@@ -1,0 +1,6 @@
+{
+  "name": "Sistem Penjualan Yakult - Cabang Jember",
+  "description": "Aplikasi manajemen dan rekapitulasi penjualan harian Yakult, monitoring target TKU Rayon 1 & 2, analisis balik botol (BB), breakdown, dan evaluasi berkala.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,900 @@
+      {/* MODE 2: TABEL PER MINGGU (MATRIKS HARIAN SEMINGGU - PERSIS FORMAT MATRIKS SEBULAN) */}
+      {viewMode === 'mgg' && (
+        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm overflow-hidden p-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <h2 className="text-base font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+                <span>Matriks Breakdown & Realisasi Harian Seminggu &bull; Minggu {selectedWeek + 1} (Tgl {weekStart}–{weekEnd} September)</span>
+                <span className="text-xs px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 font-semibold">
+                  {activeVariantTab === 'ALL' ? 'Semua Varian' : `Varian ${activeVariantTab}`}
+                </span>
+                <span className="text-xs px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 font-medium capitalize">
+                  Metrik: {monthMatrixMetric}
+                </span>
+              </h2>
+              <p className="text-xs text-neutral-500">
+                Data per hari untuk seluruh unit TKU Rayon 1 & 2 selama Minggu {selectedWeek + 1}, lengkap dengan perbandingan breakdown rencana dan realisasi
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono font-bold px-3 py-1.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200">
+                Total Minggu: {formatNumber(totalWeekActual)} / {formatNumber(totalWeekPlan)} btl ({formatPercent(totalWeekPct)})
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse min-w-[950px]">
+              <thead>
+                <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 text-[11px] bg-neutral-50 dark:bg-neutral-800/40">
+                  <th className="py-2.5 px-3 font-semibold sticky left-0 bg-neutral-50 dark:bg-neutral-800 z-10 border-r border-neutral-200 dark:border-neutral-700 min-w-[130px]">
+                    Nama TKU
+                  </th>
+                  <th className="py-2.5 px-2 font-semibold">Rayon</th>
+                  {weekDays.map(d => {
+                    const dateObj = new Date(2026, 8, d);
+                    const isSun = dateObj.getDay() === 0;
+                    const isToday = d === state.currentDayNum;
+                    return (
+                      <th
+                        key={d}
+                        className={`py-2 px-1 text-center font-mono font-semibold min-w-[55px] ${
+                          isSun
+                            ? 'text-rose-600 bg-rose-50/60 dark:bg-rose-950/30'
+                            : isToday
+                            ? 'text-neutral-900 dark:text-white bg-rose-100/50 dark:bg-rose-900/40 font-bold'
+                            : ''
+                        }`}
+                      >
+                        <div>{d}</div>
+                        <div className="text-[9px] font-normal opacity-70">
+                          {dateObj.toLocaleDateString('id-ID', { weekday: 'short' })}
+                        </div>
+                      </th>
+                    );
+                  })}
+                  <th className="py-2.5 px-2.5 text-right font-bold text-neutral-900 dark:text-neutral-100 min-w-[85px] border-l border-neutral-200 dark:border-neutral-800">
+                    Realisasi Mgg
+                  </th>
+                  <th className="py-2.5 px-2 text-right font-semibold min-w-[80px]">Rencana Mgg</th>
+                  <th className="py-2.5 px-2 text-right font-semibold min-w-[70px]">&plusmn; Selisih</th>
+                  <th className="py-2.5 px-2 text-right font-bold min-w-[65px]">Capaian</th>
+                  <th className="py-2.5 px-2 text-right font-semibold min-w-[70px]">Target Harian</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono text-[11px]">
+                {/* Rayon 1 Section */}
+                <tr className="bg-neutral-100/50 dark:bg-neutral-800/50 font-bold text-neutral-700 dark:text-neutral-300">
+                  <td colSpan={weekDays.length + 7} className="py-2 px-3 font-sans">
+                    RAYON 1 JEMBER
+                  </td>
+                </tr>
+                {state.tkus.filter(t => t.rayon === 1).map(t => {
+                  const idx = state.tkus.indexOf(t);
+                  const planArr = getPlanArray(idx);
+                  let actualWeekTotal = 0;
+                  let planWeekTotal = 0;
+
+                  const dayVals = weekDays.map(d => {
+                    const r = getTkuDailySales(idx, d, activeVariantTab);
+                    const p = planArr[d - 1] || 0;
+                    if (d <= state.currentDayNum) actualWeekTotal += r;
+                    planWeekTotal += p;
+
+                    if (monthMatrixMetric === 'realisasi') {
+                      return { d, val: r, isFuture: d > state.currentDayNum };
+                    } else if (monthMatrixMetric === 'rencana') {
+                      return { d, val: p, isFuture: false };
+                    } else {
+                      return { d, val: r - p, isFuture: d > state.currentDayNum };
+                    }
+                  });
+
+                  const diffWeek = actualWeekTotal - planWeekTotal;
+                  const pctWeek = planWeekTotal > 0 ? actualWeekTotal / planWeekTotal : 0;
+                  const dailyTg = getDailyTarget(idx);
+
+                  return (
+                    <tr key={t.id} className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors">
+                      <td className="py-2 px-3 font-sans font-semibold text-neutral-900 dark:text-neutral-100 sticky left-0 bg-white dark:bg-neutral-900 z-10 border-r border-neutral-200 dark:border-neutral-700 whitespace-nowrap">
+                        {t.nama}
+                      </td>
+                      <td className="py-2 px-2 font-sans text-neutral-400">R1</td>
+                      {dayVals.map(dv => {
+                        const isSun = new Date(2026, 8, dv.d).getDay() === 0;
+                        const isToday = dv.d === state.currentDayNum;
+                        return (
+                          <td
+                            key={dv.d}
+                            className={`py-2 px-1 text-right ${
+                              isToday
+                                ? 'bg-rose-50/70 dark:bg-rose-950/40 font-bold text-rose-700 dark:text-rose-300'
+                                : isSun
+                                ? 'bg-neutral-100/50 dark:bg-neutral-800/40 text-neutral-400'
+                                : dv.isFuture && monthMatrixMetric !== 'rencana'
+                                ? 'text-neutral-300 dark:text-neutral-600'
+                                : monthMatrixMetric === 'selisih'
+                                ? getStatusClass(dv.val)
+                                : 'text-neutral-700 dark:text-neutral-300'
+                            }`}
+                          >
+                            {isSun ? '-' : dv.isFuture && monthMatrixMetric !== 'rencana' ? '·' : monthMatrixMetric === 'selisih' ? formatDiff(dv.val) : formatNumber(dv.val)}
+                          </td>
+                        );
+                      })}
+                      <td className="py-2 px-2.5 text-right font-bold text-neutral-900 dark:text-neutral-100 border-l border-neutral-200 dark:border-neutral-800">
+                        {formatNumber(actualWeekTotal)}
+                      </td>
+                      <td className="py-2 px-2 text-right text-neutral-600 dark:text-neutral-400">
+                        {formatNumber(planWeekTotal)}
+                      </td>
+                      <td className={`py-2 px-2 text-right font-semibold ${getStatusClass(diffWeek)}`}>
+                        {formatDiff(diffWeek)}
+                      </td>
+                      <td className={`py-2 px-2 text-right font-bold ${getStatusClass(diffWeek)}`}>
+                        {formatPercent(pctWeek)}
+                      </td>
+                      <td className="py-2 px-2 text-right text-neutral-500">
+                        {formatNumber(dailyTg)}
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {/* Subtotal Rayon 1 */}
+                {(() => {
+                  const r1Tkus = state.tkus.filter(t => t.rayon === 1);
+                  let r1ActualWeek = 0;
+                  let r1PlanWeek = 0;
+                  const r1DayVals = weekDays.map(d => {
+                    let colSum = 0;
+                    r1Tkus.forEach(t => {
+                      const idx = state.tkus.indexOf(t);
+                      const r = getTkuDailySales(idx, d, activeVariantTab);
+                      const p = getPlanArray(idx)[d - 1] || 0;
+                      if (monthMatrixMetric === 'realisasi') colSum += r;
+                      else if (monthMatrixMetric === 'rencana') colSum += p;
+                      else colSum += (r - p);
+                    });
+                    return colSum;
+                  });
+
+                  r1Tkus.forEach(t => {
+                    const idx = state.tkus.indexOf(t);
+                    weekDays.forEach(d => {
+                      if (d <= state.currentDayNum) r1ActualWeek += getTkuDailySales(idx, d, activeVariantTab);
+                      r1PlanWeek += getPlanArray(idx)[d - 1] || 0;
+                    });
+                  });
+                  const diffR1 = r1ActualWeek - r1PlanWeek;
+                  const pctR1 = r1PlanWeek > 0 ? r1ActualWeek / r1PlanWeek : 0;
+
+                  return (
+                    <tr className="bg-neutral-50/90 dark:bg-neutral-800/60 font-bold border-t-2 border-neutral-200 dark:border-neutral-700">
+                      <td className="py-2.5 px-3 font-sans text-neutral-900 dark:text-white sticky left-0 bg-neutral-50 dark:bg-neutral-800 z-10 border-r border-neutral-200 dark:border-neutral-700">
+                        Total Rayon 1
+                      </td>
+                      <td className="py-2.5 px-2 font-sans text-neutral-400">R1</td>
+                      {r1DayVals.map((val, i) => {
+                        const d = weekDays[i];
+                        const isSun = new Date(2026, 8, d).getDay() === 0;
+                        const isToday = d === state.currentDayNum;
+                        const isFuture = d > state.currentDayNum;
+                        return (
+                          <td
+                            key={d}
+                            className={`py-2.5 px-1 text-right ${
+                              isToday
+                                ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 font-bold'
+                                : isSun
+                                ? 'bg-neutral-100/50 dark:bg-neutral-800/40 text-neutral-400'
+                                : isFuture && monthMatrixMetric !== 'rencana'
+                                ? 'text-neutral-400'
+                                : monthMatrixMetric === 'selisih'
+                                ? getStatusClass(val)
+                                : 'text-neutral-900 dark:text-white'
+                            }`}
+                          >
+                            {isSun ? '-' : isFuture && monthMatrixMetric !== 'rencana' ? '·' : monthMatrixMetric === 'selisih' ? formatDiff(val) : formatNumber(val)}
+                          </td>
+                        );
+                      })}
+                      <td className="py-2.5 px-2.5 text-right font-bold text-neutral-900 dark:text-white border-l border-neutral-200 dark:border-neutral-800">
+                        {formatNumber(r1ActualWeek)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-bold text-neutral-900 dark:text-white">
+                        {formatNumber(r1PlanWeek)}
+                      </td>
+                      <td className={`py-2.5 px-2 text-right font-bold ${getStatusClass(diffR1)}`}>
+                        {formatDiff(diffR1)}
+                      </td>
+                      <td className={`py-2.5 px-2 text-right font-bold ${getStatusClass(diffR1)}`}>
+                        {formatPercent(pctR1)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right text-neutral-400">—</td>
+                    </tr>
+                  );
+                })()}
+
+                {/* Rayon 2 Section */}
+                <tr className="bg-neutral-100/50 dark:bg-neutral-800/50 font-bold text-neutral-700 dark:text-neutral-300">
+                  <td colSpan={weekDays.length + 7} className="py-2 px-3 font-sans">
+                    RAYON 2 JEMBER
+                  </td>
+                </tr>
+                {state.tkus.filter(t => t.rayon === 2).map(t => {
+                  const idx = state.tkus.indexOf(t);
+                  const planArr = getPlanArray(idx);
+                  let actualWeekTotal = 0;
+                  let planWeekTotal = 0;
+
+                  const dayVals = weekDays.map(d => {
+                    const r = getTkuDailySales(idx, d, activeVariantTab);
+                    const p = planArr[d - 1] || 0;
+                    if (d <= state.currentDayNum) actualWeekTotal += r;
+                    planWeekTotal += p;
+
+                    if (monthMatrixMetric === 'realisasi') {
+                      return { d, val: r, isFuture: d > state.currentDayNum };
+                    } else if (monthMatrixMetric === 'rencana') {
+                      return { d, val: p, isFuture: false };
+                    } else {
+                      return { d, val: r - p, isFuture: d > state.currentDayNum };
+                    }
+                  });
+
+                  const diffWeek = actualWeekTotal - planWeekTotal;
+                  const pctWeek = planWeekTotal > 0 ? actualWeekTotal / planWeekTotal : 0;
+                  const dailyTg = getDailyTarget(idx);
+
+                  return (
+                    <tr key={t.id} className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors">
+                      <td className="py-2 px-3 font-sans font-semibold text-neutral-900 dark:text-neutral-100 sticky left-0 bg-white dark:bg-neutral-900 z-10 border-r border-neutral-200 dark:border-neutral-700 whitespace-nowrap">
+                        {t.nama}
+                      </td>
+                      <td className="py-2 px-2 font-sans text-neutral-400">R2</td>
+                      {dayVals.map(dv => {
+                        const isSun = new Date(2026, 8, dv.d).getDay() === 0;
+                        const isToday = dv.d === state.currentDayNum;
+                        return (
+                          <td
+                            key={dv.d}
+                            className={`py-2 px-1 text-right ${
+                              isToday
+                                ? 'bg-rose-50/70 dark:bg-rose-950/40 font-bold text-rose-700 dark:text-rose-300'
+                                : isSun
+                                ? 'bg-neutral-100/50 dark:bg-neutral-800/40 text-neutral-400'
+                                : dv.isFuture && monthMatrixMetric !== 'rencana'
+                                ? 'text-neutral-300 dark:text-neutral-600'
+                                : monthMatrixMetric === 'selisih'
+                                ? getStatusClass(dv.val)
+                                : 'text-neutral-700 dark:text-neutral-300'
+                            }`}
+                          >
+                            {isSun ? '-' : dv.isFuture && monthMatrixMetric !== 'rencana' ? '·' : monthMatrixMetric === 'selisih' ? formatDiff(dv.val) : formatNumber(dv.val)}
+                          </td>
+                        );
+                      })}
+                      <td className="py-2 px-2.5 text-right font-bold text-neutral-900 dark:text-neutral-100 border-l border-neutral-200 dark:border-neutral-800">
+                        {formatNumber(actualWeekTotal)}
+                      </td>
+                      <td className="py-2 px-2 text-right text-neutral-600 dark:text-neutral-400">
+                        {formatNumber(planWeekTotal)}
+                      </td>
+                      <td className={`py-2 px-2 text-right font-semibold ${getStatusClass(diffWeek)}`}>
+                        {formatDiff(diffWeek)}
+                      </td>
+                      <td className={`py-2 px-2 text-right font-bold ${getStatusClass(diffWeek)}`}>
+                        {formatPercent(pctWeek)}
+                      </td>
+                      <td className="py-2 px-2 text-right text-neutral-500">
+                        {formatNumber(dailyTg)}
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {/* Subtotal Rayon 2 */}
+                {(() => {
+                  const r2Tkus = state.tkus.filter(t => t.rayon === 2);
+                  let r2ActualWeek = 0;
+                  let r2PlanWeek = 0;
+                  const r2DayVals = weekDays.map(d => {
+                    let colSum = 0;
+                    r2Tkus.forEach(t => {
+                      const idx = state.tkus.indexOf(t);
+                      const r = getTkuDailySales(idx, d, activeVariantTab);
+                      const p = getPlanArray(idx)[d - 1] || 0;
+                      if (monthMatrixMetric === 'realisasi') colSum += r;
+                      else if (monthMatrixMetric === 'rencana') colSum += p;
+                      else colSum += (r - p);
+                    });
+                    return colSum;
+                  });
+
+                  r2Tkus.forEach(t => {
+                    const idx = state.tkus.indexOf(t);
+                    weekDays.forEach(d => {
+                      if (d <= state.currentDayNum) r2ActualWeek += getTkuDailySales(idx, d, activeVariantTab);
+                      r2PlanWeek += getPlanArray(idx)[d - 1] || 0;
+                    });
+                  });
+                  const diffR2 = r2ActualWeek - r2PlanWeek;
+                  const pctR2 = r2PlanWeek > 0 ? r2ActualWeek / r2PlanWeek : 0;
+
+                  return (
+                    <tr className="bg-neutral-50/90 dark:bg-neutral-800/60 font-bold border-t-2 border-neutral-200 dark:border-neutral-700">
+                      <td className="py-2.5 px-3 font-sans text-neutral-900 dark:text-white sticky left-0 bg-neutral-50 dark:bg-neutral-800 z-10 border-r border-neutral-200 dark:border-neutral-700">
+                        Total Rayon 2
+                      </td>
+                      <td className="py-2.5 px-2 font-sans text-neutral-400">R2</td>
+                      {r2DayVals.map((val, i) => {
+                        const d = weekDays[i];
+                        const isSun = new Date(2026, 8, d).getDay() === 0;
+                        const isToday = d === state.currentDayNum;
+                        const isFuture = d > state.currentDayNum;
+                        return (
+                          <td
+                            key={d}
+                            className={`py-2.5 px-1 text-right ${
+                              isToday
+                                ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 font-bold'
+                                : isSun
+                                ? 'bg-neutral-100/50 dark:bg-neutral-800/40 text-neutral-400'
+                                : isFuture && monthMatrixMetric !== 'rencana'
+                                ? 'text-neutral-400'
+                                : monthMatrixMetric === 'selisih'
+                                ? getStatusClass(val)
+                                : 'text-neutral-900 dark:text-white'
+                            }`}
+                          >
+                            {isSun ? '-' : isFuture && monthMatrixMetric !== 'rencana' ? '·' : monthMatrixMetric === 'selisih' ? formatDiff(val) : formatNumber(val)}
+                          </td>
+                        );
+                      })}
+                      <td className="py-2.5 px-2.5 text-right font-bold text-neutral-900 dark:text-white border-l border-neutral-200 dark:border-neutral-800">
+                        {formatNumber(r2ActualWeek)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-bold text-neutral-900 dark:text-white">
+                        {formatNumber(r2PlanWeek)}
+                      </td>
+                      <td className={`py-2.5 px-2 text-right font-bold ${getStatusClass(diffR2)}`}>
+                        {formatDiff(diffR2)}
+                      </td>
+                      <td className={`py-2.5 px-2 text-right font-bold ${getStatusClass(diffR2)}`}>
+                        {formatPercent(pctR2)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right text-neutral-400">—</td>
+                    </tr>
+                  );
+                })()}
+
+                {/* Grand Total Cabang Jember */}
+                {(() => {
+                  const branchDayVals = weekDays.map(d => {
+                    let colSum = 0;
+                    state.tkus.forEach(t => {
+                      const idx = state.tkus.indexOf(t);
+                      const r = getTkuDailySales(idx, d, activeVariantTab);
+                      const p = getPlanArray(idx)[d - 1] || 0;
+                      if (monthMatrixMetric === 'realisasi') colSum += r;
+                      else if (monthMatrixMetric === 'rencana') colSum += p;
+                      else colSum += (r - p);
+                    });
+                    return colSum;
+                  });
+
+                  return (
+                    <tr className="bg-rose-50/60 dark:bg-rose-950/30 font-bold border-t-2 border-rose-300 dark:border-rose-900/60 text-xs">
+                      <td className="py-3 px-3 font-sans text-rose-700 dark:text-rose-400 sticky left-0 bg-rose-50 dark:bg-rose-950 z-10 border-r border-rose-200 dark:border-rose-900">
+                        Total Cabang Jember
+                      </td>
+                      <td className="py-3 px-2 font-sans text-rose-600">ALL</td>
+                      {branchDayVals.map((val, i) => {
+                        const d = weekDays[i];
+                        const isSun = new Date(2026, 8, d).getDay() === 0;
+                        const isToday = d === state.currentDayNum;
+                        const isFuture = d > state.currentDayNum;
+                        return (
+                          <td
+                            key={d}
+                            className={`py-3 px-1 text-right ${
+                              isToday
+                                ? 'bg-rose-200/50 dark:bg-rose-900/60 font-extrabold text-rose-800 dark:text-rose-200'
+                                : isSun
+                                ? 'bg-neutral-100/50 dark:bg-neutral-800/40 text-neutral-400'
+                                : isFuture && monthMatrixMetric !== 'rencana'
+                                ? 'text-neutral-400'
+                                : monthMatrixMetric === 'selisih'
+                                ? getStatusClass(val)
+                                : 'text-rose-700 dark:text-rose-300'
+                            }`}
+                          >
+                            {isSun ? '-' : isFuture && monthMatrixMetric !== 'rencana' ? '·' : monthMatrixMetric === 'selisih' ? formatDiff(val) : formatNumber(val)}
+                          </td>
+                        );
+                      })}
+                      <td className="py-3 px-2.5 text-right font-extrabold text-rose-700 dark:text-rose-300 border-l border-neutral-200 dark:border-neutral-800">
+                        {formatNumber(totalWeekActual)}
+                      </td>
+                      <td className="py-3 px-2 text-right font-extrabold text-rose-700 dark:text-rose-300">
+                        {formatNumber(totalWeekPlan)}
+                      </td>
+                      <td className={`py-3 px-2 text-right font-extrabold ${getStatusClass(totalWeekDiff)}`}>
+                        {formatDiff(totalWeekDiff)}
+                      </td>
+                      <td className={`py-3 px-2 text-right font-extrabold ${getStatusClass(totalWeekDiff)}`}>
+                        {formatPercent(totalWeekPct)}
+                      </td>
+                      <td className="py-3 px-2 text-right text-rose-600 font-bold">
+                        {formatNumber(totalBranchTarget)}
+                      </td>
+                    </tr>
+                  );
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* MODE 3: FULL SEBULAN MATRIX (TANGGAL 1 S/D 30 LENGKAP RAYON 1 & RAYON 2 + GRAND TOTAL) */}
+      {viewMode === 'sebulan' && (
+        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm overflow-hidden p-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <h2 className="text-base font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+                <span>Matriks Breakdown & Realisasi Full Sebulan &bull; September 2026</span>
+                <span className="text-xs px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 font-semibold">
+                  {activeVariantTab === 'ALL' ? 'Semua Varian' : `Varian ${activeVariantTab}`}
+                </span>
+                <span className="text-xs px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 font-medium capitalize">
+                  Metrik: {monthMatrixMetric}
+                </span>
+              </h2>
+              <p className="text-xs text-neutral-500">
+                Peta matriks kerja harian tanggal 1 s/d 30 September 2026 untuk seluruh TKU Rayon 1 & 2 beserta Total Cabang Jember
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto pb-2">
+            <table className="w-full text-left text-xs border-collapse min-w-[1550px]">
+              <thead>
+                <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 text-[11px] bg-neutral-50 dark:bg-neutral-800/40">
+                  <th className="py-2.5 px-3 font-semibold sticky left-0 z-20 bg-neutral-50 dark:bg-neutral-800 shadow-sm min-w-[130px] border-r border-neutral-200 dark:border-neutral-700">
+                    Nama TKU
+                  </th>
+                  <th className="py-2.5 px-2 font-semibold">Rayon</th>
+                  {Array.from({ length: MD }, (_, i) => {
+                    const d = i + 1;
+                    const dateObj = new Date(2026, 8, d);
+                    const isSun = dateObj.getDay() === 0;
+                    const isToday = d === state.currentDayNum;
+
+                    return (
+                      <th
+                        key={d}
+                        className={`py-2 px-1 text-center font-mono font-semibold min-w-[42px] ${
+                          isToday
+                            ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 ring-1 ring-rose-400'
+                            : isSun
+                            ? 'bg-neutral-200/50 dark:bg-neutral-800 text-neutral-400'
+                            : ''
+                        }`}
+                      >
+                        <span className="block text-[10px] leading-tight">{d}</span>
+                        <span className="block text-[9px] text-neutral-400">{isSun ? 'Min' : ''}</span>
+                      </th>
+                    );
+                  })}
+                  <th className="py-2.5 px-2.5 text-right font-bold text-neutral-900 dark:text-neutral-100 min-w-[85px] border-l border-neutral-200 dark:border-neutral-800">
+                    Realisasi Akm
+                  </th>
+                  <th className="py-2.5 px-2.5 text-right font-semibold min-w-[85px]">
+                    Breakdown Sebulan
+                  </th>
+                  <th className="py-2.5 px-2 text-right font-semibold min-w-[70px]">
+                    &plusmn; Selisih
+                  </th>
+                  <th className="py-2.5 px-2 text-right font-semibold min-w-[65px]">
+                    % Capaian
+                  </th>
+                  <th className="py-2.5 px-2 text-right font-semibold min-w-[65px]">
+                    Target Harian
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono text-[11px]">
+                {/* RAYON 1 SECTION */}
+                <tr className="bg-neutral-100/50 dark:bg-neutral-800/50 font-bold text-neutral-700 dark:text-neutral-300">
+                  <td colSpan={MD + 7} className="py-2 px-3 font-sans">
+                    RAYON 1 JEMBER
+                  </td>
+                </tr>
+                {state.tkus.filter(t => t.rayon === 1).map(t => {
+                  const tkuIdx = state.tkus.indexOf(t);
+                  const planArr = getPlanArray(tkuIdx);
+                  const planMonthTotal = planArr.reduce((a, b) => a + b, 0);
+
+                  let actualAkm = 0;
+                  const dayValues = Array.from({ length: MD }, (_, i) => {
+                    const d = i + 1;
+                    const r = getTkuDailySales(tkuIdx, d, activeVariantTab);
+                    const p = planArr[d - 1] || 0;
+                    if (d <= state.currentDayNum) actualAkm += r;
+
+                    if (monthMatrixMetric === 'realisasi') {
+                      return { d, val: r, isFuture: d > state.currentDayNum };
+                    } else if (monthMatrixMetric === 'rencana') {
+                      return { d, val: p, isFuture: false };
+                    } else {
+                      return { d, val: r - p, isFuture: d > state.currentDayNum };
+                    }
+                  });
+
+                  const diffMonth = actualAkm - planMonthTotal;
+                  const pct = planMonthTotal > 0 ? actualAkm / planMonthTotal : 0;
+                  const dailyTg = getDailyTarget(tkuIdx);
+
+                  return (
+                    <tr key={t.id} className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors">
+                      <td className="py-2 px-3 font-sans font-semibold text-neutral-900 dark:text-neutral-100 sticky left-0 z-10 bg-white dark:bg-neutral-900 shadow-sm whitespace-nowrap border-r border-neutral-200 dark:border-neutral-700">
+                        {t.nama}
+                      </td>
+                      <td className="py-2 px-2 font-sans text-neutral-400">R1</td>
+                      {dayValues.map(dv => {
+                        const isSun = new Date(2026, 8, dv.d).getDay() === 0;
+                        const isToday = dv.d === state.currentDayNum;
+
+                        return (
+                          <td
+                            key={dv.d}
+                            className={`py-2 px-1 text-center font-mono ${
+                              isToday
+                                ? 'bg-rose-50/70 dark:bg-rose-950/40 font-bold text-rose-700 dark:text-rose-300'
+                                : isSun
+                                ? 'bg-neutral-100/50 dark:bg-neutral-800/40 text-neutral-400'
+                                : dv.isFuture && monthMatrixMetric !== 'rencana'
+                                ? 'text-neutral-300 dark:text-neutral-600'
+                                : monthMatrixMetric === 'selisih'
+                                ? getStatusClass(dv.val)
+                                : 'text-neutral-700 dark:text-neutral-300'
+                            }`}
+                          >
+                            {isSun
+                              ? '-'
+                              : dv.isFuture && monthMatrixMetric !== 'rencana'
+                              ? '·'
+                              : monthMatrixMetric === 'selisih'
+                              ? formatDiff(dv.val)
+                              : formatNumber(dv.val)}
+                          </td>
+                        );
+                      })}
+                      <td className="py-2 px-2.5 text-right font-bold text-neutral-900 dark:text-neutral-100 border-l border-neutral-200 dark:border-neutral-800">
+                        {formatNumber(actualAkm)}
+                      </td>
+                      <td className="py-2 px-2.5 text-right text-neutral-600 dark:text-neutral-400">
+                        {formatNumber(planMonthTotal)}
+                      </td>
+                      <td className={`py-2 px-2 text-right font-semibold ${getStatusClass(diffMonth)}`}>
+                        {formatDiff(diffMonth)}
+                      </td>
+                      <td className={`py-2 px-2 text-right font-bold ${getStatusClass(diffMonth)}`}>
+                        {formatPercent(pct)}
+                      </td>
+                      <td className="py-2 px-2 text-right text-neutral-700 dark:text-neutral-300">
+                        {formatNumber(dailyTg)}
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {/* Subtotal Rayon 1 */}
+                {(() => {
+                  const r1Tkus = state.tkus.filter(t => t.rayon === 1);
+                  let r1ActualAkm = 0;
+                  let r1PlanMonth = 0;
+
+                  r1Tkus.forEach(t => {
+                    const idx = state.tkus.indexOf(t);
+                    r1ActualAkm += getActualSalesUpTo(idx, state.currentDayNum);
+                    r1PlanMonth += getPlanArray(idx).reduce((a, b) => a + b, 0);
+                  });
+                  const diffR1 = r1ActualAkm - r1PlanMonth;
+                  const pctR1 = r1PlanMonth > 0 ? r1ActualAkm / r1PlanMonth : 0;
+
+                  return (
+                    <tr className="bg-neutral-50/90 dark:bg-neutral-800/60 font-bold border-t-2 border-neutral-200 dark:border-neutral-700">
+                      <td className="py-2.5 px-3 font-sans text-neutral-900 dark:text-white sticky left-0 z-10 bg-neutral-50/95 dark:bg-neutral-800/95 shadow-sm border-r border-neutral-200 dark:border-neutral-700">
+                        Total Rayon 1
+                      </td>
+                      <td className="py-2.5 px-2 font-sans text-neutral-400">R1</td>
+                      {Array.from({ length: MD }, (_, i) => {
+                        const d = i + 1;
+                        const isSun = new Date(2026, 8, d).getDay() === 0;
+                        const isToday = d === state.currentDayNum;
+                        const isFuture = d > state.currentDayNum;
+
+                        let colSum = 0;
+                        r1Tkus.forEach(t => {
+                          const idx = state.tkus.indexOf(t);
+                          const r = getTkuDailySales(idx, d, activeVariantTab);
+                          const p = getPlanArray(idx)[d - 1] || 0;
+                          if (monthMatrixMetric === 'realisasi') colSum += r;
+                          else if (monthMatrixMetric === 'rencana') colSum += p;
+                          else colSum += (r - p);
+                        });
+
+                        return (
+                          <td
+                            key={d}
+                            className={`py-2 px-1 text-center font-mono ${
+                              isToday
+                                ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 font-bold'
+                                : isSun
+                                ? 'bg-neutral-100/50 dark:bg-neutral-800/40 text-neutral-400'
+                                : isFuture && monthMatrixMetric !== 'rencana'
+                                ? 'text-neutral-400'
+                                : monthMatrixMetric === 'selisih'
+                                ? getStatusClass(colSum)
+                                : 'text-neutral-900 dark:text-white'
+                            }`}
+                          >
+                            {isSun ? '-' : (isFuture && monthMatrixMetric !== 'rencana' ? '·' : monthMatrixMetric === 'selisih' ? formatDiff(colSum) : formatNumber(colSum))}
+                          </td>
+                        );
+                      })}
+                      <td className="py-2.5 px-2.5 text-right font-bold text-neutral-900 dark:text-white border-l border-neutral-200 dark:border-neutral-800">
+                        {formatNumber(r1ActualAkm)}
+                      </td>
+                      <td className="py-2.5 px-2.5 text-right font-bold text-neutral-900 dark:text-white">
+                        {formatNumber(r1PlanMonth)}
+                      </td>
+                      <td className={`py-2.5 px-2 text-right font-bold ${getStatusClass(diffR1)}`}>
+                        {formatDiff(diffR1)}
+                      </td>
+                      <td className={`py-2.5 px-2 text-right font-bold ${getStatusClass(diffR1)}`}>
+                        {formatPercent(pctR1)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right text-neutral-400">—</td>
+                    </tr>
+                  );
+                })()}
+
+                {/* RAYON 2 SECTION */}
+                <tr className="bg-neutral-100/50 dark:bg-neutral-800/50 font-bold text-neutral-700 dark:text-neutral-300">
+                  <td colSpan={MD + 7} className="py-2 px-3 font-sans">
+                    RAYON 2 JEMBER
+                  </td>
+                </tr>
+                {state.tkus.filter(t => t.rayon === 2).map(t => {
+                  const tkuIdx = state.tkus.indexOf(t);
+                  const planArr = getPlanArray(tkuIdx);
+                  const planMonthTotal = planArr.reduce((a, b) => a + b, 0);
+
+                  let actualAkm = 0;
+                  const dayValues = Array.from({ length: MD }, (_, i) => {
+                    const d = i + 1;
+                    const r = getTkuDailySales(tkuIdx, d, activeVariantTab);
+                    const p = planArr[d - 1] || 0;
+                    if (d <= state.currentDayNum) actualAkm += r;
+
+                    if (monthMatrixMetric === 'realisasi') {
+                      return { d, val: r, isFuture: d > state.currentDayNum };
+                    } else if (monthMatrixMetric === 'rencana') {
+                      return { d, val: p, isFuture: false };
+                    } else {
+                      return { d, val: r - p, isFuture: d > state.currentDayNum };
+                    }
+                  });
+
+                  const diffMonth = actualAkm - planMonthTotal;
+                  const pct = planMonthTotal > 0 ? actualAkm / planMonthTotal : 0;
+                  const dailyTg = getDailyTarget(tkuIdx);
+
+                  return (
+                    <tr key={t.id} className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors">
+                      <td className="py-2 px-3 font-sans font-semibold text-neutral-900 dark:text-neutral-100 sticky left-0 z-10 bg-white dark:bg-neutral-900 shadow-sm whitespace-nowrap border-r border-neutral-200 dark:border-neutral-700">
+                        {t.nama}
+                      </td>
+                      <td className="py-2 px-2 font-sans text-neutral-400">R2</td>
+                      {dayValues.map(dv => {
+                        const isSun = new Date(2026, 8, dv.d).getDay() === 0;
+                        const isToday = dv.d === state.currentDayNum;
+
+                        return (
+                          <td
+                            key={dv.d}
+                            className={`py-2 px-1 text-center font-mono ${
+                              isToday
+                                ? 'bg-rose-50/70 dark:bg-rose-950/40 font-bold text-rose-700 dark:text-rose-300'
+                                : isSun
+                                ? 'bg-neutral-100/50 dark:bg-neutral-800/40 text-neutral-400'
+                                : dv.isFuture && monthMatrixMetric !== 'rencana'
+                                ? 'text-neutral-300 dark:text-neutral-600'
+                                : monthMatrixMetric === 'selisih'
+                                ? getStatusClass(dv.val)
+                                : 'text-neutral-700 dark:text-neutral-300'
+                            }`}
+                          >
+                            {isSun
+                              ? '-'
+                              : dv.isFuture && monthMatrixMetric !== 'rencana'
+                              ? '·'
+                              : monthMatrixMetric === 'selisih'
+                              ? formatDiff(dv.val)
+                              : formatNumber(dv.val)}
+                          </td>
+                        );
+                      })}
+                      <td className="py-2 px-2.5 text-right font-bold text-neutral-900 dark:text-neutral-100 border-l border-neutral-200 dark:border-neutral-800">
+                        {formatNumber(actualAkm)}
+                      </td>
+                      <td className="py-2.5 px-2.5 text-right text-neutral-600 dark:text-neutral-400">
+                        {formatNumber(planMonthTotal)}
+                      </td>
+                      <td className={`py-2 px-2 text-right font-semibold ${getStatusClass(diffMonth)}`}>
+                        {formatDiff(diffMonth)}
+                      </td>
+                      <td className={`py-2 px-2 text-right font-bold ${getStatusClass(diffMonth)}`}>
+                        {formatPercent(pct)}
+                      </td>
+                      <td className="py-2 px-2 text-right text-neutral-700 dark:text-neutral-300">
+                        {formatNumber(dailyTg)}
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {/* Subtotal Rayon 2 */}
+                {(() => {
+                  const r2Tkus = state.tkus.filter(t => t.rayon === 2);
+                  let r2ActualAkm = 0;
+                  let r2PlanMonth = 0;
+
+                  r2Tkus.forEach(t => {
+                    const idx = state.tkus.indexOf(t);
+                    r2ActualAkm += getActualSalesUpTo(idx, state.currentDayNum);
+                    r2PlanMonth += getPlanArray(idx).reduce((a, b) => a + b, 0);
+                  });
+                  const diffR2 = r2ActualAkm - r2PlanMonth;
+                  const pctR2 = r2PlanMonth > 0 ? r2ActualAkm / r2PlanMonth : 0;
+
+                  return (
+                    <tr className="bg-neutral-50/90 dark:bg-neutral-800/60 font-bold border-t-2 border-neutral-200 dark:border-neutral-700">
+                      <td className="py-2.5 px-3 font-sans text-neutral-900 dark:text-white sticky left-0 z-10 bg-neutral-50/95 dark:bg-neutral-800/95 shadow-sm border-r border-neutral-200 dark:border-neutral-700">
+                        Total Rayon 2
+                      </td>
+                      <td className="py-2.5 px-2 font-sans text-neutral-400">R2</td>
+                      {Array.from({ length: MD }, (_, i) => {
+                        const d = i + 1;
+                        const isSun = new Date(2026, 8, d).getDay() === 0;
+                        const isToday = d === state.currentDayNum;
+                        const isFuture = d > state.currentDayNum;
+
+                        let colSum = 0;
+                        r2Tkus.forEach(t => {
+                          const idx = state.tkus.indexOf(t);
+                          const r = getTkuDailySales(idx, d, activeVariantTab);
+                          const p = getPlanArray(idx)[d - 1] || 0;
+                          if (monthMatrixMetric === 'realisasi') colSum += r;
+                          else if (monthMatrixMetric === 'rencana') colSum += p;
+                          else colSum += (r - p);
+                        });
+
+                        return (
+                          <td
+                            key={d}
+                            className={`py-2 px-1 text-center font-mono ${
+                              isToday
+                                ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 font-bold'
+                                : isSun
+                                ? 'bg-neutral-100/50 dark:bg-neutral-800/40 text-neutral-400'
+                                : isFuture && monthMatrixMetric !== 'rencana'
+                                ? 'text-neutral-400'
+                                : monthMatrixMetric === 'selisih'
+                                ? getStatusClass(colSum)
+                                : 'text-neutral-900 dark:text-white'
+                            }`}
+                          >
+                            {isSun ? '-' : (isFuture && monthMatrixMetric !== 'rencana' ? '·' : monthMatrixMetric === 'selisih' ? formatDiff(colSum) : formatNumber(colSum))}
+                          </td>
+                        );
+                      })}
+                      <td className="py-2.5 px-2.5 text-right font-bold text-neutral-900 dark:text-white border-l border-neutral-200 dark:border-neutral-800">
+                        {formatNumber(r2ActualAkm)}
+                      </td>
+                      <td className="py-2.5 px-2.5 text-right font-bold text-neutral-900 dark:text-white">
+                        {formatNumber(r2PlanMonth)}
+                      </td>
+                      <td className={`py-2.5 px-2 text-right font-bold ${getStatusClass(diffR2)}`}>
+                        {formatDiff(diffR2)}
+                      </td>
+                      <td className={`py-2.5 px-2 text-right font-bold ${getStatusClass(diffR2)}`}>
+                        {formatPercent(pctR2)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right text-neutral-400">—</td>
+                    </tr>
+                  );
+                })()}
+
+                {/* Grand Total Cabang Jember */}
+                {(() => {
+                  let totalActualCutoff = 0;
+                  let totalPlanFullMonth = 0;
+
+                  state.tkus.forEach(t => {
+                    const idx = state.tkus.indexOf(t);
+                    totalActualCutoff += getActualSalesUpTo(idx, state.currentDayNum);
+                    totalPlanFullMonth += getPlanArray(idx).reduce((a, b) => a + b, 0);
+                  });
+
+                  const diffCabang = totalActualCutoff - totalPlanFullMonth;
+                  const pctCabang = totalPlanFullMonth > 0 ? totalActualCutoff / totalPlanFullMonth : 0;
+
+                  return (
+                    <tr className="bg-rose-50/60 dark:bg-rose-950/30 font-bold border-t-2 border-rose-300 dark:border-rose-900/60 text-xs">
+                      <td className="py-3 px-3 font-sans text-rose-700 dark:text-rose-400 sticky left-0 z-10 bg-rose-50 dark:bg-rose-950 shadow-sm border-r border-rose-200 dark:border-rose-900">
+                        Total Cabang Jember
+                      </td>
+                      <td className="py-3 px-2 font-sans text-rose-600">ALL</td>
+                      {Array.from({ length: MD }, (_, i) => {
+                        const d = i + 1;
+                        const isSun = new Date(2026, 8, d).getDay() === 0;
+                        const isToday = d === state.currentDayNum;
+                        const isFuture = d > state.currentDayNum;
+
+                        let colSum = 0;
+                        state.tkus.forEach(t => {
+                          const idx = state.tkus.indexOf(t);
+                          const r = getTkuDailySales(idx, d, activeVariantTab);
+                          const p = getPlanArray(idx)[d - 1] || 0;
+                          if (monthMatrixMetric === 'realisasi') colSum += r;
+                          else if (monthMatrixMetric === 'rencana') colSum += p;
+                          else colSum += (r - p);
+                        });
+
+                        return (
+                          <td
+                            key={d}
+                            className={`py-3 px-1 text-center font-mono ${
+                              isToday
+                                ? 'bg-rose-200/50 dark:bg-rose-900/60 font-extrabold text-rose-800 dark:text-rose-200'
+                                : isSun
+                                ? 'bg-neutral-100/50 dark:bg-neutral-800/40 text-neutral-400'
+                                : isFuture && monthMatrixMetric !== 'rencana'
+                                ? 'text-neutral-400'
+                                : monthMatrixMetric === 'selisih'
+                                ? getStatusClass(colSum)
+                                : 'text-rose-700 dark:text-rose-300'
+                            }`}
+                          >
+                            {isSun ? '-' : (isFuture && monthMatrixMetric !== 'rencana' ? '·' : monthMatrixMetric === 'selisih' ? formatDiff(colSum) : formatNumber(colSum))}
+                          </td>
+                        );
+                      })}
+                      <td className="py-3 px-2.5 text-right font-extrabold text-rose-700 dark:text-rose-300 border-l border-neutral-200 dark:border-neutral-800">
+                        {formatNumber(totalActualCutoff)}
+                      </td>
+                      <td className="py-3 px-2.5 text-right font-extrabold text-rose-700 dark:text-rose-300">
+                        {formatNumber(totalPlanFullMonth)}
+                      </td>
+                      <td className={`py-3 px-2 text-right font-extrabold ${getStatusClass(diffCabang)}`}>
+                        {formatDiff(diffCabang)}
+                      </td>
+                      <td className={`py-3 px-2 text-right font-extrabold ${getStatusClass(diffCabang)}`}>
+                        {formatPercent(pctCabang)}
+                      </td>
+                      <td className="py-3 px-2 text-right text-rose-600 font-bold">
+                        {formatNumber(totalBranchTarget)}
+                      </td>
+                    </tr>
+                  );
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}

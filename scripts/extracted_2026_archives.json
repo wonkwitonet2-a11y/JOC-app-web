@@ -1,0 +1,946 @@
+{
+  "2026-01": {
+    "periode": "2026-01",
+    "namaBulan": "Januari 2026",
+    "d": 31,
+    "terkunci": true,
+    "rows": [
+      {
+        "nama": "Jember",
+        "rayon": 1,
+        "varian": [
+          10,
+          347,
+          38,
+          264
+        ],
+        "total": 11
+      },
+      {
+        "nama": "Jember 2",
+        "rayon": 1,
+        "varian": [
+          11,
+          347,
+          44,
+          273
+        ],
+        "total": 11
+      },
+      {
+        "nama": "Tawangalun",
+        "rayon": 1,
+        "varian": [
+          10,
+          271,
+          46,
+          385
+        ],
+        "total": 15
+      },
+      {
+        "nama": "DP Jember 1",
+        "rayon": 1,
+        "varian": [
+          10,
+          300,
+          21,
+          332
+        ],
+        "total": 4
+      },
+      {
+        "nama": "DP Jember 4",
+        "rayon": 1,
+        "varian": [
+          7,
+          217,
+          25,
+          251
+        ],
+        "total": 500
+      },
+      {
+        "nama": "Pelita",
+        "rayon": 2,
+        "varian": [
+          13,
+          372,
+          25,
+          265
+        ],
+        "total": 46
+      },
+      {
+        "nama": "Dawuhan",
+        "rayon": 2,
+        "varian": [
+          12,
+          339,
+          24,
+          203
+        ],
+        "total": 43
+      },
+      {
+        "nama": "Kalisat",
+        "rayon": 2,
+        "varian": [
+          11,
+          341,
+          45,
+          295
+        ],
+        "total": 3
+      },
+      {
+        "nama": "DP Jember 2",
+        "rayon": 2,
+        "varian": [
+          10,
+          310,
+          27,
+          326
+        ],
+        "total": 673
+      },
+      {
+        "nama": "DP Jember 3",
+        "rayon": 2,
+        "varian": [
+          8,
+          248,
+          15,
+          203
+        ],
+        "total": 474
+      }
+    ]
+  },
+  "2026-02": {
+    "periode": "2026-02",
+    "namaBulan": "Februari 2026",
+    "d": 28,
+    "terkunci": true,
+    "rows": [
+      {
+        "nama": "Jember",
+        "rayon": 1,
+        "varian": [
+          12,
+          308,
+          34,
+          248
+        ],
+        "total": 12
+      },
+      {
+        "nama": "Jember 2",
+        "rayon": 1,
+        "varian": [
+          11,
+          331,
+          40,
+          248
+        ],
+        "total": 6
+      },
+      {
+        "nama": "Tawangalun",
+        "rayon": 1,
+        "varian": [
+          11,
+          308,
+          40,
+          273
+        ],
+        "total": 632
+      },
+      {
+        "nama": "DP Jember 1",
+        "rayon": 1,
+        "varian": [
+          10,
+          280,
+          21,
+          312
+        ],
+        "total": 4
+      },
+      {
+        "nama": "DP Jember 4",
+        "rayon": 1,
+        "varian": [
+          7,
+          196,
+          23,
+          234
+        ],
+        "total": 2
+      },
+      {
+        "nama": "Pelita",
+        "rayon": 2,
+        "varian": [
+          13,
+          321,
+          24,
+          256
+        ],
+        "total": 25
+      },
+      {
+        "nama": "Dawuhan",
+        "rayon": 2,
+        "varian": [
+          11,
+          280,
+          23,
+          204
+        ],
+        "total": 33
+      },
+      {
+        "nama": "Kalisat",
+        "rayon": 2,
+        "varian": [
+          10,
+          280,
+          34,
+          307
+        ],
+        "total": 42
+      },
+      {
+        "nama": "DP Jember 2",
+        "rayon": 2,
+        "varian": [
+          10,
+          280,
+          22,
+          290
+        ],
+        "total": 602
+      },
+      {
+        "nama": "DP Jember 3",
+        "rayon": 2,
+        "varian": [
+          8,
+          224,
+          12,
+          185
+        ],
+        "total": 9
+      }
+    ]
+  },
+  "2026-03": {
+    "periode": "2026-03",
+    "namaBulan": "Maret 2026",
+    "d": 31,
+    "terkunci": true,
+    "rows": [
+      {
+        "nama": "Jember",
+        "rayon": 1,
+        "varian": [
+          12,
+          369,
+          39,
+          307
+        ],
+        "total": 28
+      },
+      {
+        "nama": "Jember 2",
+        "rayon": 1,
+        "varian": [
+          12,
+          372,
+          38,
+          289
+        ],
+        "total": 8
+      },
+      {
+        "nama": "Tawangalun",
+        "rayon": 1,
+        "varian": [
+          11,
+          341,
+          40,
+          310
+        ],
+        "total": 5
+      },
+      {
+        "nama": "DP Jember 1",
+        "rayon": 1,
+        "varian": [
+          10,
+          310,
+          34,
+          399
+        ],
+        "total": 753
+      },
+      {
+        "nama": "DP Jember 4",
+        "rayon": 1,
+        "varian": [
+          7,
+          217,
+          20,
+          267
+        ],
+        "total": 3
+      },
+      {
+        "nama": "Pelita",
+        "rayon": 2,
+        "varian": [
+          13,
+          341,
+          31,
+          351
+        ],
+        "total": 8
+      },
+      {
+        "nama": "Dawuhan",
+        "rayon": 2,
+        "varian": [
+          11,
+          277,
+          37,
+          341
+        ],
+        "total": 10
+      },
+      {
+        "nama": "Kalisat",
+        "rayon": 2,
+        "varian": [
+          10,
+          234,
+          55,
+          535
+        ],
+        "total": 21
+      },
+      {
+        "nama": "DP Jember 2",
+        "rayon": 2,
+        "varian": [
+          10,
+          310,
+          27,
+          369
+        ],
+        "total": 1
+      },
+      {
+        "nama": "DP Jember 3",
+        "rayon": 2,
+        "varian": [
+          8,
+          248,
+          11,
+          231
+        ],
+        "total": 11
+      }
+    ]
+  },
+  "2026-04": {
+    "periode": "2026-04",
+    "namaBulan": "April 2026",
+    "d": 30,
+    "terkunci": true,
+    "rows": [
+      {
+        "nama": "Jember",
+        "rayon": 1,
+        "varian": [
+          12,
+          337,
+          30,
+          267
+        ],
+        "total": 11
+      },
+      {
+        "nama": "Jember 2",
+        "rayon": 1,
+        "varian": [
+          11,
+          360,
+          40,
+          287
+        ],
+        "total": 1
+      },
+      {
+        "nama": "Tawangalun",
+        "rayon": 1,
+        "varian": [
+          11,
+          330,
+          36,
+          300
+        ],
+        "total": 677
+      },
+      {
+        "nama": "DP Jember 1",
+        "rayon": 1,
+        "varian": [
+          10,
+          300,
+          20,
+          376
+        ],
+        "total": 706
+      },
+      {
+        "nama": "DP Jember 4",
+        "rayon": 1,
+        "varian": [
+          7,
+          210,
+          23,
+          275
+        ],
+        "total": 515
+      },
+      {
+        "nama": "Pelita",
+        "rayon": 2,
+        "varian": [
+          13,
+          330,
+          26,
+          316
+        ],
+        "total": 2
+      },
+      {
+        "nama": "Dawuhan",
+        "rayon": 2,
+        "varian": [
+          12,
+          262,
+          25,
+          255
+        ],
+        "total": 20
+      },
+      {
+        "nama": "Kalisat",
+        "rayon": 2,
+        "varian": [
+          10,
+          240,
+          45,
+          441
+        ],
+        "total": 736
+      },
+      {
+        "nama": "DP Jember 2",
+        "rayon": 2,
+        "varian": [
+          10,
+          300,
+          23,
+          352
+        ],
+        "total": 685
+      },
+      {
+        "nama": "DP Jember 3",
+        "rayon": 2,
+        "varian": [
+          8,
+          227,
+          13,
+          225
+        ],
+        "total": 25
+      }
+    ]
+  },
+  "2026-05": {
+    "periode": "2026-05",
+    "namaBulan": "Mei 2026",
+    "d": 31,
+    "terkunci": true,
+    "rows": [
+      {
+        "nama": "Jember",
+        "rayon": 1,
+        "varian": [
+          12,
+          341,
+          30,
+          283
+        ],
+        "total": 17
+      },
+      {
+        "nama": "Jember 2",
+        "rayon": 1,
+        "varian": [
+          10,
+          360,
+          37,
+          285
+        ],
+        "total": 2
+      },
+      {
+        "nama": "Tawangalun",
+        "rayon": 1,
+        "varian": [
+          11,
+          341,
+          37,
+          296
+        ],
+        "total": 5
+      },
+      {
+        "nama": "DP Jember 1",
+        "rayon": 1,
+        "varian": [
+          10,
+          310,
+          19,
+          338
+        ],
+        "total": 677
+      },
+      {
+        "nama": "DP Jember 4",
+        "rayon": 1,
+        "varian": [
+          7,
+          217,
+          20,
+          259
+        ],
+        "total": 503
+      },
+      {
+        "nama": "Pelita",
+        "rayon": 2,
+        "varian": [
+          13,
+          345,
+          29,
+          308
+        ],
+        "total": 4
+      },
+      {
+        "nama": "Dawuhan",
+        "rayon": 2,
+        "varian": [
+          12,
+          248,
+          25,
+          252
+        ],
+        "total": 537
+      },
+      {
+        "nama": "Kalisat",
+        "rayon": 2,
+        "varian": [
+          9,
+          300,
+          42,
+          389
+        ],
+        "total": 1
+      },
+      {
+        "nama": "DP Jember 2",
+        "rayon": 2,
+        "varian": [
+          10,
+          310,
+          23,
+          311
+        ],
+        "total": 654
+      },
+      {
+        "nama": "DP Jember 3",
+        "rayon": 2,
+        "varian": [
+          8,
+          217,
+          12,
+          238
+        ],
+        "total": 1
+      }
+    ]
+  },
+  "2026-06": {
+    "periode": "2026-06",
+    "namaBulan": "Juni 2026",
+    "d": 30,
+    "terkunci": true,
+    "rows": [
+      {
+        "nama": "Jember",
+        "rayon": 1,
+        "varian": [
+          61285,
+          8985,
+          19915,
+          6475
+        ],
+        "total": 96660
+      },
+      {
+        "nama": "Jember 2",
+        "rayon": 1,
+        "varian": [
+          66720,
+          11775,
+          23005,
+          7570
+        ],
+        "total": 109070
+      },
+      {
+        "nama": "Tawangalun",
+        "rayon": 1,
+        "varian": [
+          70955,
+          11010,
+          21705,
+          5830
+        ],
+        "total": 109500
+      },
+      {
+        "nama": "DP Jember 1",
+        "rayon": 1,
+        "varian": [
+          88320,
+          6575,
+          18935,
+          3990
+        ],
+        "total": 117820
+      },
+      {
+        "nama": "DP Jember 4",
+        "rayon": 1,
+        "varian": [
+          45995,
+          3350,
+          8660,
+          1790
+        ],
+        "total": 59795
+      },
+      {
+        "nama": "Pelita",
+        "rayon": 2,
+        "varian": [
+          83610,
+          9930,
+          19730,
+          5990
+        ],
+        "total": 119260
+      },
+      {
+        "nama": "Dawuhan",
+        "rayon": 2,
+        "varian": [
+          52680,
+          5700,
+          13376,
+          3300
+        ],
+        "total": 75056
+      },
+      {
+        "nama": "Kalisat",
+        "rayon": 2,
+        "varian": [
+          94525,
+          10175,
+          22955,
+          4205
+        ],
+        "total": 131860
+      },
+      {
+        "nama": "DP Jember 2",
+        "rayon": 2,
+        "varian": [
+          82085,
+          7245,
+          20365,
+          3390
+        ],
+        "total": 113085
+      },
+      {
+        "nama": "DP Jember 3",
+        "rayon": 2,
+        "varian": [
+          48590,
+          3235,
+          8625,
+          1155
+        ],
+        "total": 61605
+      }
+    ]
+  },
+  "2026-07": {
+    "periode": "2026-07",
+    "namaBulan": "Juli 2026",
+    "d": 31,
+    "terkunci": true,
+    "rows": [
+      {
+        "nama": "Jember",
+        "rayon": 1,
+        "varian": [
+          55975,
+          8140,
+          12055,
+          5915
+        ],
+        "total": 82085
+      },
+      {
+        "nama": "Jember 2",
+        "rayon": 1,
+        "varian": [
+          68155,
+          11670,
+          15730,
+          7920
+        ],
+        "total": 103475
+      },
+      {
+        "nama": "Tawangalun",
+        "rayon": 1,
+        "varian": [
+          61480,
+          10200,
+          16525,
+          5670
+        ],
+        "total": 93875
+      },
+      {
+        "nama": "DP Jember 1",
+        "rayon": 1,
+        "varian": [
+          86795,
+          6505,
+          14835,
+          4220
+        ],
+        "total": 112355
+      },
+      {
+        "nama": "DP Jember 4",
+        "rayon": 1,
+        "varian": [
+          44675,
+          3020,
+          5325,
+          1665
+        ],
+        "total": 54685
+      },
+      {
+        "nama": "Pelita",
+        "rayon": 2,
+        "varian": [
+          77345,
+          8881,
+          12556,
+          5590
+        ],
+        "total": 104372
+      },
+      {
+        "nama": "Dawuhan",
+        "rayon": 2,
+        "varian": [
+          60770,
+          6945,
+          9265,
+          3290
+        ],
+        "total": 80270
+      },
+      {
+        "nama": "Kalisat",
+        "rayon": 2,
+        "varian": [
+          87765,
+          9255,
+          18925,
+          3765
+        ],
+        "total": 119710
+      },
+      {
+        "nama": "DP Jember 2",
+        "rayon": 2,
+        "varian": [
+          74590,
+          7345,
+          12265,
+          2740
+        ],
+        "total": 96940
+      },
+      {
+        "nama": "DP Jember 3",
+        "rayon": 2,
+        "varian": [
+          55365,
+          3060,
+          6140,
+          1335
+        ],
+        "total": 65900
+      }
+    ]
+  },
+  "2026-08": {
+    "periode": "2026-08",
+    "namaBulan": "Agustus 2026",
+    "d": 31,
+    "terkunci": true,
+    "rows": [
+      {
+        "nama": "Jember",
+        "rayon": 1,
+        "varian": [
+          69850,
+          10440,
+          12990,
+          7075
+        ],
+        "total": 100355
+      },
+      {
+        "nama": "Jember 2",
+        "rayon": 1,
+        "varian": [
+          74160,
+          11420,
+          14035,
+          7750
+        ],
+        "total": 107365
+      },
+      {
+        "nama": "Tawangalun",
+        "rayon": 1,
+        "varian": [
+          68250,
+          12190,
+          16835,
+          5550
+        ],
+        "total": 102825
+      },
+      {
+        "nama": "DP Jember 1",
+        "rayon": 1,
+        "varian": [
+          117915,
+          9000,
+          12045,
+          6540
+        ],
+        "total": 145500
+      },
+      {
+        "nama": "DP Jember 4",
+        "rayon": 1,
+        "varian": [
+          45945,
+          3235,
+          4895,
+          1965
+        ],
+        "total": 56040
+      },
+      {
+        "nama": "Pelita",
+        "rayon": 2,
+        "varian": [
+          89310,
+          10265,
+          12230,
+          6835
+        ],
+        "total": 118640
+      },
+      {
+        "nama": "Dawuhan",
+        "rayon": 2,
+        "varian": [
+          64285,
+          7280,
+          9165,
+          2910
+        ],
+        "total": 83640
+      },
+      {
+        "nama": "Kalisat",
+        "rayon": 2,
+        "varian": [
+          98060,
+          10115,
+          16690,
+          3700
+        ],
+        "total": 128565
+      },
+      {
+        "nama": "DP Jember 2",
+        "rayon": 2,
+        "varian": [
+          80410,
+          8105,
+          10915,
+          3395
+        ],
+        "total": 102825
+      },
+      {
+        "nama": "DP Jember 3",
+        "rayon": 2,
+        "varian": [
+          49140,
+          2585,
+          4100,
+          815
+        ],
+        "total": 56640
+      }
+    ]
+  }
+}
