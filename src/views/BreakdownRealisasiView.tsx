@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Calendar, Download } from 'lucide-react';
+import { ArrowDown, ArrowUp, Calendar, Download } from 'lucide-react';
 import { AppState, VariantCode, DailySalesRecord } from '../types';
 import {
   formatNumber,
@@ -118,24 +118,28 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
     return null;
   };
 
-  // Penjualan harian satu TKU pada tanggal d: [YO, OM, OS, YT]
+  // Cek apakah satu TKU pada tanggal d benar-benar memiliki data penjualan tersimpan
+  const hasSavedSalesFor = (d: number, tkuIdx: number): boolean => {
+    const rec = getRecordFor(isoDate(d), tkuIdx);
+    return Boolean(rec && (rec.sold > 0 || (rec.v && rec.v.some(x => x > 0))));
+  };
+
+  // Penjualan harian satu TKU pada tanggal d: [YO, OM, OS, YT] (hanya dari data riil tersimpan)
   const getSales = (tkuIdx: number, d: number): number[] => {
     const t = state.tkus[tkuIdx];
     if (!t || !t.aktif) return [0, 0, 0, 0];
-    if (d > updateDay) return [0, 0, 0, 0];
     const rec = getRecordFor(isoDate(d), tkuIdx);
     if (rec && rec.v) return [0, 1, 2, 3].map(i => rec.v[i] || 0);
-    if (dow(d) === 0) return [0, 0, 0, 0]; // Minggu libur
-    const branchDayTotal = getSeedDailyBranchTotal(state, d);
-    const tkuTotal = Math.round(branchDayTotal * (t.targetHarian / totalBranchTarget));
-    const ratios = [0.76, 0.09, 0.11, 0.04];
-    return ratios.map(r => Math.round(tkuTotal * r));
+    return [0, 0, 0, 0];
   };
 
   // Rencana breakdown satu TKU pada tanggal d: [YO, OM, OS, YT]
   const getPlan = (tkuIdx: number, d: number): number[] => {
     const t = state.tkus[tkuIdx];
     if (!t || !t.aktif) return [0, 0, 0, 0];
+    // Hari Minggu libur (tidak ada transaksi): rencana breakdown selalu 0, sama seperti Realisasi.
+    // Jika suatu Minggu ternyata ada penjualan tersimpan, angka riil tetap tampil (lihat salesByTku).
+    if (dow(d) === 0) return [0, 0, 0, 0];
     const bv = state.breakdownPerVariant;
     if (bv && bv.YO && bv.YO[tkuIdx]) return VCODES.map(v => bv[v]?.[tkuIdx]?.[d - 1] || 0);
     const tot = state.breakdown?.[tkuIdx]?.[d - 1] || 0;
@@ -147,11 +151,15 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
     state.tkus.forEach((_t, idx) => {
       const arr: number[][] = [[0, 0, 0, 0]];
       for (let d = 1; d <= daysInMonth; d++) {
-        // Pada menu breakdown: tanggal <= updateDay (sudah terealisasi) diisi dari realisasi (getSales),
-        // sedangkan tanggal > updateDay (sisa hari) diisi dari rencana target (getPlan).
+        const hasRealized = hasSavedSalesFor(d, idx);
+        // Pada menu breakdown:
+        // - Jika tanggal tsb SUDAH ada simpan penjualan: otomatis tampilkan hasil riil (getSales)
+        // - Jika tanggal tsb BELUM ada simpan penjualan: TETAP TAMPILKAN RENCANA TARGET (getPlan)! Jangan hilang!
+        // Pada menu realisasi:
+        // - Tampilkan hasil riil, atau [0, 0, 0, 0] jika belum tersimpan
         const val = isReal
-          ? getSales(idx, d)
-          : (d <= updateDay ? getSales(idx, d) : getPlan(idx, d));
+          ? (hasRealized ? getSales(idx, d) : [0, 0, 0, 0])
+          : (hasRealized ? getSales(idx, d) : getPlan(idx, d));
         arr.push(val);
       }
       map[idx] = arr;
@@ -281,6 +289,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
     head.push('Akumulasi Total');
     VCODES.forEach(v => head.push(`Rata-rata ${v}`));
     head.push('Rata-rata Total');
+    if (showWeekCmp) head.push('% vs Minggu Lalu', 'Selisih vs Minggu Lalu (btl)');
     head.push('% vs Target', '% vs Bulan Lalu', '% vs Tahun Lalu');
     head.push('Selisih Botol vs Target', 'Selisih Botol vs Bulan Lalu', 'Selisih Botol vs Tahun Lalu');
     if (isReal) head.push('BB Akm', '% BB', 'PDM Akm', 'Absen Akm', 'Frek Akm', 'JWP', 's/YL', 'Jml YL', 'Jml Area', '% Cover Area');
@@ -293,6 +302,10 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
       line.push(r.agg.accTotal);
       r.agg.avg.forEach(x => line.push(Math.round(x)));
       line.push(Math.round(r.agg.avgTotal));
+      if (showWeekCmp) {
+        const wc = weekCmp(r.agg);
+        line.push(wc.pct === null ? '' : (wc.pct * 100).toFixed(1) + '%', wc.diff === null ? '' : Math.round(wc.diff));
+      }
       line.push(...[r.agg.pct.tg, r.agg.pct.bl, r.agg.pct.ty].map(p => (p === null ? '' : (p * 100).toFixed(1) + '%')));
       line.push(Math.round(r.agg.diff.tg), Math.round(r.agg.diff.bl), Math.round(r.agg.diff.ty));
       if (isReal) {
@@ -337,14 +350,68 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
     kind === 'total' ? (x >= 0 ? 'text-emerald-300' : 'text-red-300') : getStatusClass(x);
 
   const th = 'px-2 py-1.5 text-center font-semibold whitespace-nowrap border-l border-neutral-200 dark:border-neutral-800';
-  const td = 'px-2 py-2 text-right font-mono text-[11px] whitespace-nowrap';
+  // Semua sel angka: ukuran & ketebalan sama
+  const td = 'px-2 py-2 text-right font-mono text-[11px] font-bold whitespace-nowrap';
+
+  // ---- Perbandingan dengan Minggu lalu (hari yang sama = tanggal - 7) ----
+  // Hanya tab Breakdown & tampilan Mingguan. Tanggal 1-7 belum punya pembanding.
+  const showWeekCmp = !isReal && viewMode === 'mingguan';
+  const dayTotal = (a: Agg, d: number) => a.daily[d].reduce((x, y) => x + y, 0);
+
+  // Hari libur = tidak ada transaksi sama sekali di SEMUA TKU aktif (mis. hari Minggu).
+  // Hari libur tidak diberi tanda/warna dan tidak dipakai sebagai pembanding.
+  const activeIdxs = state.tkus.map((t, i) => (t.aktif ? i : -1)).filter(i => i >= 0);
+  const isHoliday = (d: number): boolean =>
+    activeIdxs.every(i => (salesByTku[i]?.[d] || [0, 0, 0, 0]).every(x => !x));
+
+  type Tone = 'up' | 'down' | 'same' | 'none';
+  const toneOf = (diff: number | null): Tone => (diff === null ? 'none' : diff > 0 ? 'up' : diff < 0 ? 'down' : 'same');
+  // Selisih satu tanggal vs tanggal yang sama minggu lalu (null jika salah satunya libur)
+  const dayDiff = (a: Agg, d: number): number | null =>
+    d > 7 && !isHoliday(d) && !isHoliday(d - 7) ? dayTotal(a, d) - dayTotal(a, d - 7) : null;
+  // Total minggu yang ditampilkan vs hari-hari yang sama minggu lalu (hari libur dilewati)
+  const weekCmp = (a: Agg) => {
+    let cur = 0, prev = 0, any = false;
+    shownDays.forEach(d => {
+      if (d > 7 && !isHoliday(d) && !isHoliday(d - 7)) { any = true; cur += dayTotal(a, d); prev += dayTotal(a, d - 7); }
+    });
+    if (!any) return { pct: null as number | null, diff: null as number | null };
+    return { pct: prev > 0 ? cur / prev : null, diff: cur - prev };
+  };
+  const toneText = (t: Tone, kind: TableRow['kind']) =>
+    t === 'none'
+      ? 'text-neutral-400'
+      : kind === 'total'
+        ? t === 'up' ? 'text-emerald-300' : t === 'down' ? 'text-red-300' : 'text-white'
+        : t === 'up'
+          ? 'text-emerald-600 dark:text-emerald-400'
+          : t === 'down'
+            ? 'text-red-600 dark:text-red-400'
+            : 'text-neutral-900 dark:text-white';
+  // Warna angka harian: hijau naik, merah turun; sama / libur = warna biasa
+  const dayToneClass = (t: Tone) =>
+    t === 'up'
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : t === 'down'
+        ? 'text-red-600 dark:text-red-400'
+        : '';
+  // Panah kecil di samping persen
+  const TrendArrow: React.FC<{ tone: Tone }> = ({ tone }) =>
+    tone === 'up'
+      ? <ArrowUp className="w-3 h-3 shrink-0" strokeWidth={3} aria-label="naik" />
+      : tone === 'down'
+        ? <ArrowDown className="w-3 h-3 shrink-0" strokeWidth={3} aria-label="turun" />
+        : null;
 
   const blocks = [
-    { title: isReal ? '1. Realisasi per Tanggal' : '1. Rencana Breakdown per Tanggal', span: shownDays.length * 4, tone: 'text-neutral-700 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800' },
-    { title: `2. Akumulasi (Tgl 1–${n})`, span: 5, tone: 'text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-950/30' },
-    { title: `3. Rata-rata (÷ ${n} hari)`, span: 5, tone: 'text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/30' },
-    { title: '4. Vs Target / Bulan Lalu / Tahun Lalu', span: 3, tone: 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30' },
-    { title: '5. Selisih Botol', span: 3, tone: 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30' }
+    { title: isReal ? 'Realisasi per Tanggal' : 'Rencana Breakdown per Tanggal', span: shownDays.length * 4, tone: 'text-neutral-700 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800' },
+    { title: 'Akumulasi', span: 5, tone: 'text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-950/30' },
+    { title: 'Rata-rata', span: 5, tone: 'text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/30' },
+    ...(showWeekCmp
+      ? [{ title: 'Vs Minggu Lalu', span: 2, tone: 'text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/30' }]
+      : []),
+    { title: 'Vs Target / Bulan Lalu / Tahun Lalu', span: 3, tone: 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30' },
+    { title: 'Selisih Botol', span: 3, tone: 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30' }
   ];
 
   return (
@@ -359,6 +426,44 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl shrink-0">
+            {([
+              { id: 'mingguan', label: 'Mingguan' },
+              { id: 'bulanan', label: 'Bulanan' }
+            ] as const).map(m => (
+              <button
+                key={m.id}
+                onClick={() => setViewMode(m.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  viewMode === m.id
+                    ? 'bg-brand-600 text-white shadow-sm'
+                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          {viewMode === 'mingguan' && (
+            <div className="flex items-center gap-1.5 overflow-x-auto max-w-full">
+              <Calendar className="w-3.5 h-3.5 text-brand-600 shrink-0" />
+              {weeks.map((w, i) => (
+                <button
+                  key={i}
+                  onClick={() => setSelectedWeek(i)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                    i === weekIdx
+                      ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900'
+                      : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                  }`}
+                >
+                  Mgg {i + 1} <span className="font-normal opacity-70">({w.start}–{w.end})</span>
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="inline-flex p-1 bg-neutral-900 dark:bg-neutral-100 rounded-xl shrink-0">
             {([
               { id: 'breakdown', label: 'Breakdown' },
@@ -409,64 +514,6 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
         </div>
       </div>
 
-      {/* Toolbar: Mingguan / Bulanan (+ pilih minggu) */}
-      <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-neutral-900 p-3 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
-        <div className="p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl flex items-center">
-          {([
-            { id: 'mingguan', label: 'Mingguan' },
-            { id: 'bulanan', label: 'Bulanan' }
-          ] as const).map(m => (
-            <button
-              key={m.id}
-              onClick={() => setViewMode(m.id)}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                viewMode === m.id
-                  ? 'bg-brand-600 text-white shadow-sm'
-                  : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-              }`}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
-
-        {viewMode === 'mingguan' && (
-          <div className="flex items-center gap-1.5 overflow-x-auto max-w-full">
-            <Calendar className="w-3.5 h-3.5 text-brand-600 shrink-0" />
-            {weeks.map((w, i) => (
-              <button
-                key={i}
-                onClick={() => setSelectedWeek(i)}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                  i === weekIdx
-                    ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900'
-                    : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
-                }`}
-              >
-                Mgg {i + 1} <span className="font-normal opacity-70">({w.start}–{w.end})</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        <span className="text-[11px] text-neutral-500 sm:ml-auto">
-          Pembagi {isReal ? '(tanggal update)' : viewMode === 'mingguan' ? '(tanggal Sabtu minggu ini)' : '(tanggal terakhir bulan)'}: <strong className="font-mono text-neutral-800 dark:text-neutral-200">{n} hari</strong>
-          {' '}&bull; Selisih = Akumulasi − (pembanding × {n})
-        </span>
-      </div>
-
-      {/* Legend Keterangan Warna */}
-      <div className="flex flex-wrap items-center gap-4 bg-neutral-50 dark:bg-neutral-800/60 px-3.5 py-2 rounded-xl border border-neutral-200/80 dark:border-neutral-700/80 text-xs">
-        <div className="flex items-center gap-1.5 font-sans">
-          <span className="w-2.5 h-2.5 rounded bg-emerald-500 inline-block shrink-0" />
-          <span><strong className="text-emerald-700 dark:text-emerald-400">Header Hijau Badge "Riil" / Kolom Hijau</strong> = Tanggal Sudah Terealisasi (Data Penjualan Nyata)</span>
-        </div>
-        <div className="flex items-center gap-1.5 font-sans">
-          <span className="w-2.5 h-2.5 rounded bg-neutral-200 dark:bg-neutral-700 inline-block shrink-0" />
-          <span><strong className="text-neutral-700 dark:text-neutral-300">Kolom Biasa</strong> = Target Rencana Sisa Hari</span>
-        </div>
-      </div>
-
       {/* Tabel */}
       <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
@@ -485,25 +532,14 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
               <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/40 text-neutral-600 dark:text-neutral-300">
                 {shownDays.map(d => {
                   const w = dow(d);
-                  const isRealizedDay = d <= updateDay;
                   return (
                     <th
                       key={d}
                       colSpan={4}
-                      className={`${th} ${w === 0 ? 'text-red-600 dark:text-red-400' : ''} ${
-                        isRealizedDay
-                          ? 'bg-emerald-100/90 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 font-bold border-b-2 border-b-emerald-500'
-                          : ''
-                      }`}
-                      title={isRealizedDay ? `Tgl ${d} • Sudah Terealisasi (Penjualan Riil)` : `Tgl ${d} • Target Rencana Sisa Hari`}
+                      className={`${th} ${w === 0 ? 'text-red-600 dark:text-red-400' : ''}`}
                     >
                       <div className="flex items-center justify-center gap-1">
                         <span>{DAY_NAMES[w]} {d}</span>
-                        {isRealizedDay && (
-                          <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-600 text-white font-bold leading-none">
-                            Riil
-                          </span>
-                        )}
                       </div>
                     </th>
                   );
@@ -513,6 +549,9 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                 ))}
                 {[...VCODES, 'Total'].map(l => (
                   <th key={`r${l}`} rowSpan={2} className={th}>{l}</th>
+                ))}
+                {showWeekCmp && ['Persen', 'Selisih'].map(l => (
+                  <th key={`w${l}`} rowSpan={2} className={th}>{l}</th>
                 ))}
                 {['Target', 'Bln Lalu', 'Thn Lalu'].map(l => (
                   <th key={`p${l}`} rowSpan={2} className={th}>{l}</th>
@@ -550,13 +589,16 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                       VCODES.map((v, vi) => {
                         const future = isReal && d > updateDay;
                         const val = a.daily[d][vi];
-                        const isSunEmpty = dow(d) === 0 && val === 0;
+                        // Hari libur (semua TKU tanpa transaksi): tampil '-' tanpa tanda warna
+                        const isHolidayEmpty = !future && val === 0 && isHoliday(d);
+                        // Warna angka per tanggal vs hari yang sama minggu lalu (baris TKU, tampilan mingguan)
+                        const dayTone: Tone = showWeekCmp && r.kind === 'tku' && !future && !isHolidayEmpty ? toneOf(dayDiff(a, d)) : 'none';
                         return (
                           <td
                             key={`${d}${v}`}
-                            className={`${td} ${vi === 0 ? sep : ''} ${future || isSunEmpty ? 'text-neutral-300 dark:text-neutral-600' : ''}`}
+                            className={`${td} ${vi === 0 ? sep : ''} ${future || isHolidayEmpty ? 'text-neutral-300 dark:text-neutral-600' : dayToneClass(dayTone)}`}
                           >
-                            {future ? '·' : isSunEmpty ? '-' : formatNumber(val)}
+                            {future ? '·' : isHolidayEmpty ? '-' : formatNumber(val)}
                           </td>
                         );
                       })
@@ -566,24 +608,44 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                     {a.acc.map((x, i) => (
                       <td key={`a${i}`} className={`${td} ${i === 0 ? sep : ''}`}>{formatNumber(x)}</td>
                     ))}
-                    <td className={`${td} font-bold`}>{formatNumber(a.accTotal)}</td>
+                    <td className={td}>{formatNumber(a.accTotal)}</td>
 
                     {/* 3. Rata-rata */}
                     {a.avg.map((x, i) => (
                       <td key={`r${i}`} className={`${td} ${i === 0 ? sep : ''}`}>{formatNumber(x)}</td>
                     ))}
-                    <td className={`${td} font-bold`}>{formatNumber(a.avgTotal)}</td>
+                    <td className={td}>{formatNumber(a.avgTotal)}</td>
 
-                    {/* 4. Vs target / bulan lalu / tahun lalu */}
+                    {/* 4. Vs Minggu lalu (hanya mingguan, tab Breakdown) */}
+                    {showWeekCmp && (() => {
+                      const wc = weekCmp(a);
+                      const toneDiff = toneOf(wc.diff);
+                      const tonePct: Tone = wc.pct === null ? 'none' : toneDiff;
+                      return (
+                        <>
+                          <td className={`${td} ${sep} ${toneText(tonePct, r.kind)}`}>
+                            <span className="inline-flex items-center justify-end gap-0.5">
+                              {wc.pct === null ? '—' : formatPercent(wc.pct)}
+                              <TrendArrow tone={tonePct} />
+                            </span>
+                          </td>
+                          <td className={`${td} ${toneText(toneDiff, r.kind)}`}>
+                            {wc.diff === null ? '—' : `${wc.diff > 0 ? '+' : wc.diff < 0 ? '−' : ''}${formatNumber(Math.abs(wc.diff))}`}
+                          </td>
+                        </>
+                      );
+                    })()}
+
+                    {/* 5. Vs target / bulan lalu / tahun lalu */}
                     {[a.pct.tg, a.pct.bl, a.pct.ty].map((p, i) => (
-                      <td key={`p${i}`} className={`${td} font-semibold ${i === 0 ? sep : ''} ${pctClass(p, r.kind)}`}>
+                      <td key={`p${i}`} className={`${td} ${i === 0 ? sep : ''} ${pctClass(p, r.kind)}`}>
                         {formatPercent(p)}
                       </td>
                     ))}
 
-                    {/* 5. Selisih botol */}
+                    {/* 6. Selisih botol */}
                     {[a.diff.tg, a.diff.bl, a.diff.ty].map((x, i) => (
-                      <td key={`s${i}`} className={`${td} font-semibold ${i === 0 ? sep : ''} ${diffClass(x, r.kind)}`}>
+                      <td key={`s${i}`} className={`${td} ${i === 0 ? sep : ''} ${diffClass(x, r.kind)}`}>
                         {formatDiff(x)}
                       </td>
                     ))}

@@ -363,8 +363,24 @@ export const TrendChart: React.FC<Props> = ({ days, today, year, monthIndex, mon
                   valueClass="text-neutral-900 dark:text-white"
                 />
               )}
-              {selected.lm > 0 && <Cell label="Bulan lalu (LM)" value={`${formatNumber(Math.round(selected.lm))} btl`} valueClass="text-yellow-600 dark:text-yellow-400" />}
-              {selected.ly > 0 && <Cell label="Tahun lalu (LY)" value={`${formatNumber(Math.round(selected.ly))} btl`} valueClass="text-violet-600 dark:text-violet-400" />}
+              {selected.lm > 0 && (
+                <Cell
+                  label="Bulan lalu (LM)"
+                  value={`${formatNumber(Math.round(selected.lm))} btl`}
+                  sub={`${selected.sold - selected.lm >= 0 ? '+' : '−'}${formatNumber(Math.abs(Math.round(selected.sold - selected.lm)))} btl`}
+                  subClass={selected.sold - selected.lm >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}
+                  valueClass="text-yellow-600 dark:text-yellow-400"
+                />
+              )}
+              {selected.ly > 0 && (
+                <Cell
+                  label="Tahun lalu (LY)"
+                  value={`${formatNumber(Math.round(selected.ly))} btl`}
+                  sub={`${selected.sold - selected.ly >= 0 ? '+' : '−'}${formatNumber(Math.abs(Math.round(selected.sold - selected.ly)))} btl`}
+                  subClass={selected.sold - selected.ly >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}
+                  valueClass="text-violet-600 dark:text-violet-400"
+                />
+              )}
               <Cell label="Balik botol (BB)" value={`${formatNumber(selected.bb)} btl`} valueClass="text-blue-600 dark:text-blue-400" />
             </div>
           )}

@@ -8,6 +8,9 @@ import {
   loadStateFromSupabase, 
   saveStateToSupabase,
   hasUnsyncedChanges,
+  hasSyncMeta,
+  setMergedStateHandler,
+  reapplyMergedState,
   getLatestSalesDay,
   getTanggalUpdate,
   computeActiveDate,
@@ -129,9 +132,16 @@ export default function App() {
   // Sub-menu aktif untuk akun operator TKU: Ringkasan di depan, menu kedua Input Penjualan
   const [tkuSubMenu, setTkuSubMenu] = useState<'ringkasan' | 'input' | 'breakdown' | 'realisasi'>('ringkasan');
 
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const hasPendingPushRef = useRef(false);
+
   // Automatically save state to localStorage whenever it changes (cache instan/offline)
   useEffect(() => {
     saveAppState(state);
+    if (hasUnsyncedChanges(state)) {
+      hasPendingPushRef.current = true;
+    }
   }, [state]);
 
   // Beri tahu aplikasi pembungkus (APK/webview) apakah akun sedang masuk atau keluar,
@@ -193,27 +203,30 @@ export default function App() {
   }, []);
 
   // Fungsi sinkronisasi data menyeluruh (lokal & cloud Supabase jika terhubung)
+  // Poin 3 & 4: Callback stabil tanpa dependensi volatile (menu/role/theme),
+  // tidak menimpa perubahan lokal yang belum terkirim.
   const refreshFromCloud = useCallback(async (isManual = false) => {
+    const currentState = stateRef.current;
+    // Jangan tarik otomatis kalau ada input lokal yang belum terkirim (kirim dulu).
+    // Perangkat yang belum pernah sinkron (HP baru) justru HARUS menarik dulu; gabungannya aman.
+    const belumPernahSinkron = !hasSyncMeta(currentState.supabaseConfig);
+    if (!isManual && !belumPernahSinkron && (hasPendingPushRef.current || hasUnsyncedChanges(currentState))) {
+      return;
+    }
+
     setIsSyncing(true);
     setSyncStatus('syncing');
     try {
-      if (state.supabaseConfig.u && state.supabaseConfig.k) {
-        const result = await loadStateFromSupabase(state.supabaseConfig);
+      if (currentState.supabaseConfig.u && currentState.supabaseConfig.k) {
+        const result = await loadStateFromSupabase(currentState.supabaseConfig, currentState);
         if (result === 'unchanged') {
           setSyncStatus('synced');
           setState(prev => synchronizeAppState(prev));
           if (isManual) showToast('Sinkronisasi selesai! Data lokal & cloud sudah mutakhir dan serasi.', 'success');
         } else if (result && result.state) {
-          const synchronized = synchronizeAppState({
-            ...result.state,
-            role: state.role,
-            activeTkuId: state.activeTkuId,
-            currentMenu: state.currentMenu,
-            selectedRayon: state.selectedRayon,
-            theme: state.theme,
-            supabaseConfig: state.supabaseConfig
-          });
-          setState(synchronized);
+          hasPendingPushRef.current = false;
+          // Terapkan sebagai selisih supaya ketikan baru selama proses tarik tidak tertimpa
+          setState(prev => reapplyMergedState(prev, currentState, result.state));
           setSyncStatus('synced');
           if (isManual) showToast('Sinkronisasi cloud berhasil! Seluruh data dan metrik telah disesuaikan.', 'success');
         } else {
@@ -233,18 +246,24 @@ export default function App() {
     } finally {
       setIsSyncing(false);
     }
-  }, [state.supabaseConfig, state.role, state.activeTkuId, state.currentMenu, state.selectedRayon, state.theme]);
+  }, []);
 
-  // Tarik data cloud: saat pertama buka, saat kembali ke tab browser, dan periodik hemat (tiap 2.5 menit)
+  // Poin 4: Tarik data cloud: saat pertama buka, saat kembali ke tab browser (deduplikasi focus/visibility),
+  // dan periodik hemat (tiap 2.5 menit).
+  // HANYA bergantung pada kredensial Supabase (supabaseSig), TIDAK PERNAH berjalan ulang saat ganti menu!
   const supabaseSig = state.supabaseConfig.u + '|' + state.supabaseConfig.k;
   useEffect(() => {
     if (!state.supabaseConfig.u || !state.supabaseConfig.k) return;
     refreshFromCloud(false);
 
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        refreshFromCloud(false);
-      }
+    let lastForegroundPull = Date.now();
+    const handleForeground = () => {
+      if (document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      // Poin 4: Deduplikasi event focus dan visibilitychange (jeda minimal 10 detik)
+      if (now - lastForegroundPull < 10000) return;
+      lastForegroundPull = now;
+      refreshFromCloud(false);
     };
 
     const periodicTimer = setInterval(() => {
@@ -253,13 +272,13 @@ export default function App() {
       }
     }, 150000); // 2.5 menit
 
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    window.addEventListener('focus', onVisibilityChange);
+    document.addEventListener('visibilitychange', handleForeground);
+    window.addEventListener('focus', handleForeground);
 
     return () => {
       clearInterval(periodicTimer);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('focus', onVisibilityChange);
+      document.removeEventListener('visibilitychange', handleForeground);
+      window.removeEventListener('focus', handleForeground);
     };
   }, [supabaseSig, refreshFromCloud]);
 
@@ -311,24 +330,88 @@ export default function App() {
     };
   }, []);
 
+  // Hasil gabungan dari simpan (termasuk simpan paksa) diterapkan ke tampilan sebagai selisih.
+  useEffect(() => {
+    setMergedStateHandler((merged, start) => {
+      setState(prev => reapplyMergedState(prev, start, merged));
+    });
+    return () => setMergedStateHandler(null);
+  }, []);
+
   // Dorong perubahan ke Supabase, di-debounce 2.5 detik supaya tidak menulis ke cloud di
   // setiap ketikan/klik (sangat hemat egress), dan dilewati jika data riil tidak berubah.
+  // Kalau gagal (offline dll.), diulang otomatis: 15 dtk, 30 dtk, lalu tiap 60 dtk, dan segera
+  // saat HP kembali online atau aplikasi kembali ke layar depan.
   const supabasePushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const supabaseRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pushRetryCountRef = useRef(0);
+  const pushingRef = useRef(false);
+
+  const pushNow = useCallback(async () => {
+    const s = stateRef.current;
+    if (!s.supabaseConfig.u || !s.supabaseConfig.k) return;
+    if (!hasUnsyncedChanges(s)) {
+      hasPendingPushRef.current = false;
+      return;
+    }
+    if (pushingRef.current) return;
+    pushingRef.current = true;
+    if (supabaseRetryTimer.current) {
+      clearTimeout(supabaseRetryTimer.current);
+      supabaseRetryTimer.current = null;
+    }
+    setIsSyncing(true);
+    setSyncStatus('syncing');
+    let ok = false;
+    try {
+      ok = await saveStateToSupabase(s, false);
+    } finally {
+      pushingRef.current = false;
+    }
+    setIsSyncing(false);
+    setSyncStatus(ok ? 'synced' : 'error');
+    if (ok) {
+      pushRetryCountRef.current = 0;
+      hasPendingPushRef.current = false;
+      // Ada ketikan baru selama proses simpan? Kirim lagi sebentar lagi.
+      if (hasUnsyncedChanges(stateRef.current)) {
+        if (supabasePushTimer.current) clearTimeout(supabasePushTimer.current);
+        supabasePushTimer.current = setTimeout(() => { pushNow(); }, 2500);
+      }
+    } else {
+      hasPendingPushRef.current = true;
+      const jeda = [15000, 30000, 60000];
+      const d = jeda[Math.min(pushRetryCountRef.current, jeda.length - 1)];
+      pushRetryCountRef.current += 1;
+      supabaseRetryTimer.current = setTimeout(() => { pushNow(); }, d);
+    }
+  }, []);
+
   useEffect(() => {
     if (!state.supabaseConfig.u || !state.supabaseConfig.k) return;
     if (!hasUnsyncedChanges(state)) return; // Lewati jika tidak ada perubahan data riil
+    hasPendingPushRef.current = true;
     if (supabasePushTimer.current) clearTimeout(supabasePushTimer.current);
-    supabasePushTimer.current = setTimeout(async () => {
-      setIsSyncing(true);
-      setSyncStatus('syncing');
-      const ok = await saveStateToSupabase(state);
-      setIsSyncing(false);
-      setSyncStatus(ok ? 'synced' : 'error');
-    }, 2500);
+    supabasePushTimer.current = setTimeout(() => { pushNow(); }, 2500);
     return () => {
       if (supabasePushTimer.current) clearTimeout(supabasePushTimer.current);
     };
-  }, [state]);
+  }, [state, pushNow]);
+
+  useEffect(() => {
+    const kick = () => {
+      if (document.visibilityState === 'hidden') return;
+      pushRetryCountRef.current = 0;
+      pushNow();
+    };
+    window.addEventListener('online', kick);
+    document.addEventListener('visibilitychange', kick);
+    return () => {
+      window.removeEventListener('online', kick);
+      document.removeEventListener('visibilitychange', kick);
+      if (supabaseRetryTimer.current) clearTimeout(supabaseRetryTimer.current);
+    };
+  }, [pushNow]);
 
   // Handle dark mode theme class on root element
   useEffect(() => {
@@ -733,12 +816,13 @@ export default function App() {
   // Daily Data & TKU Input
   const handleSaveDailyData = (date: string, tkuIdx: number, record: DailySalesRecord) => {
     setState(prev => {
-      const nextPjd = { ...prev.pjd };
-      if (!nextPjd[date]) {
-        nextPjd[date] = {};
-      }
-      nextPjd[date][tkuIdx] = record;
-
+      const nextPjd = {
+        ...prev.pjd,
+        [date]: {
+          ...(prev.pjd[date] || {}),
+          [tkuIdx]: record
+        }
+      };
       const nextInputs = date === prev.activeDate ? { ...prev.todayInputs, [tkuIdx]: record } : prev.todayInputs;
 
       return synchronizeAppState({
@@ -767,11 +851,13 @@ export default function App() {
   const handleSaveTkuInput = (tkuIdx: number, record: DailySalesRecord) => {
     setState(prev => {
       const nextInputs = { ...prev.todayInputs, [tkuIdx]: record };
-      const nextPjd = { ...prev.pjd };
-      if (!nextPjd[prev.activeDate]) {
-        nextPjd[prev.activeDate] = {};
-      }
-      nextPjd[prev.activeDate][tkuIdx] = record;
+      const nextPjd = {
+        ...prev.pjd,
+        [prev.activeDate]: {
+          ...(prev.pjd[prev.activeDate] || {}),
+          [tkuIdx]: record
+        }
+      };
 
       return synchronizeAppState({
         ...prev,

@@ -98,7 +98,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return acc + (state.targetTahunLalu[rawIdx] || 0);
   }, 0);
 
-  // Rata-rata & Selisih
+  // Persentase membandingkan rata-rata harian; selisih adalah gap akumulasi terhadap target s/d tanggal update.
   const avgPerDay = totalSold / divider;
   const targetDiff = totalSold - totalTarget * divider;
   const targetPct = avgPerDay / (totalTarget || 1);
@@ -108,6 +108,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const tyDiff = totalSold - tySum * divider;
   const tyPct = avgPerDay / (tySum || 1);
+  const formatAkmDiffPair = (diff: number) =>
+    `${formatDiff(diff)}/${formatDiff(Math.round(diff / Math.max(1, divider)))}`;
 
   // 1. Area & Yakult Lady (YL) & Coverage Area
   const totalArea = filteredTkus.reduce((a, t) => a + (t.jumlahArea || 10), 0);
@@ -557,7 +559,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
                 <span className="text-neutral-500">Target: {formatDecimal(totalTarget)}/hr</span>
                 <span className={`font-mono font-bold ${getStatusClass(targetDiff)}`}>
-                  {formatDiff(targetDiff)} btl
+                  {formatAkmDiffPair(targetDiff)}
                 </span>
               </div>
             </div>
@@ -576,7 +578,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
                 <span className="text-neutral-500">LM: {formatNumber(blSum)}/hr</span>
                 <span className={`font-mono font-bold ${getStatusClass(blDiff)}`}>
-                  {formatDiff(blDiff)} btl
+                  {formatAkmDiffPair(blDiff)}
                 </span>
               </div>
             </div>
@@ -595,7 +597,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
                 <span className="text-neutral-500">LY: {formatNumber(tySum)}/hr</span>
                 <span className={`font-mono font-bold ${getStatusClass(tyDiff)}`}>
-                  {formatDiff(tyDiff)} btl
+                  {formatAkmDiffPair(tyDiff)}
                 </span>
               </div>
             </div>
@@ -623,7 +625,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
               <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">Absen</span>
               <span className="text-base md:text-lg leading-tight truncate font-bold text-neutral-900 dark:text-neutral-100">
-                {totalAbsenSpreadsheet} <span className="text-xs font-normal text-neutral-400 font-sans">hari</span>
+                {totalAbsenSpreadsheet} <span className="text-xs font-normal text-neutral-400 font-sans">YL</span>
               </span>
               <span className="text-[10px] text-neutral-600 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans truncate">
                 Freq: <strong className="text-neutral-900 dark:text-neutral-100 font-mono font-bold">{totalFrekSpreadsheet}</strong>
@@ -968,7 +970,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           {formatPercent(row.pctTg)}
                         </div>
                         <div className="text-[10px] text-neutral-400 font-normal">
-                          {formatDiff(row.diffTg)} btl
+                          {formatAkmDiffPair(row.diffTg)}
                         </div>
                       </td>
 
@@ -979,7 +981,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           {formatPercent(row.pctBl)}
                         </div>
                         <div className="text-[10px] text-neutral-400 font-normal">
-                          {formatDiff(row.diffBl)} btl
+                          {formatAkmDiffPair(row.diffBl)}
                         </div>
                       </td>
 
@@ -990,7 +992,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           {formatPercent(row.pctTy)}
                         </div>
                         <div className="text-[10px] text-neutral-400 font-normal">
-                          {formatDiff(row.diffTy)} btl
+                          {formatAkmDiffPair(row.diffTy)}
                         </div>
                       </td>
 

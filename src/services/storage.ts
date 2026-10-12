@@ -10,6 +10,7 @@ import {
   INITIAL_DAILY_HISTORY
 } from '../data/initialData';
 import { DEFAULT_SUPABASE_CONFIG } from '../config/defaultSupabase';
+import { SYNC_KEYS, Syncable, deepEq, mergeSyncable, pickSyncable } from './syncMerge';
 
 export const STORAGE_KEY = 'yakult_sales_system_v11';
 export const SESSION_KEY = 'yk_sesi_v11';
@@ -203,7 +204,7 @@ function getSupabaseClient(config: SupabaseConfig | undefined | null): SupabaseC
 // (2) melewati upload kalau tidak ada data yang benar-benar berubah.
 const SYNC_META_KEY = 'yakult_sb_sync_meta_v1';
 
-interface SyncMeta { ts: number; hash: string; u: string; }
+interface SyncMeta { ts: number; hash: string; u: string; tok?: string; mode?: 'version' | 'updated_at'; }
 
 // Field yang hanya soal tampilan / turunan kalender. Berubah saat pindah menu, ganti
 // tema, atau ganti hari, tetapi bukan data penjualan, jadi tidak perlu memicu upload.
@@ -232,10 +233,27 @@ export function computeSyncHash(state: AppState): string {
 }
 
 // Buat payload bersih untuk cloud: buang kredensial supabaseConfig, preferensi UI lokal, dll.
+// Buat payload bersih untuk cloud: buang kredensial supabaseConfig, preferensi UI lokal, dll.
+// Poin 4 (Egress): Buang arsip statis bawaan 2025/2026 yang sudah terkompilasi di kode aplikasi
+// Hanya simpan arsip bulanan baru buatan pengguna agar payload hemat ~30-40 KB per upload/download
+// Arsip bawaan aplikasi (sudah ada di kode) tidak ikut ke cloud.
+const isStaticArchiveKey = (k: string): boolean => k.startsWith('2025') || k === '2026-08';
+
 export function sanitizeStateForCloud(state: AppState): Partial<AppState> {
   const clean: Record<string, unknown> = { ...(state as unknown as Record<string, unknown>) };
   VOLATILE_KEYS.forEach(k => { delete clean[k]; });
   delete clean.supabaseConfig; // Kredensial rahasia tidak disimpan di database cloud
+
+  if (clean.archives && typeof clean.archives === 'object') {
+    const userArchives: Record<string, unknown> = {};
+    Object.keys(clean.archives as Record<string, unknown>).forEach(k => {
+      if (!isStaticArchiveKey(k)) {
+        userArchives[k] = (clean.archives as Record<string, unknown>)[k];
+      }
+    });
+    clean.archives = userArchives;
+  }
+
   return clean as Partial<AppState>;
 }
 
@@ -251,12 +269,44 @@ function readSyncMeta(config: SupabaseConfig | undefined | null): SyncMeta | nul
   }
 }
 
-function writeSyncMeta(config: SupabaseConfig, ts: number, hash: string) {
+function writeSyncMeta(config: SupabaseConfig, ts: number, hash: string, tok?: string) {
   try {
-    localStorage.setItem(SYNC_META_KEY, JSON.stringify({ ts, hash, u: config.u.trim() }));
+    localStorage.setItem(
+      SYNC_META_KEY,
+      JSON.stringify({ ts, hash, u: config.u.trim(), tok: tok ?? '', mode: tokenMode })
+    );
   } catch (_) {
-    // abaikan: paling buruk, sinkronisasi kembali ke perilaku lama (download/upload penuh)
+    // abaikan
   }
+}
+
+// Salinan isi cloud saat terakhir sinkron (hanya bagian yang digabung): titik awal untuk gabungan tiga arah.
+const SYNC_BASE_KEY = 'yakult_sb_sync_base_v1';
+
+function readSyncBase(config: SupabaseConfig | undefined | null): Syncable | null {
+  try {
+    const raw = localStorage.getItem(SYNC_BASE_KEY);
+    if (!raw || !config) return null;
+    const b = JSON.parse(raw) as { u: string; data: Syncable };
+    if (!b || b.u !== config.u.trim() || !b.data) return null;
+    return b.data;
+  } catch {
+    return null;
+  }
+}
+
+function writeSyncBase(config: SupabaseConfig, data: Syncable) {
+  try {
+    localStorage.setItem(SYNC_BASE_KEY, JSON.stringify({ u: config.u.trim(), data }));
+  } catch (_) {
+    // Kuota penuh: tanpa base, gabungan berjalan aman tanpa penghapusan.
+    try { localStorage.removeItem(SYNC_BASE_KEY); } catch (_) { /* abaikan */ }
+  }
+}
+
+// True kalau perangkat ini belum pernah sinkron dengan cloud (HP baru / data browser dihapus).
+export function hasSyncMeta(config: SupabaseConfig | undefined | null): boolean {
+  return !!readSyncMeta(config);
 }
 
 // True kalau data (di luar field tampilan) berbeda dari yang terakhir tersinkron.
@@ -266,84 +316,179 @@ export function hasUnsyncedChanges(state: AppState): boolean {
   return meta.hash !== computeSyncHash(state);
 }
 
+/**
+ * Terapkan hasil gabungan (bagian yang disinkronkan) ke state lokal.
+ * Arsip bawaan 2025/2026-08 tidak ikut cloud, jadi dipertahankan dari lokal.
+ */
+export function applySyncable(state: AppState, s: Syncable): AppState {
+  const next: any = { ...state };
+  SYNC_KEYS.forEach(k => {
+    if (k === 'archives') return;
+    if (s[k] !== undefined) next[k] = s[k];
+  });
+  const statics: Record<string, ArchiveRecord> = {};
+  Object.keys(state.archives || {}).forEach(k => {
+    if (isStaticArchiveKey(k)) statics[k] = state.archives[k];
+  });
+  next.archives = { ...statics, ...(s.archives || {}) };
+  return synchronizeAppState(next as AppState);
+}
+
+const syncableOf = (state: AppState): Syncable => pickSyncable(sanitizeStateForCloud(state));
+
+/**
+ * Dipakai setelah simpan/tarik selesai: state di layar mungkin sudah berubah (pengguna masih mengetik)
+ * sejak proses dimulai. Hasil gabungan diterapkan sebagai selisih, jadi ketikan baru tidak tertimpa.
+ */
+export function reapplyMergedState(prev: AppState, start: AppState, merged: AppState): AppState {
+  if (prev === start) return merged;
+  const r = mergeSyncable(syncableOf(start), syncableOf(prev), syncableOf(merged), { guard: false });
+  return applySyncable(prev, r.merged);
+}
+
+// Penerima hasil gabungan untuk SEMUA jalur simpan (termasuk simpan paksa), didaftarkan oleh App.
+type MergedHandler = (merged: AppState, start: AppState) => void;
+let mergedHandler: MergedHandler | null = null;
+export function setMergedStateHandler(fn: MergedHandler | null) {
+  mergedHandler = fn;
+}
+
 export type RemoteLoadResult = { state: AppState } | 'unchanged' | null;
 
-// Ambil state terbaru dari Supabase.
-//  - null        : belum dikonfigurasi, belum ada data tersimpan, atau error jaringan
-//                  (silent fallback ke localStorage)
-//  - 'unchanged' : data cloud sama dengan yang sudah ada di perangkat ini, tidak ada
-//                  yang perlu diunduh (hanya ~100 byte yang ditransfer)
-//  - { state }   : data cloud lebih baru, sudah diunduh penuh
-export async function loadStateFromSupabase(config: SupabaseConfig | undefined | null): Promise<RemoteLoadResult> {
+// ---- Akses baris utama di Supabase dengan "token versi" ----
+// Token = kolom `version` (angka, naik 1 tiap simpan). Kalau kolom itu belum dibuat di Supabase,
+// otomatis memakai `updated_at` sebagai token. Simpan hanya berhasil kalau token di server masih
+// sama dengan yang kita pegang; jadi jam HP tidak lagi menentukan siapa yang "lebih baru".
+type TokenMode = 'version' | 'updated_at';
+let tokenMode: TokenMode = 'version';
+
+const isMissingVersionCol = (e: any): boolean =>
+  !!e && (e.code === '42703' || e.code === 'PGRST204' || /column.*version|version.*column/i.test(String(e.message || '')));
+
+const tokenCols = () => (tokenMode === 'version' ? 'version, updated_at' : 'updated_at');
+
+type RowRead =
+  | { ok: true; exists: boolean; tok: string; updatedAt: string; value?: any }
+  | { ok: false; message: string };
+
+async function fetchMainRow(client: SupabaseClient, withValue: boolean): Promise<RowRead> {
+  for (let i = 0; i < 2; i++) {
+    const cols = tokenCols() + (withValue ? ', value' : '');
+    const { data, error } = await client.from('app_store').select(cols).eq('key', REMOTE_KEY).maybeSingle();
+    if (error) {
+      if (tokenMode === 'version' && isMissingVersionCol(error)) {
+        tokenMode = 'updated_at';
+        continue;
+      }
+      return { ok: false, message: error.message };
+    }
+    if (!data) return { ok: true, exists: false, tok: '', updatedAt: '' };
+    const row = data as any;
+    return {
+      ok: true,
+      exists: true,
+      tok: tokenMode === 'version' ? String(row.version ?? 0) : String(row.updated_at ?? ''),
+      updatedAt: String(row.updated_at ?? ''),
+      value: row.value
+    };
+  }
+  return { ok: false, message: 'Gagal membaca baris utama Supabase' };
+}
+
+type RowWrite =
+  | { status: 'ok'; tok: string }
+  | { status: 'conflict' }
+  | { status: 'error'; message: string };
+
+async function writeMainRow(client: SupabaseClient, payload: Partial<AppState>, exists: boolean, expectTok: string): Promise<RowWrite> {
+  const nowIso = new Date().toISOString();
+  const cols = tokenCols();
+  const tokOf = (row: any) => (tokenMode === 'version' ? String(row.version ?? 0) : String(row.updated_at ?? ''));
+
+  if (!exists) {
+    const row: any = { key: REMOTE_KEY, value: payload, updated_at: nowIso };
+    if (tokenMode === 'version') row.version = 1;
+    const { data, error } = await client.from('app_store').insert(row).select(cols);
+    if (error) {
+      if (error.code === '23505') return { status: 'conflict' }; // baris sudah dibuat perangkat lain
+      if (tokenMode === 'version' && isMissingVersionCol(error)) {
+        tokenMode = 'updated_at';
+        return { status: 'conflict' };
+      }
+      return { status: 'error', message: error.message };
+    }
+    const first = Array.isArray(data) ? (data[0] as any) : null;
+    return { status: 'ok', tok: first ? tokOf(first) : '' };
+  }
+
+  const patch: any = { value: payload, updated_at: nowIso };
+  let q: any;
+  if (tokenMode === 'version') {
+    patch.version = Number(expectTok) + 1;
+    q = client.from('app_store').update(patch).eq('key', REMOTE_KEY).eq('version', Number(expectTok));
+  } else {
+    q = client.from('app_store').update(patch).eq('key', REMOTE_KEY).eq('updated_at', expectTok);
+  }
+  const { data, error } = await q.select(cols);
+  if (error) {
+    if (tokenMode === 'version' && isMissingVersionCol(error)) {
+      tokenMode = 'updated_at';
+      return { status: 'conflict' };
+    }
+    return { status: 'error', message: error.message };
+  }
+  const rows = Array.isArray(data) ? data : [];
+  if (rows.length === 0) return { status: 'conflict' }; // token di server sudah berubah: ada yang menyimpan duluan
+  return { status: 'ok', tok: tokOf(rows[0]) };
+}
+
+// Ambil state terbaru dari Supabase dan gabungkan dengan state lokal (tiga arah).
+export async function loadStateFromSupabase(
+  config: SupabaseConfig | undefined | null,
+  currentState?: AppState
+): Promise<RemoteLoadResult> {
   const client = getSupabaseClient(config);
   if (!client || !config) return null;
   try {
     const known = readSyncMeta(config);
-    if (known && known.ts > 0) {
-      // Cek murah dulu: hanya kolom updated_at, bukan JSON besar di kolom value (~50 byte egress).
-      const head = await client
-        .from('app_store')
-        .select('updated_at')
-        .eq('key', REMOTE_KEY)
-        .maybeSingle();
-      if (!head.error && head.data && head.data.updated_at) {
-        const remoteTs = Date.parse(head.data.updated_at as string);
-        if (!isNaN(remoteTs) && remoteTs === known.ts) return 'unchanged';
-      }
-      // Kalau cek gagal / beda versi: lanjut unduh penuh (perilaku lama).
-    }
-    const { data, error } = await client
-      .from('app_store')
-      .select('value, updated_at')
-      .eq('key', REMOTE_KEY)
-      .maybeSingle();
-    if (error) {
-      console.warn('Supabase sync (load info):', error.message);
+    const local = currentState || getDefaultState();
+
+    // Cek murah dulu: hanya token, bukan JSON besar.
+    const head = await fetchMainRow(client, false);
+    if (!head.ok) {
+      console.warn('Supabase sync (load info):', head.message);
       return null;
     }
-    if (!data || !data.value) return null;
-    const defState = getDefaultState();
-    const rawVal = data.value as Partial<AppState>;
-    const merged: AppState = { 
-      ...defState, 
-      ...rawVal,
-      supabaseConfig: config // pertahankan kredensial lokal perangkat
-    };
-    if (rawVal.archives) {
-      merged.archives = {
-        ...defState.archives,
-        ...rawVal.archives
-      };
+    if (!head.exists) return null;
+    if (known && known.tok && known.mode === tokenMode && known.tok === head.tok) return 'unchanged';
+
+    const full = await fetchMainRow(client, true);
+    if (!full.ok) {
+      console.warn('Supabase sync (load):', full.message);
+      return null;
     }
-    // Tanggal aktif harus mengikuti bulan kerja yang tersimpan di cloud (bisa beda dari bawaan perangkat)
+    if (!full.exists || !full.value) return null;
+
+    const remoteSync = pickSyncable(full.value);
+    const localHash = computeSyncHash(local);
+    const localClean = !!known && known.hash === localHash;
+
+    let base = readSyncBase(config);
+    // Lokal persis sama dengan yang terakhir tersinkron: bisa dijadikan titik awal bersama.
+    if (!base && localClean) base = syncableOf(local);
+
+    const r = mergeSyncable(base, syncableOf(local), remoteSync, { guard: false });
+    let merged = applySyncable(local, r.merged);
+
+    // Tanggal aktif harus mengikuti bulan kerja yang tersimpan di cloud jika beda
     const remoteAct = computeActiveDate(merged.activePeriod);
-    merged.activeDate = remoteAct.date;
-    merged.currentDayNum = remoteAct.day;
-    merged.pembagiHari = remoteAct.day;
+    merged = { ...merged, activeDate: remoteAct.date, currentDayNum: remoteAct.day, pembagiHari: remoteAct.day };
 
-    const remotePjd = merged.pjd?.[remoteAct.date] || {};
-    const syncedRemoteInputs: Record<number, DailySalesRecord> = {};
-    merged.tkus.forEach((_, idx) => {
-      if (remotePjd[idx]) {
-        syncedRemoteInputs[idx] = { ...remotePjd[idx] };
-      } else {
-        syncedRemoteInputs[idx] = {
-          v: [0, 0, 0, 0],
-          b: [0, 0, 0, 0],
-          sold: 0,
-          bb: 0,
-          pdmV: [0, 0, 0, 0],
-          pdm: 0,
-          yl: merged.tkus[idx]?.jumlahYl || 10,
-          ar: merged.tkus[idx]?.jumlahArea || 10,
-          jwp: (merged.tkus[idx]?.jumlahYl || 10) * remoteAct.day,
-        };
-      }
-    });
-    merged.todayInputs = syncedRemoteInputs;
-
-    const remoteTs = Date.parse((data.updated_at as string) || '');
-    writeSyncMeta(config, isNaN(remoteTs) ? 0 : remoteTs, computeSyncHash(merged));
+    // Masih ada perubahan lokal yang belum ada di cloud? Tandai "belum tersinkron" supaya terkirim.
+    const hasLocalOnly = known ? !localClean : !deepEq(r.merged, remoteSync);
+    const remoteTs = Date.parse(full.updatedAt || '');
+    writeSyncBase(config, remoteSync);
+    writeSyncMeta(config, isNaN(remoteTs) ? 0 : remoteTs, hasLocalOnly ? 'belum-terkirim' : computeSyncHash(merged), full.tok);
     return { state: merged };
   } catch (err) {
     console.warn('Supabase sync fallback ke lokal:', err);
@@ -351,28 +496,73 @@ export async function loadStateFromSupabase(config: SupabaseConfig | undefined |
   }
 }
 
-// Simpan (upsert) state ke Supabase. Selalu dipanggil berdampingan dengan saveAppState
-// (localStorage) supaya aplikasi tetap responsif walau koneksi lambat/putus.
-// Upload dilewati kalau tidak ada perubahan data sejak sinkronisasi terakhir
-// (mis. hanya pindah menu / ganti tema / ganti hari), kecuali jika force = true.
-export async function saveStateToSupabase(state: AppState, force = false): Promise<boolean> {
+const MAX_SAVE_TRIES = 4;
+
+// Simpan state ke Supabase dengan cek versi di server (compare-and-swap).
+// Kalau perangkat lain sudah menyimpan duluan: tarik, gabungkan tiga arah, coba lagi (maks. 4 kali).
+// Perangkat yang belum punya catatan sinkron TIDAK pernah menimpa membabi buta: selalu digabung dulu.
+export async function saveStateToSupabase(
+  state: AppState,
+  force = false,
+  onMergedState?: (merged: AppState) => void
+): Promise<boolean> {
   const client = getSupabaseClient(state.supabaseConfig);
   if (!client) return false;
   try {
     const hash = computeSyncHash(state);
     const meta = readSyncMeta(state.supabaseConfig);
-    if (!force && meta && meta.hash === hash) return true; // sudah sama dengan cloud, tidak perlu upload
-    const cleanPayload = sanitizeStateForCloud(state);
-    const sentAt = new Date();
-    const { error } = await client
-      .from('app_store')
-      .upsert({ key: REMOTE_KEY, value: cleanPayload, updated_at: sentAt.toISOString() });
-    if (error) {
-      console.warn('Supabase sync (save info):', error.message);
-      return false;
+    if (!force && meta && meta.hash === hash) return true; // sudah sama dengan cloud
+
+    const localSync = syncableOf(state);
+    let base = readSyncBase(state.supabaseConfig);
+    if (!base && meta && meta.hash === hash) base = localSync;
+
+    for (let attempt = 0; attempt < MAX_SAVE_TRIES; attempt++) {
+      const head = await fetchMainRow(client, false);
+      if (!head.ok) {
+        console.warn('Supabase sync (save head):', head.message);
+        return false; // tidak tahu kondisi cloud: jangan menimpa
+      }
+      const knownTok = meta && meta.tok && meta.mode === tokenMode ? meta.tok : null;
+
+      let working = state;
+      let exists = head.exists;
+      let expectTok = head.tok;
+
+      if (head.exists && head.tok !== knownTok) {
+        // Cloud berubah sejak sinkron terakhir kita: tarik lalu gabungkan sebelum menyimpan.
+        const full = await fetchMainRow(client, true);
+        if (!full.ok) {
+          console.warn('Supabase sync (save pull):', full.message);
+          return false;
+        }
+        exists = full.exists;
+        expectTok = full.tok;
+        if (full.exists) {
+          const r = mergeSyncable(base, localSync, pickSyncable(full.value || {}), { guard: !force });
+          working = applySyncable(state, r.merged);
+        }
+      }
+
+      const cleanPayload = sanitizeStateForCloud(working);
+      const res = await writeMainRow(client, cleanPayload, exists, expectTok);
+      if (res.status === 'conflict') continue; // ada yang menyimpan di sela-sela: ulangi dari tarik data
+      if (res.status === 'error') {
+        console.warn('Supabase sync (save info):', res.message);
+        return false;
+      }
+
+      writeSyncBase(state.supabaseConfig, pickSyncable(cleanPayload));
+      writeSyncMeta(state.supabaseConfig, Date.now(), computeSyncHash(working), res.tok);
+      if (working !== state && computeSyncHash(working) !== hash) {
+        // Hasil gabungan membawa data dari perangkat lain: perbarui tampilan HP ini juga.
+        if (onMergedState) onMergedState(working);
+        else if (mergedHandler) mergedHandler(working, state);
+      }
+      return true;
     }
-    writeSyncMeta(state.supabaseConfig, sentAt.getTime(), hash);
-    return true;
+    console.warn('Supabase sync: terlalu banyak bentrok versi, akan dicoba lagi nanti');
+    return false;
   } catch (err) {
     console.warn('Supabase sync save error (data aman di lokal):', err);
     return false;
@@ -1030,11 +1220,15 @@ export async function inspectCloudData(config: SupabaseConfig | undefined | null
   const client = getSupabaseClient(config);
   if (!client) return { ok: false, message: 'Supabase belum dikonfigurasi (URL & Key).', months: [] };
   try {
-    const { data, error } = await client.from('app_store').select('key, value, updated_at');
-    if (error) return { ok: false, message: error.message, months: [] };
-    const rows: Array<{ key: string; value: unknown; updated_at: string }> = (data as any[]) || [];
-    const main = rows.find(r => r.key === REMOTE_KEY);
-    if (!main || !main.value) return { ok: false, message: 'Belum ada data utama di Supabase.', months: [] };
+    const [{ data: mainRow, error: mainErr }, { data: keyRows, error: keyErr }] = await Promise.all([
+      client.from('app_store').select('value, updated_at').eq('key', REMOTE_KEY).maybeSingle(),
+      client.from('app_store').select('key')
+    ]);
+    if (mainErr) return { ok: false, message: mainErr.message, months: [] };
+    if (keyErr) return { ok: false, message: keyErr.message, months: [] };
+    if (!mainRow || !mainRow.value) return { ok: false, message: 'Belum ada data utama di Supabase.', months: [] };
+    const rows: Array<{ key: string }> = (keyRows as any[]) || [];
+    const main = mainRow;
     const v = main.value as Partial<AppState>;
     const perMonth: Record<string, { days: number; total: number }> = {};
     Object.keys(v.pjd || {}).forEach(dateStr => {

@@ -136,6 +136,8 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   const tku = state.tkus[tkuIdx] || state.tkus[0];
   const day = state.currentDayNum;
   const divider = getPembagiKhususTku(state, tkuIdx);
+  const formatAkmDiffPair = (diff: number, days = divider) =>
+    `${formatDiff(diff)}/${formatDiff(Math.round(diff / Math.max(1, days)))}`;
   // Info bulan kerja (tidak lagi di-hard-code September 2026)
   const period = getPeriodInfo(state);
   const DIM = period.daysInMonth;
@@ -384,16 +386,32 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     return 0;
   };
 
+  // Helper: Cek apakah pada tanggal d sudah tersimpan transaksi penjualan riil
+  const hasActualSavedSalesForDay = (d: number): boolean => {
+    const dStr = `${period.key}-${String(d).padStart(2, '0')}`;
+    const pjdRec = state.pjd[dStr]?.[tkuIdx];
+    if (pjdRec && (pjdRec.sold > 0 || (pjdRec.v && pjdRec.v.some(x => x > 0)))) return true;
+    if (period.key === SEED_PERIOD) {
+      const list = REAL_TKU_DAILY_SALES[tkuIdx] || [];
+      const found = list.find(item => item.d === d);
+      if (found && found.sold > 0) return true;
+    }
+    return false;
+  };
+
   // Helper: Retrieve target or actual realized sales for a specific date and variant
   const getPlannedTargetForDay = (d: number, variant: 'ALL' | VariantCode): number => {
-    // Tanggal yang sudah terealisasi (d <= day): Otomatis ambil dari Penjualan Riil!
-    if (d <= day) {
+    // Tanggal yang SUDAH ADA simpan penjualan: Otomatis ambil dari Penjualan Riil!
+    if (hasActualSavedSalesForDay(d)) {
       if (variant === 'ALL') {
         return getActualSalesForDay(d, 'YO') + getActualSalesForDay(d, 'OM') + getActualSalesForDay(d, 'OS') + getActualSalesForDay(d, 'YT');
       }
       return getActualSalesForDay(d, variant);
     }
-    // Tanggal mendatang (d > day): Ambil dari data rencana breakdown
+    // Tanggal yang BELUM ada simpan penjualan (termasuk hari ini / tgl 11):
+    // Rencana target breakdown MASIH ADA, JANGAN HILANG!
+    // Kecuali hari Minggu (libur, tidak ada transaksi): rencana selalu 0 seperti di Realisasi.
+    if (new Date(PY, PM0, d).getDay() === 0) return 0;
     const dayIdx = d - 1;
     if (variant === 'ALL') {
       const arr = state.breakdown[tkuIdx];
@@ -956,14 +974,17 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   // Summary Metrics for TKU (Ringkasan / Dashboard TKU)
   const targetHarian = tku.targetHarian;
   const targetPct = targetHarian > 0 ? (tkuDailyAvg / targetHarian) : 0;
+  const akmDiffVsTarget = tkuAkmTotal - targetHarian * divider;
 
   const blHarian = state.targetBulanLalu[tkuIdx] || 0;
   const blDiff = tkuDailyAvg - blHarian;
   const blPct = blHarian > 0 ? (tkuDailyAvg / blHarian) : 0;
+  const akmDiffVsBl = tkuAkmTotal - blHarian * divider;
 
   const tyHarian = state.targetTahunLalu[tkuIdx] || 0;
   const tyDiff = tkuDailyAvg - tyHarian;
   const tyPct = tyHarian > 0 ? (tkuDailyAvg / tyHarian) : 0;
+  const akmDiffVsTy = tkuAkmTotal - tyHarian * divider;
 
 
 
@@ -978,7 +999,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     const pctTg = vTg > 0 ? (avg / vTg) : 0;
     const pctBl = vBl > 0 ? (avg / vBl) : 0;
     const pctTy = vTy > 0 ? (avg / vTy) : 0;
-    const diffTg = avg - vTg;
+    const diffTg = akm - vTg * divider;
     return {
       variant: v,
       akm,
@@ -1332,13 +1353,13 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                   const avgDaily = (isPast && dayDivider > 0) ? Math.round(cum.cumTotal / dayDivider) : 0;
 
                   const vsTgPct = (isPast && targetHarian > 0) ? (avgDaily / targetHarian) : 0;
-                  const vsTgDiff = avgDaily - targetHarian;
+                   const vsTgAkmDiff = cum.cumTotal - targetHarian * dayDivider;
 
                   const vsBlPct = (isPast && blHarian > 0) ? (avgDaily / blHarian) : 0;
-                  const vsBlDiff = avgDaily - blHarian;
+                   const vsBlAkmDiff = cum.cumTotal - blHarian * dayDivider;
 
                   const vsTyPct = (isPast && tyHarian > 0) ? (avgDaily / tyHarian) : 0;
-                  const vsTyDiff = avgDaily - tyHarian;
+                   const vsTyAkmDiff = cum.cumTotal - tyHarian * dayDivider;
 
                   const editTotalSold = inlineEditV[0] + inlineEditV[1] + inlineEditV[2] + inlineEditV[3];
                   const editTotalBb = inlineEditBbV[0] + inlineEditBbV[1] + inlineEditBbV[2] + inlineEditBbV[3];
@@ -1467,7 +1488,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                               {formatPercent(vsTgPct)}
                             </span>
                             <div className="text-[10px] text-neutral-400 font-normal">
-                              {vsTgDiff >= 0 ? `+${formatNumber(vsTgDiff)}` : formatNumber(vsTgDiff)}
+                              {formatAkmDiffPair(vsTgAkmDiff, dayDivider)}
                             </div>
                           </>
                         ) : (
@@ -1483,7 +1504,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                               {formatPercent(vsBlPct)}
                             </span>
                             <div className="text-[10px] text-neutral-400 font-normal">
-                              {vsBlDiff >= 0 ? `+${formatNumber(vsBlDiff)}` : formatNumber(vsBlDiff)}
+                              {formatAkmDiffPair(vsBlAkmDiff, dayDivider)}
                             </div>
                           </>
                         ) : (
@@ -1499,7 +1520,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                               {formatPercent(vsTyPct)}
                             </span>
                             <div className="text-[10px] text-neutral-400 font-normal">
-                              {vsTyDiff >= 0 ? `+${formatNumber(vsTyDiff)}` : formatNumber(vsTyDiff)}
+                              {formatAkmDiffPair(vsTyAkmDiff, dayDivider)}
                             </div>
                           </>
                         ) : (
@@ -2221,138 +2242,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
             </div>
           </div>
 
-          {/* Card 1: Rekapitulasi Target Rencana Mingguan (Dengan Perbandingan vs Minggu Sebelumnya) */}
-          <div className="p-6 bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <h3 className="text-base font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
-                  <Target className="w-5 h-5 text-brand-600" />
-                  Target Mingguan
-                </h3>
-              </div>
-
-              <div className="px-3.5 py-1.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-xs font-mono font-semibold text-neutral-700 dark:text-neutral-300">
-                Target Harian: <strong className="text-brand-600">{formatNumber(targetHarian)} btl/hr</strong>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left border-collapse min-w-[920px]">
-                <thead>
-                  <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 font-semibold bg-neutral-50 dark:bg-neutral-800/50">
-                    <th className="py-2.5 px-3">Periode Minggu</th>
-                    <th className="py-2.5 px-3 text-right">Rencana Minggu Ini</th>
-                    <th className="py-2.5 px-3 text-right text-brand-600 dark:text-brand-400 font-bold">Akumulasi</th>
-                    <th className="py-2.5 px-3 text-right font-bold">Rata-rata/hr</th>
-                    <th className="py-2.5 px-3 text-right font-bold text-neutral-900 dark:text-white border-l border-neutral-200 dark:border-neutral-700">vs Minggu Sebelumnya (%)</th>
-                    <th className="py-2.5 px-3 text-right font-bold text-neutral-900 dark:text-white">Pertumbuhan / Selisih (btl)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800 font-mono">
-                  {(() => {
-                    let runningCumTotal = 0;
-                    let runningCumV = [0, 0, 0, 0];
-                    let prevWeekTotal: number | null = null;
-
-                    return WEEKS.map((w, wIdx) => {
-                      let weekPlanTotal = 0;
-                      const weekPlanV = [0, 0, 0, 0];
-
-                      w.days.forEach(d => {
-                        VARIANTS.forEach((v, vIdx) => {
-                          const p = getPlannedTargetForDay(d, v.code);
-                          weekPlanV[vIdx] += p;
-                          weekPlanTotal += p;
-                        });
-                      });
-
-                      // Akumulasi nyambung
-                      runningCumTotal += weekPlanTotal;
-                      weekPlanV.forEach((val, vIdx) => {
-                        runningCumV[vIdx] += val;
-                      });
-
-                      // Pembagi Sabtu di minggu tersebut
-                      const weekDivider = w.saturdayDate;
-                      const avgDaily = weekDivider > 0 ? (runningCumTotal / weekDivider) : 0;
-
-                      // Perhitungan vs Minggu Sebelumnya
-                      const vsPrevPct = prevWeekTotal !== null && prevWeekTotal > 0 ? (weekPlanTotal / prevWeekTotal) : null;
-                      const vsPrevDiff = prevWeekTotal !== null ? (weekPlanTotal - prevWeekTotal) : null;
-
-                      // Simpan untuk minggu berikutnya
-                      const curWeekTotalForNext = weekPlanTotal;
-                      prevWeekTotal = curWeekTotalForNext;
-
-                      const pKey = `M${wIdx + 1}` as 'M1' | 'M2' | 'M3' | 'M4' | 'M5';
-                      const isSelected = selectedBreakdownPeriod === pKey;
-
-                      return (
-                        <tr
-                          key={w.id}
-                          onClick={() => setSelectedBreakdownPeriod(pKey)}
-                          className={`cursor-pointer transition-colors ${
-                            isSelected
-                              ? 'bg-brand-50/70 dark:bg-brand-950/30 font-semibold'
-                              : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/40'
-                          }`}
-                        >
-                          <td className="py-3 px-3">
-                            <div className="flex items-center gap-2 font-sans font-bold">
-                              <span>{w.label}</span>
-                              <span className="text-[10px] text-neutral-400 font-normal">
-                                (Tgl {w.start}–{w.end} {period.namaBulanPendek})
-                              </span>
-                              {isSelected && (
-                                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-brand-600 text-white font-semibold">
-                                  Terpilih
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-3 px-3 text-right font-bold text-neutral-900 dark:text-neutral-100">
-                            {formatNumber(weekPlanTotal)} btl
-                            <div className="text-[10px] text-neutral-400 font-normal">
-                              YO:{formatNumber(weekPlanV[0])} OM:{formatNumber(weekPlanV[1])} OS:{formatNumber(weekPlanV[2])} YT:{formatNumber(weekPlanV[3])}
-                            </div>
-                          </td>
-                          <td className="py-3 px-3 text-right font-bold text-brand-600 dark:text-brand-400">
-                            {formatNumber(runningCumTotal)} btl
-                            <div className="text-[10px] text-neutral-400 font-normal">
-                              Akm V: {formatNumber(runningCumV[0])} / {formatNumber(runningCumV[1])} / {formatNumber(runningCumV[2])} / {formatNumber(runningCumV[3])}
-                            </div>
-                          </td>
-                          <td className="py-3 px-3 text-right font-bold text-neutral-900 dark:text-neutral-100 text-sm">
-                            {formatNumber(Math.round(avgDaily))} btl
-                          </td>
-                          <td className="py-3 px-3 text-right font-bold border-l border-neutral-200 dark:border-neutral-700">
-                            {vsPrevPct !== null ? (
-                              <span className={vsPrevPct >= 1 ? 'text-emerald-600' : 'text-red-600'}>
-                                {formatPercent(vsPrevPct)}
-                              </span>
-                            ) : (
-                              <span className="text-neutral-400 font-normal font-sans text-xs">— (Baseline M1)</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-3 text-right font-semibold">
-                            {vsPrevDiff !== null ? (
-                              <span className={vsPrevDiff >= 0 ? 'text-emerald-600 font-bold' : 'text-red-600 font-bold'}>
-                                {vsPrevDiff >= 0 ? `+${formatNumber(vsPrevDiff)}` : formatNumber(vsPrevDiff)} btl
-                              </span>
-                            ) : (
-                              <span className="text-neutral-400 font-normal font-sans text-xs">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    });
-                  })()}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Card 2: Detail Rencana Harian per Varian (Selector M1, M2, M3, M4, M5, Satu Bulan) */}
+          {/* Card: Detail Rencana Harian per Varian (Selector M1, M2, M3, M4, M5, Satu Bulan) */}
           {(() => {
             let curTotalPlan = 0;
             const curVPlan = [0, 0, 0, 0];
@@ -2365,15 +2255,6 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                       <Target className="w-5 h-5 text-brand-600" />
                       Rencana Harian
                     </h3>
-                    <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-neutral-600 dark:text-neutral-400">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 font-semibold border border-emerald-300 dark:border-emerald-800">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0" />
-                        Sel Hijau / Badge "Realisasi": Data Penjualan Riil
-                      </span>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 font-medium border border-neutral-200 dark:border-neutral-700">
-                        Sel Putih: Target Rencana Sisa Hari (Dapat Diatur)
-                      </span>
-                    </div>
                   </div>
 
                   {/* Switcher M1, M2, M3, M4, M5, Satu Bulan */}
@@ -2402,7 +2283,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                 </div>
 
                 <div className="overflow-x-auto max-h-[650px] border border-neutral-200 dark:border-neutral-800 rounded-2xl">
-                  <table className="w-full text-xs text-left border-collapse min-w-[1050px]">
+                  <table className="w-full text-xs text-left border-collapse min-w-[1250px]">
                     <thead className="sticky top-0 z-10 bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 font-semibold shadow-2xs">
                       <tr className="border-b border-neutral-200 dark:border-neutral-700">
                         <th className="py-2.5 px-3">Tanggal</th>
@@ -2414,6 +2295,8 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                         <th className="py-2.5 px-2.5 text-right font-bold text-neutral-900 dark:text-white">Rencana Harian</th>
                         <th className="py-2.5 px-2.5 text-right text-brand-600 dark:text-brand-400 font-bold">Akumulasi</th>
                         <th className="py-2.5 px-2.5 text-right font-bold">Rata-rata/hr (Per Varian & Total)</th>
+                        <th className="py-2.5 px-2.5 text-right font-bold">vs Minggu Lalu (%)</th>
+                        <th className="py-2.5 px-2.5 text-right font-bold">Pertumbuhan / Selisih (btl)</th>
                         <th className="py-2.5 px-2.5 text-right">vs Tgt ({formatNumber(targetHarian)})</th>
                         <th className="py-2.5 px-2.5 text-right">vs LM ({formatNumber(blHarian)})</th>
                         <th className="py-2.5 px-2.5 text-right">vs LY ({formatNumber(tyHarian)})</th>
@@ -2441,14 +2324,27 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                         const avgYt = dayDivider > 0 ? Math.round(cum.cumYt / dayDivider) : 0;
                         const avgDaily = dayDivider > 0 ? Math.round(cum.cumTotal / dayDivider) : 0;
 
+                        // Perbandingan dengan Minggu lalu di hari yang sama (tanggal d-7)
+                        const hasPrevWeek = d > 7;
+                        const prevWeekPlan = hasPrevWeek ? getDayPlanAllVariants(d - 7).total : null;
+                        const wkDiff = prevWeekPlan !== null ? p.total - prevWeekPlan : null;
+                        const wkPct = prevWeekPlan !== null && prevWeekPlan > 0 ? p.total / prevWeekPlan : null;
+                        const wkTone = wkDiff === null
+                          ? 'text-neutral-400'
+                          : wkDiff > 0
+                            ? 'text-emerald-600'
+                            : wkDiff < 0
+                              ? 'text-red-600'
+                              : 'text-neutral-900 dark:text-white';
+
                         const vsTgPct = targetHarian > 0 ? (avgDaily / targetHarian) : 0;
-                        const vsTgDiff = avgDaily - targetHarian;
+                        const vsTgDiff = cum.cumTotal - targetHarian * dayDivider; // selisih akumulasi (tanpa dibagi tanggal)
 
                         const vsBlPct = blHarian > 0 ? (avgDaily / blHarian) : 0;
-                        const vsBlDiff = avgDaily - blHarian;
+                        const vsBlDiff = cum.cumTotal - blHarian * dayDivider;
 
                         const vsTyPct = tyHarian > 0 ? (avgDaily / tyHarian) : 0;
-                        const vsTyDiff = avgDaily - tyHarian;
+                        const vsTyDiff = cum.cumTotal - tyHarian * dayDivider;
 
                         return (
                           <tr 
@@ -2476,36 +2372,39 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                                 {dayName} {isSun ? '(Libur)' : ''}
                               </span>
                             </td>
-                            {VARIANTS.map(v => (
-                              <td key={v.code} className="py-1 px-1 text-right">
-                                <input
-                                  id={`bd-input-${d}-${v.code}`}
-                                  type="text"
-                                  inputMode="numeric"
-                                  value={p[v.code.toLowerCase() as 'yo' | 'om' | 'os' | 'yt'] || ''}
-                                  placeholder="0"
-                                  disabled={d <= day}
-                                  readOnly={d <= day}
-                                  onChange={(e) => {
-                                    if (d <= day) return;
-                                    const raw = e.target.value.replace(/[^\d]/g, '');
-                                    const num = raw === '' ? 0 : parseInt(raw, 10);
-                                    handleCellChange(d, v.code, isNaN(num) ? 0 : num);
-                                  }}
-                                  onFocus={(e) => d > day && e.target.select()}
-                                  onPaste={(e) => d > day && handleCellPaste(e, d, v.code)}
-                                  onKeyDown={(e) => d > day && handleCellKeyDown(e, d, v.code)}
-                                  className={`w-16 px-1.5 py-1 text-right font-mono font-bold text-xs rounded-lg border transition-all shadow-2xs ${
-                                    d <= day
-                                      ? 'bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-300/80 dark:border-emerald-800/80 text-emerald-800 dark:text-emerald-300 cursor-default'
-                                      : 'bg-white dark:bg-neutral-800/80 border-neutral-200 dark:border-neutral-700 hover:border-brand-400 focus:border-brand-500 focus:bg-white dark:focus:bg-neutral-900 focus:ring-2 focus:ring-brand-500/20 focus:outline-none'
-                                  }`}
-                                  style={{ color: d <= day ? undefined : v.color }}
-                                  title={d <= day ? `Tgl ${d} • Realisasi Riil ${v.code}` : `Tgl ${d} • Target ${v.code} (${v.name})`}
-                                />
-                              </td>
-                            ))}
-                            <td className="py-2 px-2.5 text-right font-bold text-neutral-900 dark:text-neutral-100">
+                            {(() => {
+                              const isDaySaved = hasActualSavedSalesForDay(d);
+                              return VARIANTS.map(v => (
+                                <td key={v.code} className="py-1 px-1 text-right">
+                                  <input
+                                    id={`bd-input-${d}-${v.code}`}
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={p[v.code.toLowerCase() as 'yo' | 'om' | 'os' | 'yt'] || ''}
+                                    placeholder="0"
+                                    disabled={isDaySaved}
+                                    readOnly={isDaySaved}
+                                    onChange={(e) => {
+                                      if (isDaySaved) return;
+                                      const raw = e.target.value.replace(/[^\d]/g, '');
+                                      const num = raw === '' ? 0 : parseInt(raw, 10);
+                                      handleCellChange(d, v.code, isNaN(num) ? 0 : num);
+                                    }}
+                                    onFocus={(e) => !isDaySaved && e.target.select()}
+                                    onPaste={(e) => !isDaySaved && handleCellPaste(e, d, v.code)}
+                                    onKeyDown={(e) => !isDaySaved && handleCellKeyDown(e, d, v.code)}
+                                    className={`w-16 px-1.5 py-1 text-right font-mono font-bold text-xs rounded-lg border transition-all shadow-2xs bg-white dark:bg-neutral-800/80 border-neutral-200 dark:border-neutral-700 ${
+                                      isDaySaved
+                                        ? 'cursor-default'
+                                        : 'hover:border-brand-400 focus:border-brand-500 focus:bg-white dark:focus:bg-neutral-900 focus:ring-2 focus:ring-brand-500/20 focus:outline-none'
+                                    }`}
+                                    style={{ color: v.color }}
+                                    title={isDaySaved ? `Tgl ${d} • Realisasi Riil ${v.code}` : `Tgl ${d} • Target ${v.code} (${v.name})`}
+                                  />
+                                </td>
+                              ));
+                            })()}
+                            <td className={`py-2 px-2.5 text-right font-bold ${wkDiff === null ? 'text-neutral-900 dark:text-neutral-100' : wkTone}`}>
                               {formatNumber(p.total)} btl
                             </td>
                             <td className="py-2 px-2.5 text-right font-bold text-brand-600 dark:text-brand-400">
@@ -2514,34 +2413,46 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                                 {formatNumber(cum.cumYo)} / {formatNumber(cum.cumOm)} / {formatNumber(cum.cumOs)} / {formatNumber(cum.cumYt)}
                               </div>
                             </td>
-                            <td className="py-2 px-2.5 text-right font-bold text-neutral-900 dark:text-neutral-100">
+                            <td className={`py-2 px-2.5 text-right font-bold ${wkDiff === null ? 'text-neutral-900 dark:text-neutral-100' : wkTone}`}>
                               {formatNumber(avgDaily)} btl
                               <div className="text-[10px] text-neutral-400 font-normal">
                                 Rata V: {formatNumber(avgYo)} / {formatNumber(avgOm)} / {formatNumber(avgOs)} / {formatNumber(avgYt)}
                               </div>
+                            </td>
+                            <td className={`py-2 px-2.5 text-right font-bold ${wkTone}`}>
+                              {wkDiff === null
+                                ? <span className="font-normal font-sans text-xs">—</span>
+                                : wkPct !== null
+                                  ? formatPercent(wkPct)
+                                  : <span className="font-normal font-sans text-xs">—</span>}
+                            </td>
+                            <td className={`py-2 px-2.5 text-right font-bold ${wkTone}`}>
+                              {wkDiff === null
+                                ? <span className="font-normal font-sans text-xs">—</span>
+                                : `${wkDiff > 0 ? '+' : ''}${formatNumber(wkDiff)} btl`}
                             </td>
                             <td className="py-2 px-2.5 text-right font-bold">
                               <span className={vsTgPct >= 1 ? 'text-emerald-600' : 'text-red-600'}>
                                 {formatPercent(vsTgPct)}
                               </span>
                               <div className={`text-[10px] ${vsTgDiff >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                {vsTgDiff >= 0 ? `+${formatNumber(vsTgDiff)}` : formatNumber(vsTgDiff)}
+                                {formatAkmDiffPair(vsTgDiff, dayDivider)}
                               </div>
                             </td>
-                            <td className="py-2 px-2.5 text-right font-semibold">
-                              <span className={vsBlPct >= 1 ? 'text-emerald-600' : 'text-neutral-600 dark:text-neutral-400'}>
+                            <td className="py-2 px-2.5 text-right font-bold">
+                              <span className={vsBlPct >= 1 ? 'text-emerald-600' : 'text-red-600'}>
                                 {formatPercent(vsBlPct)}
                               </span>
                               <div className={`text-[10px] ${vsBlDiff >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                {vsBlDiff >= 0 ? `+${formatNumber(vsBlDiff)}` : formatNumber(vsBlDiff)}
+                                {formatAkmDiffPair(vsBlDiff, dayDivider)}
                               </div>
                             </td>
-                            <td className="py-2 px-2.5 text-right font-semibold">
-                              <span className={vsTyPct >= 1 ? 'text-emerald-600' : 'text-neutral-600 dark:text-neutral-400'}>
+                            <td className="py-2 px-2.5 text-right font-bold">
+                              <span className={vsTyPct >= 1 ? 'text-emerald-600' : 'text-red-600'}>
                                 {formatPercent(vsTyPct)}
                               </span>
                               <div className={`text-[10px] ${vsTyDiff >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                {vsTyDiff >= 0 ? `+${formatNumber(vsTyDiff)}` : formatNumber(vsTyDiff)}
+                                {formatAkmDiffPair(vsTyDiff, dayDivider)}
                               </div>
                             </td>
                           </tr>
@@ -2560,7 +2471,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                         <td className="py-3 px-2.5 text-right text-brand-600 dark:text-brand-400 text-sm">
                           {formatNumber(curTotalPlan)} btl
                         </td>
-                        <td colSpan={5} className="py-3 px-3 text-right text-neutral-500 font-normal font-sans text-xs">
+                        <td colSpan={7} className="py-3 px-3 text-right text-neutral-500 font-normal font-sans text-xs">
                           {breakdownDaysToShow.length} Hari Kerja Terjadwal
                         </td>
                       </tr>
@@ -2638,7 +2549,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                   <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
                     <span className="text-neutral-500">Target: {formatNumber(targetHarian)}/hr</span>
                     <span className={`font-mono font-bold ${getStatusClass(diffVsTarget)}`}>
-                      {formatDiff(diffVsTarget)} btl
+                      {formatAkmDiffPair(akmDiffVsTarget)}
                     </span>
                   </div>
                 </div>
@@ -2657,7 +2568,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                   <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
                     <span className="text-neutral-500">LM: {formatNumber(blHarian)}/hr</span>
                     <span className={`font-mono font-bold ${getStatusClass(blDiff)}`}>
-                      {formatDiff(blDiff)} btl
+                      {formatAkmDiffPair(akmDiffVsBl)}
                     </span>
                   </div>
                 </div>
@@ -2676,7 +2587,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                   <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
                     <span className="text-neutral-500">LY: {formatNumber(tyHarian)}/hr</span>
                     <span className={`font-mono font-bold ${getStatusClass(tyDiff)}`}>
-                      {formatDiff(tyDiff)} btl
+                      {formatAkmDiffPair(akmDiffVsTy)}
                     </span>
                   </div>
                 </div>
@@ -2845,7 +2756,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                       </td>
                       <td className="py-3 px-3 text-right font-bold">
                         <span className={item.diffTg >= 0 ? 'text-emerald-600' : 'text-red-600'}>
-                          {item.diffTg >= 0 ? `+${formatNumber(item.diffTg)}` : formatNumber(item.diffTg)}
+                          {formatAkmDiffPair(item.diffTg)}
                         </span>
                       </td>
                     </tr>
@@ -2866,8 +2777,8 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                     <td className="py-3 px-3 text-right">{formatPercent(blPct)}</td>
                     <td className="py-3 px-3 text-right">{formatPercent(tyPct)}</td>
                     <td className="py-3 px-3 text-right">
-                      <span className={diffVsTarget >= 0 ? 'text-emerald-600' : 'text-red-600'}>
-                        {diffVsTarget >= 0 ? `+${formatNumber(diffVsTarget)}` : formatNumber(diffVsTarget)}
+                      <span className={akmDiffVsTarget >= 0 ? 'text-emerald-600' : 'text-red-600'}>
+                        {formatAkmDiffPair(akmDiffVsTarget)}
                       </span>
                     </td>
                   </tr>
