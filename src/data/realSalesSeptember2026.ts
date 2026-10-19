@@ -1,6 +1,5 @@
 // Real sales data extracted from Google Spreadsheet (September 1-26, 2026)
 // Total Branch Accumulated: 870.255 bottles
-import { DailySalesRecord } from "../types";
 
 export interface TkuRealDailyEntry {
   d: number;
@@ -2630,10 +2629,3 @@ export const REAL_TKU_DAILY_SALES: Record<number, TkuRealDailyEntry[]> = {
     }
   ]
 };
-
-export const REAL_DAILY_BRANCH_TOTALS: number[] = [
-  45015, 36150, 34680, 32955, 33130, 0, 56645,
-  44885, 32930, 32835, 35750, 32605, 0, 51765,
-  42155, 32270, 34695, 32930, 31170, 0, 55510,
-  41490, 36115, 32535, 31395, 30645
-];

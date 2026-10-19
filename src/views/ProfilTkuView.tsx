@@ -1,17 +1,10 @@
 import { useConfirm } from '../components/ConfirmDialog';
 import React, { useState } from 'react';
 import { Pencil, Save, X } from 'lucide-react';
-import { 
-  Users, 
-  Plus, 
-  Trash2, 
-  ToggleLeft, 
-  ToggleRight, 
-  MapPin, 
-  Phone, 
-  User, 
-  Building,
-  CheckCircle2
+import {
+  Plus,
+  Trash2,
+  Building
 } from 'lucide-react';
 import { AppState, TkuItem } from '../types';
 import { formatPercent } from '../services/storage';
@@ -77,7 +70,7 @@ export const ProfilTkuView: React.FC<ProfilTkuViewProps> = ({
   const [newPic, setNewPic] = useState('');
   const [newAlamat, setNewAlamat] = useState('');
   const [newHp, setNewHp] = useState('');
-  const [newJumlahArea, setNewJumlahArea] = useState<number>(10);
+  const [newJumlahArea] = useState<number>(10);
   const [newJumlahYl, setNewJumlahYl] = useState<number>(10);
 
   const handleCreate = (e: React.FormEvent) => {
@@ -297,16 +290,16 @@ export const ProfilTkuView: React.FC<ProfilTkuViewProps> = ({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse min-w-[850px]">
+          <table className="w-full text-left text-sm border-collapse min-w-[1250px]">
             <thead>
               <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 text-xs bg-neutral-50 dark:bg-neutral-800/40">
-                <th className="py-2.5 px-3 font-semibold">Nama TKU</th>
-                <th className="py-2.5 px-3 font-semibold">Rayon</th>
-                <th className="py-2.5 px-3 font-semibold">PIC / Koordinator</th>
-                <th className="py-2.5 px-3 font-semibold">Alamat Kantor</th>
-                <th className="py-2.5 px-3 font-semibold">No. HP PIC</th>
-                <th className="py-2.5 px-3 font-semibold text-center">Jml Area</th>
-                <th className="py-2.5 px-3 font-semibold text-center">Jml YL</th>
+                <th className="py-2.5 px-3 font-semibold min-w-[170px]">Nama TKU</th>
+                <th className="py-2.5 px-3 font-semibold min-w-[110px]">Rayon</th>
+                <th className="py-2.5 px-3 font-semibold min-w-[170px]">PIC / Koordinator</th>
+                <th className="py-2.5 px-3 font-semibold min-w-[200px]">Alamat Kantor</th>
+                <th className="py-2.5 px-3 font-semibold min-w-[150px]">No. HP PIC</th>
+                <th className="py-2.5 px-3 font-semibold text-center min-w-[90px]">Jml Area</th>
+                <th className="py-2.5 px-3 font-semibold text-center min-w-[90px]">Jml YL</th>
                 <th className="py-2.5 px-3 font-semibold text-center">% Cover</th>
                 <th className="py-2.5 px-3 font-semibold text-center">Status</th>
                 <th className="py-2.5 px-3 font-semibold text-right">Aksi</th>
@@ -350,13 +343,13 @@ export const ProfilTkuView: React.FC<ProfilTkuViewProps> = ({
 
                   <td className="py-3 px-3 font-sans">
                     {editMode ? (
-                      <input type="text" value={t.alamat || ''} placeholder="Alamat kantor..." onChange={(e) => setDraftField(idx, { alamat: e.target.value })} className={`${inp} w-48`} />
+                      <input type="text" value={t.alamat || ''} placeholder="Alamat kantor..." onChange={(e) => setDraftField(idx, { alamat: e.target.value })} className={inp} />
                     ) : dash(t.alamat)}
                   </td>
 
                   <td className="py-3 px-3">
                     {editMode ? (
-                      <input type="text" value={t.hp || ''} placeholder="08xx..." onChange={(e) => setDraftField(idx, { hp: e.target.value })} className={`${inp} w-28 font-mono`} />
+                      <input type="text" value={t.hp || ''} placeholder="08xx..." onChange={(e) => setDraftField(idx, { hp: e.target.value })} className={`${inp} font-mono`} />
                     ) : dash(t.hp)}
                   </td>
 
@@ -370,7 +363,7 @@ export const ProfilTkuView: React.FC<ProfilTkuViewProps> = ({
                           const val = Number(e.target.value);
                           setDraftField(idx, { jumlahArea: val, coverageArea: val > 0 ? (yl / val) : 1 });
                         }}
-                        className={`${inp} w-16 text-center font-mono font-bold`}
+                        className={`${inp} text-center font-mono font-bold`}
                       />
                     ) : <span className="font-bold">{t.jumlahArea || 10}</span>}
                   </td>
@@ -385,7 +378,7 @@ export const ProfilTkuView: React.FC<ProfilTkuViewProps> = ({
                           const val = Number(e.target.value);
                           setDraftField(idx, { jumlahYl: val, coverageArea: area > 0 ? (val / area) : 1 });
                         }}
-                        className={`${inp} w-16 text-center font-mono font-bold`}
+                        className={`${inp} text-center font-mono font-bold`}
                       />
                     ) : <span className="font-bold text-emerald-700 dark:text-emerald-300">{t.jumlahYl || 0}</span>}
                   </td>

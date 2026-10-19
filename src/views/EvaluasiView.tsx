@@ -83,7 +83,7 @@ const RingkasanPrestasiPanel: React.FC<RingkasanPrestasiPanelProps> = ({
       title: 'Top rata2',
       rawNames: highlights.topRata.names || [highlights.topRata.name],
       shortNames: formatShortNames(highlights.topRata.names, highlights.topRata.name),
-      value: `${formatNumber(Math.round(highlights.topRata.val))} btl`,
+      value: `${formatNumber(highlights.topRata.val)} btl`,
       icon: TrendingUp,
       iconColor: 'text-brand-600 dark:text-brand-400',
       valColor: 'text-brand-600 dark:text-brand-400',
@@ -312,7 +312,6 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
 
   const selectedRayon = state.selectedRayon; // 0: Cabang, 1: Rayon 1, 2: Rayon 2
   const period = getPeriodInfo(state);
-  const day = state.currentDayNum;
   const divider = getPembagiHari(state);
 
   const {
@@ -339,9 +338,9 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
   return (
     <div className="space-y-6">
       {/* 1. Header & Controls Bar */}
-      <div className="p-4 sm:p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="p-4 sm:p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 min-w-0">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-lg sm:text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-brand-600 shrink-0" />
               <span>Evaluasi</span>
@@ -352,7 +351,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full">
           {/* Rayon Filter */}
           <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl shrink-0">
             {[
@@ -621,7 +620,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
                             {formatNumber(runningCum)} <span className="text-[10px] font-sans text-neutral-400 font-normal">btl</span>
                           </td>
                           <td className="py-2.5 px-3 text-right font-bold text-neutral-800 dark:text-neutral-200">
-                            {formatNumber(Math.round(avgPerDay))} <span className="text-[10px] font-sans text-neutral-400 font-normal">btl/hr</span>
+                            {formatNumber(avgPerDay)} <span className="text-[10px] font-sans text-neutral-400 font-normal">btl/hr</span>
                           </td>
                           <td className="py-2.5 px-3 text-right border-l border-neutral-200 dark:border-neutral-700">
                             {vsPrevPct !== null ? (
@@ -683,7 +682,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
                       <div className="min-w-0">
                         <p className="font-bold text-xs text-neutral-900 dark:text-white break-words">{r.tku.nama} (Rayon {r.tku.rayon})</p>
                         <span className="text-[10px] text-neutral-500 font-mono block break-words">
-                          Rata: {formatNumber(Math.round(r.rata2))} btl/hr &bull; s/YL: {r.syl} &bull; % BB: {formatPercent(r.pctBb)}
+                          Rata: {formatNumber(r.rata2)} btl/hr &bull; s/YL: {r.syl} &bull; % BB: {formatPercent(r.pctBb)}
                         </span>
                       </div>
                     </div>
@@ -714,7 +713,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
                       <div className="min-w-0">
                         <p className="font-bold text-xs text-neutral-900 dark:text-white break-words">{r.tku.nama} (Rayon {r.tku.rayon})</p>
                         <span className="text-[10px] text-neutral-500 font-mono block break-words">
-                          Rata: {formatNumber(Math.round(r.rata2))} btl/hr &bull; YL &lt; 250: {r.l250} ({formatPercent(r.pctL250)})
+                          Rata: {formatNumber(r.rata2)} btl/hr &bull; YL &lt; 250: {r.l250} ({formatPercent(r.pctL250)})
                         </span>
                       </div>
                     </div>
@@ -741,7 +740,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
               <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200/70 dark:border-neutral-700 space-y-1.5 min-w-0 h-full break-words">
                 <span className="font-bold text-brand-600 dark:text-brand-400 uppercase text-[10px] tracking-wider block">1. Evaluasi Ritme &amp; Target</span>
                 <p>
-                  Pencapaian Cabang Jember mencapai rata-rata <strong className="font-mono">{formatNumber(Math.round(cabangTotal.rata2))} btl/hari</strong> ({formatPercent(cabangTotal.vsTgPct)} vs Target). Unit dengan tren pertumbuhan mingguan (vs LW) tertinggi dipimpin oleh <strong className="text-emerald-600">{highlights.topLw?.name || '—'}</strong>.
+                  Pencapaian Cabang Jember mencapai rata-rata <strong className="font-mono">{formatNumber(cabangTotal.rata2)} btl/hari</strong> ({formatPercent(cabangTotal.vsTgPct)} vs Target). Unit dengan tren pertumbuhan mingguan (vs LW) tertinggi dipimpin oleh <strong className="text-emerald-600">{highlights.topLw?.name || '—'}</strong>.
                 </p>
               </div>
 

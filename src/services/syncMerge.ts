@@ -16,6 +16,7 @@
 export const SYNC_KEYS = [
   'pjd',
   'todayInputs',
+  'sisaStock',
   'breakdown',
   'breakdownPerVariant',
   'targetBulanLalu',
@@ -34,6 +35,7 @@ export type Syncable = Partial<Record<SyncKey, any>>;
 const DEPTH: Record<Exclude<SyncKey, 'tkus'>, number> = {
   pjd: 2,
   todayInputs: 1,
+  sisaStock: 1, // tku.id -> satu rekaman utuh (diperbarui sebagai satu kesatuan)
   breakdown: 1,
   breakdownPerVariant: 2,
   targetBulanLalu: 1,

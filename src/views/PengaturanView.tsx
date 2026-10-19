@@ -1,26 +1,22 @@
 import { useConfirm } from '../components/ConfirmDialog';
 import React, { useState, useEffect } from 'react';
-import { 
-  Settings, 
-  Sparkles, 
-  Trash2, 
-  Plus, 
-  Database, 
-  KeyRound, 
-  Download, 
-  Upload, 
-  RotateCcw, 
-  CheckCircle2, 
-  ShieldAlert, 
-  Radio, 
-  Unlink, 
-  Lock, 
-  Unlock, 
-  ShieldCheck, 
+import {
+  Trash2,
+  Database,
+  KeyRound,
+  Download,
+  Upload,
+  RotateCcw,
+  CheckCircle2,
+  ShieldAlert,
+  Radio,
+  Unlink,
+  Lock,
+  Unlock,
   RefreshCw,
   Link2,
   CalendarDays,
-  X 
+  X
 } from 'lucide-react';
 import { AppState } from '../types';
 import { buildInviteLink } from '../services/supabaseInvite';
@@ -322,7 +318,7 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
             <div className="text-xs text-amber-700 dark:text-amber-400 font-semibold bg-amber-50 dark:bg-amber-950/20 p-4 rounded-2xl border border-amber-200/50 dark:border-amber-900/40 leading-relaxed">
               💡 <strong>Info Penting:</strong> Bulan {periodLabelOf(pickedPeriod)} adalah bulan kerja yang sedang <strong>aktif saat ini</strong> di aplikasi Anda. Anda tidak perlu pindah bulan kerja untuk mengelolanya.<br />
               - Untuk mencadangkan data bulan ini ke cloud Supabase, klik tombol <strong>"Cadangkan Data"</strong> di atas.<br />
-              - Untuk menyimpan/mengarsipkan bulan September secara resmi sebagai arsip final bulanan, buka menu <strong>Arsip</strong> di sidebar kiri lalu klik tombol <strong>"Simpan Bulan Ini"</strong>.
+              - Untuk menyimpan/mengarsipkan bulan {periodLabelOf(pickedPeriod)} secara resmi sebagai arsip final bulanan, buka menu <strong>Arsip</strong> (di HP lewat tombol <strong>Lainnya</strong>, di tablet/desktop lewat sidebar kiri) lalu klik tombol <strong>"Simpan Bulan Ini"</strong>.
             </div>
           )}
 

@@ -50,8 +50,9 @@ export interface DailySalesRecord {
   ar?: number;
   l250?: number;
   l300?: number;
-  jwp?: number;
+  jwp?: number; // (lama) JWP otomatis; tidak lagi ditulis, hanya dibaca sebagai cadangan data lama
   jwpm?: number;
+  jwpManual?: number; // JWP kumulatif yang diisi manual oleh TKU (nilai terbaru berlaku)
   absen?: number;
   frek?: number;
 }
@@ -106,6 +107,21 @@ export interface ArchiveRecord {
   d: number; // days in month
   terkunci: boolean;
   rows: ArchiveRow[];
+}
+
+// ===== Sisa Stock =====
+// Grup stok: 4 varian + loose (botol lepas). Tiap grup bisa punya BANYAK tanggal exp.
+export type StockGroup = VariantCode | 'LOOSE';
+
+export interface StockBatch {
+  exp: string; // YYYY-MM-DD
+  qty: number; // jumlah botol untuk tanggal exp tsb
+}
+
+// Satu rekaman per TKU. Sifatnya PERBARUI: simpan = menimpa seluruh isi sebelumnya (bukan menambah).
+export interface SisaStockRecord {
+  updatedAt: string; // ISO time terakhir diperbarui
+  batches: Record<StockGroup, StockBatch[]>;
 }
 
 export interface MotivationQuote {
@@ -172,6 +188,8 @@ export interface AppState {
   pembagiHari?: number; // Pembagi hari aktif untuk hitung rata-rata penjualan di Dashboard
   pembagiHariMode?: 'tanggal'; // Tanpa cut-off: pembagi selalu = tanggal update (maks. tanggal terakhir bulan kerja)
   pembagiKhususTku?: Record<number, number>; // tkuIndex -> pembagi khusus hari
+  /** Tanggal pembagi (rata2) & pengali JWP yang dipilih manual di Dashboard admin. Hanya berlaku untuk bulan `period`; kosong = otomatis (tanggal transaksi terakhir). */
+  pembagiManual?: { period: string; day: number } | null;
   pembagiBreakdown?: number; // Pembagi khusus HANYA untuk menu breakdown rencana
   pembagiBreakdownMode?: 'auto' | 'manual'; // 'auto': ikut tanggal beranda, 'manual': diisi manual khusus breakdown
   pembagiKhususBreakdownTku?: Record<number, number>; // tkuIndex -> pembagi khusus breakdown rencana
@@ -191,6 +209,7 @@ export interface AppState {
     YT: Record<number, number[]>;
   };
   todayInputs: Record<number, DailySalesRecord>;
+  sisaStock?: Record<number, SisaStockRecord>; // tku.id -> snapshot sisa stock terbaru (diperbarui, bukan dijumlah)
   pjd: Record<string, Record<number, DailySalesRecord>>; // date -> tkuIndex -> record
   hjd: Record<string, Record<number, DailyOpsRecord>>; // date -> tkuIndex -> record
   bbHarian: Record<number, number>; // dayNum -> total BB

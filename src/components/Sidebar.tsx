@@ -9,8 +9,8 @@ import {
   Settings,
   GitCompare,
   LayoutGrid,
-  ShieldCheck,
   Building2,
+  PackageSearch,
   X
 } from 'lucide-react';
 
@@ -43,7 +43,8 @@ export const ADMIN_MENUS: MenuItem[] = [
   { id: "Dashboard", label: "Dashboard", short: "Dashboard", icon: BarChart3, group: "Pantau" },
   { id: "Penjualan Harian", label: "Penjualan Harian", short: "Harian", icon: CalendarCheck, group: "Pantau" },
   { id: "Evaluasi", label: "Evaluasi", short: "Evaluasi", icon: TrendingUp, group: "Pantau" },
-  { id: "Breakdown & Realisasi", label: "Breakdown & Realisasi", short: "Breakdown & Realisasi", icon: GitCompare, group: "Pantau" },
+  { id: "Breakdown & Realisasi", label: "Breakdown & Realisasi", short: "Bd & Real", icon: GitCompare, group: "Pantau" },
+  { id: "Sisa Stock", label: "Sisa Stock", short: "Stock", icon: PackageSearch, group: "Pantau" },
   { id: "Target", label: "Target", short: "Target", icon: Target, group: "Kelola" },
   { id: "Profil TKU", label: "Profil TKU", short: "Profil", icon: Users, group: "Kelola" },
   { id: "Arsip", label: "Arsip", short: "Arsip", icon: Archive, group: "Kelola" },
@@ -55,13 +56,11 @@ export const TKU_MENUS: MenuItem[] = [
   { id: "input", label: "Penjualan", short: "Penjualan", icon: CalendarCheck, group: "Menu Utama TKU" },
   { id: "breakdown", label: "Breakdown", short: "Breakdown", icon: Target, group: "Menu Utama TKU" },
   { id: "realisasi", label: "Realisasi", short: "Realisasi", icon: GitCompare, group: "Menu Utama TKU" },
+  { id: "stok", label: "Sisa Stock", short: "Stock", icon: PackageSearch, group: "Menu Utama TKU" },
 ];
 
-// Backwards-compatible export
-export const MENUS = ADMIN_MENUS;
-
 const ADMIN_BOTTOM_IDS = ["Dashboard", "Penjualan Harian", "Evaluasi", "Breakdown & Realisasi"];
-const TKU_BOTTOM_IDS = ["ringkasan", "input", "breakdown", "realisasi"];
+const TKU_BOTTOM_IDS = ["ringkasan", "input", "breakdown", "realisasi", "stok"];
 
 const NavList: React.FC<{
   menus: MenuItem[];
@@ -186,7 +185,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur border-t border-neutral-200 dark:border-neutral-800"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        <div className={`grid ${isTku ? 'grid-cols-4' : 'grid-cols-5'} h-16`}>
+        <div className={`grid grid-cols-5 h-16`}>
           {bottomIds.map(id => {
             const item = menus.find(m => m.id === id);
             if (!item) return null;

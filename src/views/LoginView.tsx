@@ -6,7 +6,7 @@ import {
   ArrowRight,
   Lock
 } from 'lucide-react';
-import { AppState, TkuItem, SupabaseConfig } from '../types';
+import { TkuItem, SupabaseConfig } from '../types';
 
 interface LoginViewProps {
   tkus: TkuItem[];

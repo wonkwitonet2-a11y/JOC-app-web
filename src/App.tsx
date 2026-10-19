@@ -1,18 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { AppState, TkuItem, DailySalesRecord, VariantCode, ArchiveRecord, ArchiveRow, SupabaseConfig } from './types';
-import { 
-  loadAppState, 
-  saveAppState, 
-  exportStateToJson, 
-  getDefaultState, 
-  loadStateFromSupabase, 
+import { AppState, TkuItem, DailySalesRecord, VariantCode, ArchiveRecord, ArchiveRow, SupabaseConfig, SisaStockRecord } from './types';
+import {
+  loadAppState,
+  saveAppState,
+  exportStateToJson,
+  getDefaultState,
+  loadStateFromSupabase,
   saveStateToSupabase,
   hasUnsyncedChanges,
   hasSyncMeta,
   setMergedStateHandler,
   reapplyMergedState,
-  getLatestSalesDay,
   getTanggalUpdate,
+  getPembagiHari,
+  getArsipRataVarian,
+  getArsipRataTotal,
   computeActiveDate,
   getPeriodInfo,
   saveSupabaseConfigToVault,
@@ -26,7 +28,8 @@ import {
   saveAppSession,
   isSessionExpired,
   INACTIVITY_TIMEOUT_MS,
-  SESSION_EXPIRED_FLAG_KEY
+  SESSION_EXPIRED_FLAG_KEY,
+  SEED_PERIOD
 } from './services/storage';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
@@ -46,12 +49,16 @@ import { ArsipView } from './views/ArsipView';
 import { INITIAL_ARCHIVES } from './data/initialData';
 import { PengaturanView } from './views/PengaturanView';
 import { TkuInputView } from './views/TkuInputView';
+import { SisaStockView } from './views/SisaStockView';
 
 // Susun arsip satu bulan dari angka kerja saat ini.
 function buildArchiveFromState(state: AppState): ArchiveRecord {
   const curP = getPeriodInfo(state);
   const currentKey = curP.key;
-  const divider = state.pembagiHari || state.currentDayNum || 1;
+  const divider = getPembagiHari(state) || state.pembagiHari || state.currentDayNum || 1;
+
+  // Potong ke 2 desimal tanpa pembulatan ke atas (Math.floor)
+  const trunc2 = (n: number): number => Math.floor(n * 100 + 1e-9) / 100;
 
   const rows: ArchiveRow[] = state.tkus.filter(t => t.aktif).map((t) => {
     const idx = state.tkus.indexOf(t);
@@ -60,23 +67,23 @@ function buildArchiveFromState(state: AppState): ArchiveRecord {
     const targetHarian = t.targetHarian || 0;
     const bulanLalu = state.targetBulanLalu[idx] || 0;
     const tahunLalu = state.targetTahunLalu[idx] || 0;
-    const rataHarian = divider > 0 ? round2(sold / divider) : 0;
-    const vsTargetPct = targetHarian > 0 ? rataHarian / targetHarian : 1;
-    const vsLmPct = bulanLalu > 0 ? rataHarian / bulanLalu : 1;
-    const vsLyPct = tahunLalu > 0 ? rataHarian / tahunLalu : 1;
-    const akmBbPct = (sold + akmBb) > 0 ? akmBb / (sold + akmBb) : 0;
+    const rataHarian = divider > 0 ? Math.floor(sold / divider) : 0;
+    const vsTargetPct = targetHarian > 0 ? trunc2((rataHarian / targetHarian) * 1000) / 1000 : 1;
+    const vsLmPct = bulanLalu > 0 ? trunc2((rataHarian / bulanLalu) * 1000) / 1000 : 1;
+    const vsLyPct = tahunLalu > 0 ? trunc2((rataHarian / tahunLalu) * 1000) / 1000 : 1;
+    const akmBbPct = (sold + akmBb) > 0 ? trunc2((akmBb / (sold + akmBb)) * 1000) / 1000 : 0;
     const akmJwp = t.akmJwp || 0;
-    const sYl = akmJwp > 0 ? Math.round(sold / akmJwp) : 0;
+    const sYl = akmJwp > 0 ? Math.floor(sold / akmJwp) : 0;
     const absenYl = t.absenYl || 0;
     const frekuensiAbsen = t.frekuensiAbsen || 0;
     const jumlahYl = t.jumlahYl || 0;
     const jumlahArea = t.jumlahArea || 0;
-    const coverageArea = jumlahArea > 0 ? jumlahYl / jumlahArea : 1;
+    const coverageArea = jumlahArea > 0 ? trunc2((jumlahYl / jumlahArea) * 1000) / 1000 : 1;
     const rataVarian: [number, number, number, number] = [
-      divider > 0 ? round2(t.penjualanAkm[0] / divider) : 0,
-      divider > 0 ? round2(t.penjualanAkm[1] / divider) : 0,
-      divider > 0 ? round2(t.penjualanAkm[2] / divider) : 0,
-      divider > 0 ? round2(t.penjualanAkm[3] / divider) : 0
+      divider > 0 ? Math.floor(t.penjualanAkm[0] / divider) : 0,
+      divider > 0 ? Math.floor(t.penjualanAkm[1] / divider) : 0,
+      divider > 0 ? Math.floor(t.penjualanAkm[2] / divider) : 0,
+      divider > 0 ? Math.floor(t.penjualanAkm[3] / divider) : 0
     ];
 
     return {
@@ -128,9 +135,10 @@ export default function App() {
   // Sidebar statis mode tablet/desktop: bisa disembunyikan lewat tombol X di
   // sidebar itu sendiri, atau tombol hamburger di Navbar, agar konten terlihat
   // penuh tanpa menu. Tidak berpengaruh di mode HP (drawer terpisah di atas).
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Layar < 1024px (tablet / HP): menu samping dimulai TERTUTUP supaya area isi tidak sempit (bisa dibuka lewat tombol menu).
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth < 1024);
   // Sub-menu aktif untuk akun operator TKU: Ringkasan di depan, menu kedua Input Penjualan
-  const [tkuSubMenu, setTkuSubMenu] = useState<'ringkasan' | 'input' | 'breakdown' | 'realisasi'>('ringkasan');
+  const [tkuSubMenu, setTkuSubMenu] = useState<'ringkasan' | 'input' | 'breakdown' | 'realisasi' | 'stok'>('ringkasan');
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -303,7 +311,6 @@ export default function App() {
                 pdm: 0,
                 yl: prev.tkus[idx]?.jumlahYl || 10,
                 ar: prev.tkus[idx]?.jumlahArea || 10,
-                jwp: (prev.tkus[idx]?.jumlahYl || 10) * act.day,
               };
             }
           });
@@ -587,6 +594,17 @@ export default function App() {
     setState(prev => ({ ...prev, pembagiHariMode: 'tanggal', pembagiHari: getTanggalUpdate(prev) }));
   };
 
+  // Admin memilih tanggal pembagi rata2 di Dashboard. null = kembali otomatis (tanggal transaksi terakhir).
+  const handleSetPembagiManual = (day: number | null) => {
+    setState(prev => {
+      const key = getPeriodInfo(prev).key;
+      return synchronizeAppState({
+        ...prev,
+        pembagiManual: day === null ? null : { period: key, day }
+      });
+    });
+  };
+
   // Tanggal aktif mengikuti kalender. Saat tanggal berganti, data input form harian otomatis kosong
   // (atau memuat data tersimpan jika tanggal tersebut sudah pernah disimpan).
   const handleUpdateActiveDay = (newDay?: number) => {
@@ -610,7 +628,6 @@ export default function App() {
             pdm: 0,
             yl: t.jumlahYl || 10,
             ar: t.jumlahArea || 10,
-            jwp: (t.jumlahYl || 10) * targetDay,
           };
         }
       });
@@ -692,17 +709,17 @@ export default function App() {
       }, 0);
 
       const nextTkus = [...prev.tkus];
-      if (field === 'tg' && totalTgForTku > 0) {
+      if (field === 'tg') {
         nextTkus[tkuIdx] = { ...nextTkus[tkuIdx], targetHarian: totalTgForTku };
       }
 
       const nextBl = [...prev.targetBulanLalu];
-      if (field === 'bl' && totalBlForTku > 0) {
+      if (field === 'bl') {
         nextBl[tkuIdx] = totalBlForTku;
       }
 
       const nextTy = [...prev.targetTahunLalu];
-      if (field === 'ty' && totalTyForTku > 0) {
+      if (field === 'ty') {
         nextTy[tkuIdx] = totalTyForTku;
       }
 
@@ -720,7 +737,8 @@ export default function App() {
   // Menarik rata-rata penjualan PER VARIAN (ORI/OM/OS/YT) dari arsip:
   //  - Bulan lalu  = arsip satu bulan sebelum bulan kerja aktif
   //  - Tahun lalu  = arsip bulan yang sama di tahun sebelumnya (jika ada)
-  // Poin 6: Jika arsip tidak ditemukan, data dikosongkan (di-set 0) agar bisa diisi manual.
+  // Catatan: Jika arsip tidak ditemukan (misal Oktober 2025 belum ada di arsip),
+  // data tahun lalu dipertahankan (tidak dihapus/dikosongkan ke 0) agar hasil isian manual tidak hilang.
   const handleTarikDariArsip = () => {
     const curP = getPeriodInfo(state);
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -731,14 +749,9 @@ export default function App() {
     const arcTy = state.archives[tyKey];
 
     const VCODES: VariantCode[] = ['YO', 'OM', 'OS', 'YT'];
-    // Rata-rata per hari tiap varian dari satu baris arsip (dibulatkan ke bawah)
-    const avgPerVariant = (row: ArchiveRow, days: number): [number, number, number, number] => {
-      if (row.rataVarian && row.rataVarian.length === 4) {
-        return row.rataVarian.map(v => Math.floor(Number(v) || 0)) as [number, number, number, number];
-      }
-      const d = days > 0 ? days : 1;
-      return [0, 1, 2, 3].map(i => Math.floor((Number(row.varian?.[i]) || 0) / d)) as [number, number, number, number];
-    };
+    // Rata-rata per hari tiap varian dari satu baris arsip, TANPA pembulatan ke bilangan bulat (desimal ikut, dipotong 2 angka)
+    const avgPerVariant = (row: ArchiveRow, days: number): [number, number, number, number] =>
+      getArsipRataVarian(row, days);
 
     let filledBl = 0;
     let filledTy = 0;
@@ -750,53 +763,62 @@ export default function App() {
         OS: { ...(prev.targetPerVariant?.OS || {}) },
         YT: { ...(prev.targetPerVariant?.YT || {}) }
       };
-      // Jika arsip tidak ada, kosongkan (0) agar diisi manual sesuai Poin 6
-      const nextBl = arcBl ? [...prev.targetBulanLalu] : prev.tkus.map(() => 0);
-      const nextTy = arcTy ? [...prev.targetTahunLalu] : prev.tkus.map(() => 0);
+
+      // Jika September 2026 dan data tahun lalu pernah ter-reset bersih ke 0, pulihkan default baseline
+      const isSeedPeriod = curP.key === SEED_PERIOD;
+      const prevTyAllZero = !prev.targetTahunLalu || prev.targetTahunLalu.length === 0 || prev.targetTahunLalu.every(x => !x || x === 0);
+      const defaultBaseline = (isSeedPeriod && prevTyAllZero) ? getDefaultState() : null;
+
+      // Pertahankan data yang ada (jangan di-reset ke 0 jika arsip tidak ditemukan)
+      const nextBl = [...(prev.targetBulanLalu || [])];
+      const nextTy = defaultBaseline ? [...defaultBaseline.targetTahunLalu] : [...(prev.targetTahunLalu || [])];
+
+      if (defaultBaseline) {
+        VCODES.forEach(v => {
+          if (defaultBaseline.targetPerVariant?.[v]) {
+            Object.keys(defaultBaseline.targetPerVariant[v]).forEach(k => {
+              const idx = Number(k);
+              const defTy = defaultBaseline.targetPerVariant[v][idx]?.ty ?? 0;
+              nextMap[v][idx] = { ...(nextMap[v][idx] || {}), ty: defTy } as any;
+            });
+          }
+        });
+      }
+
+      const norm = (str: string) => {
+        const s = (str || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        if (s === 'jember' || s === 'jember 1') return 'jember 1';
+        if (s === 'dp jempat 4' || s === 'dp jember 4') return 'dp jember 4';
+        return s;
+      };
 
       prev.tkus.forEach((t, idx) => {
-        const nama = t.nama.toLowerCase();
+        const targetNorm = norm(t.nama);
         if (arcBl) {
-          const row = arcBl.rows.find(r => r.nama.toLowerCase() === nama);
+          const row = arcBl.rows.find(r => norm(r.nama) === targetNorm);
           if (row) {
             const avg = avgPerVariant(row, arcBl.d);
             VCODES.forEach((v, i) => {
               nextMap[v][idx] = { ...(nextMap[v][idx] || {}), bl: avg[i] } as any;
             });
-            nextBl[idx] = avg.reduce((a, b) => a + b, 0);
+            nextBl[idx] = getArsipRataTotal(row, arcBl.d);
             filledBl++;
-          } else {
-            VCODES.forEach((v) => {
-              nextMap[v][idx] = { ...(nextMap[v][idx] || {}), bl: 0 } as any;
-            });
-            nextBl[idx] = 0;
           }
-        } else {
-          VCODES.forEach((v) => {
-            nextMap[v][idx] = { ...(nextMap[v][idx] || {}), bl: 0 } as any;
-          });
         }
+        // Jika arcBl tidak ada, data bulan lalu tetap dipertahankan
 
         if (arcTy) {
-          const row = arcTy.rows.find(r => r.nama.toLowerCase() === nama);
+          const row = arcTy.rows.find(r => norm(r.nama) === targetNorm);
           if (row) {
             const avg = avgPerVariant(row, arcTy.d);
             VCODES.forEach((v, i) => {
               nextMap[v][idx] = { ...(nextMap[v][idx] || {}), ty: avg[i] } as any;
             });
-            nextTy[idx] = avg.reduce((a, b) => a + b, 0);
+            nextTy[idx] = getArsipRataTotal(row, arcTy.d);
             filledTy++;
-          } else {
-            VCODES.forEach((v) => {
-              nextMap[v][idx] = { ...(nextMap[v][idx] || {}), ty: 0 } as any;
-            });
-            nextTy[idx] = 0;
           }
-        } else {
-          VCODES.forEach((v) => {
-            nextMap[v][idx] = { ...(nextMap[v][idx] || {}), ty: 0 } as any;
-          });
         }
+        // Jika arcTy tidak ada (mis. Oktober 2025): data yang sudah ada (manual atau bawaan) tetap dipertahankan!
       });
 
       return {
@@ -808,8 +830,12 @@ export default function App() {
     });
 
     const parts: string[] = [];
-    parts.push(arcBl ? `bulan lalu (${curP.bulanLaluLabel}) terisi` : `bulan lalu (${curP.bulanLaluLabel}) dikosongkan (silakan isi manual)`);
-    parts.push(arcTy ? `tahun lalu (${curP.tahunLaluLabel}) terisi` : `tahun lalu (${curP.tahunLaluLabel}) dikosongkan (silakan isi manual)`);
+    parts.push(arcBl ? `bulan lalu (${curP.bulanLaluLabel}) terisi dari arsip` : `bulan lalu (${curP.bulanLaluLabel}) dipertahankan`);
+    parts.push(
+      arcTy
+        ? `tahun lalu (${curP.tahunLaluLabel}) terisi dari arsip`
+        : `tahun lalu (${curP.tahunLaluLabel}) dipertahankan (arsip tidak ditemukan, silakan isi manual)`
+    );
     showToast(`Tarik dari arsip: ${parts.join('; ')}.`, 'info');
   };
 
@@ -865,6 +891,14 @@ export default function App() {
         pjd: nextPjd
       });
     });
+  };
+
+  // Sisa stock: simpan = MENIMPA rekaman TKU tsb (bukan dijumlah dengan data lama)
+  const handleSaveSisaStock = (tkuId: number, record: SisaStockRecord) => {
+    setState(prev => ({
+      ...prev,
+      sisaStock: { ...(prev.sisaStock || {}), [tkuId]: record }
+    }));
   };
 
   const handleUpdateBreakdownDay = (tkuIdx: number, variant: 'ALL' | VariantCode, dayIdx: number, val: number) => {
@@ -1318,7 +1352,6 @@ export default function App() {
         pdm: 0,
         yl: state.tkus[idx]?.jumlahYl || ylCounts[idx] || 10,
         ar: state.tkus[idx]?.jumlahArea || areaCounts[idx] || 10,
-        jwp: (state.tkus[idx]?.jumlahYl || ylCounts[idx] || 10) * dayNum,
       };
     });
 
@@ -1378,7 +1411,7 @@ export default function App() {
       {/* Top Bar Navigation */}
       <Navbar
         state={state}
-        onLogout={handleLogout}
+        onLogout={() => handleLogout()}
         onToggleTheme={handleToggleTheme}
         onExport={handleExportJson}
         onSelectMenu={handleSelectMenu}
@@ -1453,8 +1486,17 @@ export default function App() {
         )}
 
         {/* Content Viewport */}
-        <main className={`flex-1 p-4 md:p-6 lg:p-8 min-w-0 pb-24 md:pb-6 lg:pb-8`}>
+        {/* @container: kolom di dalam halaman menyesuaikan lebar AREA ISI (bukan lebar layar), jadi tetap lega saat menu samping terbuka */}
+        <main className={`flex-1 @container p-4 md:p-6 lg:p-8 min-w-0 pb-24 md:pb-6 lg:pb-8`}>
           {state.role === 't' ? (
+            tkuSubMenu === 'stok' ? (
+            <SisaStockView
+              state={state}
+              mode="tku"
+              onSaveSisaStock={handleSaveSisaStock}
+              showToast={showToast}
+            />
+            ) : (
             /* TKU Operator View */
             <TkuInputView
               state={state}
@@ -1472,6 +1514,7 @@ export default function App() {
                 showToast('Beralih ke Mode Admin (Cabang)', 'info');
               }}
             />
+            )
           ) : (
             /* Admin Views */
             <>
@@ -1481,6 +1524,7 @@ export default function App() {
                   onUpdateRayon={handleUpdateRayon} 
                   onUpdatePembagiHari={handleUpdatePembagiHari}
                   onUpdateActiveDay={handleUpdateActiveDay}
+                  onSetPembagiManual={handleSetPembagiManual}
                 />
               )}
               {state.currentMenu === 'Penjualan Harian' && (
@@ -1503,6 +1547,14 @@ export default function App() {
                   onUpdatePembagiHari={handleUpdatePembagiHari}
                   onUpdateActiveDay={handleUpdateActiveDay}
                   onUpdatePembagiKhususTku={handleUpdatePembagiKhususTku}
+                />
+              )}
+              {state.currentMenu === 'Sisa Stock' && (
+                <SisaStockView
+                  state={state}
+                  mode="admin"
+                  onSaveSisaStock={handleSaveSisaStock}
+                  showToast={showToast}
                 />
               )}
               {state.currentMenu === 'Target' && (

@@ -20,7 +20,6 @@ export const PembagiHariControl: React.FC<PembagiHariControlProps> = ({
 }) => {
   const pembagi = getPembagiHari(state);
   const hariBulan = getDaysInActiveMonth(state);
-  const penuh = pembagi >= hariBulan;
 
   if (variant === 'compact' || variant === 'table-header') {
     return (

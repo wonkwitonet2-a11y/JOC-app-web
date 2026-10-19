@@ -10,32 +10,20 @@ import {
   Sparkles,
   Calendar,
   Layers,
-  ChevronDown,
-  CheckCircle2,
-  AlertCircle,
   BarChart3,
   CalendarRange,
   Edit3,
-  Check,
   PackageCheck,
   Info,
   SlidersHorizontal,
-  ArrowUpRight,
-  ArrowDownRight,
-  TrendingDown,
   Clock,
   MapPin,
   Phone,
-  FileSpreadsheet,
-  CheckSquare,
-  ListOrdered,
-  Award,
-  CalendarCheck,
-  GitCompare,
   Copy
 } from 'lucide-react';
-import { AppState, VARIANTS, VariantCode, DailySalesRecord, TkuItem } from '../types';
+import { AppState, VARIANTS, VariantCode, DailySalesRecord } from '../types';
 import { TrendChart } from '../components/TrendChart';
+import { EvaluasiPanel } from '../components/EvaluasiPanel';
 import { 
   formatNumber, 
   formatPercent, 
@@ -43,14 +31,14 @@ import {
   getStatusClass, 
   getBbStatusClass, 
   formatDateIndo,
-  getPembagiHari,
   getPembagiKhususTku,
+  getJwpAsOf,
+  truncFixed,
   getPeriodInfo,
   SEED_PERIOD
 } from '../services/storage';
-import { makeUnitAxis, makeNiceAxis, formatAxisLabel } from '../services/chartAxis';
 import { REAL_TKU_DAILY_SALES } from '../data/realSalesSeptember2026';
-import { saveTkuInputDraft, loadTkuInputDraft, clearTkuInputDraft } from '../services/inputDraft';
+import { saveTkuInputDraft, loadTkuInputDraft } from '../services/inputDraft';
 
 interface TkuInputViewProps {
   state: AppState;
@@ -125,42 +113,20 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   // 2. input: Input Penjualan Hari Ini - Menu kedua
   // 3. breakdown: Breakdown Rencana Target (Mingguan / Bulanan)
   // 4. realisasi: Realisasi Penjualan Aktual (Mingguan / Bulanan)
-  const [internalSubMenu, setInternalSubMenu] = useState<TkuSubMenu>('ringkasan');
+  const [internalSubMenu] = useState<TkuSubMenu>('ringkasan');
   const activeSubMenu = activeSubMenuProp !== undefined ? activeSubMenuProp : internalSubMenu;
-  const setActiveSubMenu = (sub: TkuSubMenu) => {
-    setInternalSubMenu(sub);
-    if (onSelectSubMenu) onSelectSubMenu(sub);
-  };
   
   const tkuIdx = state.activeTkuId;
   const tku = state.tkus[tkuIdx] || state.tkus[0];
   const day = state.currentDayNum;
   const divider = getPembagiKhususTku(state, tkuIdx);
   const formatAkmDiffPair = (diff: number, days = divider) =>
-    `${formatDiff(diff)}/${formatDiff(Math.round(diff / Math.max(1, days)))}`;
+    `${formatDiff(diff)}/${formatDiff(Math.trunc(diff / Math.max(1, days)))}`;
   // Info bulan kerja (tidak lagi di-hard-code September 2026)
   const period = getPeriodInfo(state);
   const DIM = period.daysInMonth;
   const PY = period.year;
   const PM0 = period.monthIndex;
-
-  // Existing today's input or defaults
-  const existingInput = state.todayInputs[tkuIdx] || {
-    v: [0, 0, 0, 0],
-    b: [0, 0, 0, 0],
-    sold: 0,
-    bb: 0,
-    pdmV: [0, 0, 0, 0],
-    pdm: 0,
-    yl: tku.jumlahYl || 10,
-    ar: tku.jumlahArea || 10,
-    l250: tku.l250 ?? 0,
-    l300: tku.l300 ?? 0,
-    jwpm: (tku.jumlahYl || 10) * day,
-    jwp: (tku.jumlahYl || 10) * day,
-    absen: 0,
-    frek: 0
-  };
 
   // Tanggal input: default = tanggal update (hari ini), bisa dipilih mundur untuk mengisi tanggal yang terlewat
   const [inputDate, setInputDate] = useState<string>(state.activeDate);
@@ -185,9 +151,15 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   const [ar, setAr] = useState<number>(tku.jumlahArea || 10);
   const [l250, setL250] = useState<number>(tku.l250 ?? 0);
   const [l300, setL300] = useState<number>(tku.l300 ?? 0);
-  const [jwpCustom, setJwpCustom] = useState<number>((tku.jumlahYl || 10) * day);
+  const [jwpCustom, setJwpCustom] = useState<number>(tku.akmJwp || 0);
   const [absen, setAbsen] = useState<number>(0);
   const [frek, setFrek] = useState<number>(0);
+  // Kondisi TKU (absen, frek, <250, <300) disimpan lewat tombolnya sendiri (tidak otomatis).
+  // opsDirty = ada perubahan yang belum disimpan; selama dirty, nilai ketikan tidak ditimpa saat data lain disimpan.
+  const [opsDirty, setOpsDirty] = useState(false);
+  const opsDirtyRef = useRef(false);
+  opsDirtyRef.current = opsDirty;
+  const opsKeyRef = useRef<string>('');
 
   // Breakdown Sub-Menu States
   const [selectedBreakdownPeriod, setSelectedBreakdownPeriod] = useState<'M1' | 'M2' | 'M3' | 'M4' | 'M5' | 'ALL'>('M1');
@@ -202,20 +174,6 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   const [inlineEditFrek, setInlineEditFrek] = useState<number>(0);
   const [inlineEditL250, setInlineEditL250] = useState<number>(0);
   const [inlineEditL300, setInlineEditL300] = useState<number>(0);
-
-  // Ringkasan Sub-Menu Hover Point
-  const [hoveredTrend, setHoveredTrend] = useState<{
-    day: number;
-    val: number;
-    bb?: number;
-    mult: number;
-    effTarget: number;
-    effBL: number;
-    effTY: number;
-    diff: number;
-    x?: number;
-    y?: number;
-  } | null>(null);
 
   // Sync form jika TKU aktif / tanggal input berubah
   useEffect(() => {
@@ -266,12 +224,21 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
 
     setYl(draft?.yl ?? input?.yl ?? tku.jumlahYl ?? 10);
     setAr(draft?.ar ?? input?.ar ?? tku.jumlahArea ?? 10);
-    setL250(input?.l250 ?? draft?.l250 ?? tku.l250 ?? 0);
-    setL300(input?.l300 ?? draft?.l300 ?? tku.l300 ?? 0);
-    setJwpCustom(draft?.jwpCustom ?? input?.jwpm ?? (tku.jumlahYl || 10) * inputDay);
-    setAbsen(input?.absen ?? draft?.absen ?? tku.absenYl ?? 0);
-    setFrek(input?.frek ?? draft?.frek ?? tku.frekuensiAbsen ?? 0);
-  }, [tkuIdx, state.pjd, state.todayInputs, inputDate, tku]);
+    const opsKey = `${inputDate}_${tkuIdx}`;
+    if (opsKeyRef.current !== opsKey) {
+      opsKeyRef.current = opsKey;
+      opsDirtyRef.current = false;
+      setOpsDirty(false);
+    }
+    if (!opsDirtyRef.current) {
+      setL250(input?.l250 ?? draft?.l250 ?? tku.l250 ?? 0);
+      setL300(input?.l300 ?? draft?.l300 ?? tku.l300 ?? 0);
+      setAbsen(input?.absen ?? draft?.absen ?? tku.absenYl ?? 0);
+      setFrek(input?.frek ?? draft?.frek ?? tku.frekuensiAbsen ?? 0);
+      // JWP diisi manual: tampilkan isian tanggal ini, atau nilai JWP TKU saat ini sebagai titik awal
+      setJwpCustom(input?.jwpManual ?? tku.akmJwp ?? 0);
+    }
+  }, [tkuIdx, state.pjd, state.todayInputs, inputDate, tku, divider]);
 
   // Otomatis simpan draft ketikan ke memori perangkat agar aman jika halaman ter-refresh
   const lastAutosaveKeyRef = useRef<string>('');
@@ -303,7 +270,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   const pctL250 = yl > 0 ? l250 / yl : 0;
   const pctL300 = yl > 0 ? l300 / yl : 0;
 
-  const effectiveJwp = jwpCustom > 0 ? jwpCustom : (yl * day);
+  const effectiveJwp = tku.akmJwp || 0; // JWP diisi manual oleh TKU (nilai tersimpan terbaru)
   const tkuAkmTotal = tku.penjualanAkm.reduce((a, b) => a + b, 0);
   const tkuDailyAvg = divider > 0 ? tkuAkmTotal / divider : 0;
   const tkuTarget = tku.targetHarian;
@@ -311,7 +278,10 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   const syl = effectiveJwp > 0 ? tkuAkmTotal / effectiveJwp : null;
 
   // Handle Save Input Penjualan Hari Ini (Data tetap muncul dan tidak hilang dari form setelah disimpan)
+  // Tombol ini HANYA menyimpan penjualan (PJL, BB, PDM). Kondisi TKU (absen, frek, <250, <300)
+  // punya tombol simpan sendiri; nilainya yang sudah tersimpan dipertahankan apa adanya.
   const handleSave = () => {
+    const savedRec = state.pjd[inputDate]?.[tkuIdx] || (inputDate === state.activeDate ? state.todayInputs[tkuIdx] : undefined);
     const record: DailySalesRecord = {
       v: salesV,
       b: bbV,
@@ -321,12 +291,12 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       pdm: totalPdmToday,
       yl: tku.jumlahYl || 10,
       ar: tku.jumlahArea || 10,
-      l250,
-      l300,
-      jwpm: jwpCustom,
-      jwp: (tku.jumlahYl || 10) * inputDay,
-      absen,
-      frek
+      ...(savedRec?.l250 !== undefined ? { l250: savedRec.l250 } : {}),
+      ...(savedRec?.l300 !== undefined ? { l300: savedRec.l300 } : {}),
+      ...(savedRec?.absen !== undefined ? { absen: savedRec.absen } : {}),
+      ...(savedRec?.frek !== undefined ? { frek: savedRec.frek } : {}),
+      ...(savedRec?.jwpManual !== undefined ? { jwpManual: savedRec.jwpManual } : {}),
+      ...(savedRec?.jwp !== undefined ? { jwp: savedRec.jwp } : {}),
     };
 
     // Pastikan draf lokal juga menyimpan data terkini yang disimpan agar form tetap terisi
@@ -399,6 +369,9 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     return false;
   };
 
+  // Tanggal yang sudah lewat (sampai tanggal update / pembagi) dianggap terkunci = realisasi
+  const isPastDayLocked = (d: number): boolean => d <= divider;
+
   // Helper: Retrieve target or actual realized sales for a specific date and variant
   const getPlannedTargetForDay = (d: number, variant: 'ALL' | VariantCode): number => {
     // Tanggal yang SUDAH ADA simpan penjualan: Otomatis ambil dari Penjualan Riil!
@@ -408,8 +381,10 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       }
       return getActualSalesForDay(d, variant);
     }
-    // Tanggal yang BELUM ada simpan penjualan (termasuk hari ini / tgl 11):
-    // Rencana target breakdown MASIH ADA, JANGAN HILANG!
+    // Tanggal yang sudah lewat (<= tanggal update) tapi TKU ini tidak ada transaksi: ikut realisasi = 0,
+    // bukan rencana (supaya sama dengan menu Realisasi).
+    if (isPastDayLocked(d)) return 0;
+    // Tanggal yang BELUM datang: rencana target breakdown tetap tampil.
     // Kecuali hari Minggu (libur, tidak ada transaksi): rencana selalu 0 seperti di Realisasi.
     if (new Date(PY, PM0, d).getDay() === 0) return 0;
     const dayIdx = d - 1;
@@ -441,14 +416,14 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   // In-cell Direct Editing & Excel Copy-Paste Handlers for Breakdown
   const VAR_CODES: VariantCode[] = useMemo(() => ['YO', 'OM', 'OS', 'YT'], []);
 
-  // Definisi minggu (Senin-Minggu) dari kalender bulan kerja.
+  // Definisi minggu dari kalender bulan kerja: minggu berakhir hari SABTU (sama dengan getWeeksOfMonth di admin).
   // Pembagi mingguan = tanggal hari Sabtu dalam minggu itu; jika minggu tsb tidak punya Sabtu
   // (minggu terakhir yang terpotong akhir bulan) = tanggal terakhir bulan.
   const WEEKS = useMemo(() => {
     const list: { id: number; label: string; start: number; end: number; saturdayDate: number; days: number[] }[] = [];
     let start = 1;
     for (let d = 1; d <= DIM; d++) {
-      if (new Date(PY, PM0, d).getDay() === 0 || d === DIM) {
+      if (new Date(PY, PM0, d).getDay() === 6 || d === DIM) {
         const days = Array.from({ length: d - start + 1 }, (_, i) => start + i);
         const sat = days.find(x => new Date(PY, PM0, x).getDay() === 6);
         const id = list.length + 1;
@@ -559,23 +534,6 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     }
   };
 
-  const handleCopyAllTargets = () => {
-    // Generate TSV format for Excel
-    const lines = ['Tanggal\tHari\tYO\tOM\tOS\tYT\tTotal'];
-    for (let d = 1; d <= DIM; d++) {
-      const dateObj = new Date(PY, PM0, d);
-      const dayName = dateObj.toLocaleDateString('id-ID', { weekday: 'short' });
-      const p = getDayPlanAllVariants(d);
-      lines.push(`${d}\t${dayName}\t${p.yo}\t${p.om}\t${p.os}\t${p.yt}\t${p.total}`);
-    }
-    const tsv = lines.join('\n');
-    navigator.clipboard.writeText(tsv).then(() => {
-      showToast('Tabel target rencana berhasil disalin ke clipboard (format Excel/TSV)', 'success');
-    }).catch(() => {
-      showToast('Gagal menyalin ke clipboard', 'error');
-    });
-  };
-
   // Helper: Get target per variant and total for a day
   const getDayPlanAllVariants = (d: number) => {
     const yo = getPlannedTargetForDay(d, 'YO');
@@ -630,11 +588,11 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       const r = getDayActualAllVariants(d);
       const cum = getCumActualUpToDay(d);
       const opsD = getDailyOpsDetail(d);
-      const avgDaily = d > 0 ? Math.round(cum.cumTotal / d) : 0;
-      const vsTg = targetHarian > 0 ? ((avgDaily / targetHarian) * 100).toFixed(1) + '%' : '-';
-      const vsLm = blHarian > 0 ? ((avgDaily / blHarian) * 100).toFixed(1) + '%' : '-';
-      const vsLy = tyHarian > 0 ? ((avgDaily / tyHarian) * 100).toFixed(1) + '%' : '-';
-      const pctBbStr = (opsD.pctBb * 100).toFixed(1) + '%';
+      const avgDaily = d > 0 ? Math.floor(cum.cumTotal / d) : 0;
+      const vsTg = targetHarian > 0 ? truncFixed(((avgDaily / targetHarian) * 100), 1) + '%' : '-';
+      const vsLm = blHarian > 0 ? truncFixed(((avgDaily / blHarian) * 100), 1) + '%' : '-';
+      const vsLy = tyHarian > 0 ? truncFixed(((avgDaily / tyHarian) * 100), 1) + '%' : '-';
+      const pctBbStr = truncFixed((opsD.pctBb * 100), 1) + '%';
       const sylStr = opsD.sylDay !== null ? String(opsD.sylDay) : '—';
       lines.push(`${d}\t${dayName}\t${r.yo}\t${r.om}\t${r.os}\t${r.yt}\t${r.total}\t${cum.cumTotal}\t${avgDaily}\t${vsTg}\t${vsLm}\t${vsLy}\t${opsD.bbV[0]}\t${opsD.bbV[1]}\t${opsD.bbV[2]}\t${opsD.bbV[3]}\t${opsD.bb}\t${pctBbStr}\t${opsD.pdmV[0]}\t${opsD.pdmV[1]}\t${opsD.pdmV[2]}\t${opsD.pdmV[3]}\t${opsD.pdm}\t${opsD.absen}\t${opsD.frek}\t${opsD.cumJwp}\t${sylStr}`);
     }
@@ -688,7 +646,6 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       ar: tku.jumlahArea || 10,
       l250: Math.max(0, Number(inlineEditL250) || 0),
       l300: Math.max(0, Number(inlineEditL300) || 0),
-      jwp: (tku.jumlahYl || 10) * d,
       ...(base || {}),
       v,
       b,
@@ -818,12 +775,13 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       o.bb = Math.max(o.bb, baseBb);
       if (!seenAbsen) o.absen = t.absenYl || 0;
       if (!seenFrek) o.frek = t.frekuensiAbsen || 0;
-      o.jwp = last?.jwp || (isSeed ? (t.akmJwp || (o.yl * day)) : (o.yl * day));
+      // JWP diisi manual oleh TKU (t.akmJwp)
+      o.jwp = t.akmJwp || 0;
       if (!t.aktif) { o.bb = 0; o.pdm = 0; o.absen = 0; o.frek = 0; o.jwp = 0; o.yl = 0; o.area = 0; }
       map[idx] = o;
     });
     return map;
-  }, [state.tkus, state.pjd, state.todayInputs, state.activeDate, day, DIM, period.key]);
+  }, [state.tkus, state.pjd, state.todayInputs, state.activeDate, day, divider, DIM, period.key]);
 
   const opsOf = (idxs: number[], accSold: number) => {
     const o = { bb: 0, pdm: 0, absen: 0, frek: 0, jwp: 0, yl: 0, area: 0 };
@@ -841,19 +799,12 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       ...o,
       pdm: accSold + o.bb,
       pctBb: o.bb + accSold > 0 ? o.bb / (o.bb + accSold) : null,
-      syl: o.jwp > 0 ? Math.round(accSold / o.jwp) : null,
+      syl: o.jwp > 0 ? Math.floor(accSold / o.jwp) : null,
       cover: o.area > 0 ? o.yl / o.area : null
     };
   };
 
   const tkuOps = opsOf([tkuIdx], tkuAkmTotal);
-  const rayonIdxs = useMemo(() => state.tkus.map((t, i) => (t.aktif && t.rayon === tku.rayon ? i : -1)).filter(i => i >= 0), [state.tkus, tku.rayon]);
-  const rayonAccSold = useMemo(() => rayonIdxs.reduce((sum, i) => sum + state.tkus[i].penjualanAkm.reduce((a, b) => a + b, 0), 0), [rayonIdxs, state.tkus]);
-  const rayonOps = opsOf(rayonIdxs, rayonAccSold);
-
-  const cabangIdxs = useMemo(() => state.tkus.map((t, i) => (t.aktif ? i : -1)).filter(i => i >= 0), [state.tkus]);
-  const cabangAccSold = useMemo(() => cabangIdxs.reduce((sum, i) => sum + state.tkus[i].penjualanAkm.reduce((a, b) => a + b, 0), 0), [cabangIdxs, state.tkus]);
-  const cabangOps = opsOf(cabangIdxs, cabangAccSold);
 
   // Helper untuk detail operasional per tanggal d untuk TKU ini
   const getDailyOpsDetail = (d: number) => {
@@ -935,22 +886,18 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     // Kumulatif s/d tgl d
     const cum = isPast ? getCumActualUpToDay(d) : { cumTotal: 0 };
     let cumBb = 0;
-    let cumAbsen = 0;
-    let cumFrek = 0;
 
     if (isPast) {
       for (let i = 1; i <= d; i++) {
         const sStr = `${period.key}-${String(i).padStart(2, "0")}`;
         const r = state.pjd[sStr]?.[tkuIdx] || (i === day ? state.todayInputs[tkuIdx] : null);
         cumBb += r?.bb ?? getDailyOpsForDay(i).bb;
-        if (r?.absen !== undefined) cumAbsen = Number(r.absen) || 0;
-        if (r?.frek !== undefined) cumFrek = Number(r.frek) || 0;
       }
     }
 
     const cumPdm = cum.cumTotal + cumBb;
-    const cumJwp = (rec?.yl || tku.jumlahYl || 10) * d;
-    const sylDay = cumJwp > 0 ? Math.round(cum.cumTotal / cumJwp) : null;
+    const cumJwp = getJwpAsOf(state, tkuIdx, d, period.key !== SEED_PERIOD) ?? 0;
+    const sylDay = cumJwp > 0 ? Math.floor(cum.cumTotal / cumJwp) : null;
 
     return {
       sold,
@@ -1081,62 +1028,62 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     return arr;
   }, [day, tkuIdx, targetHarian, blHarian, tyHarian, state.pjd, state.todayInputs, activeYear, activeMonth]);
 
-  // Parameter Operasional Master Chips (Dipindah dari menu Realisasi ke menu Input Penjualan Harian setelah PDM)
-  // Parameter Operasional Master Chips (Dipindah dari menu Realisasi ke menu Input Penjualan Harian setelah PDM)
-  // Jml YL & Area hanya tampilan (diedit di Profil TKU). JWP otomatis mengikuti tanggal yang dipilih.
-  // Absen, Freq, <250, <300 bersifat memperbarui (overwrite/update langsung saat diubah, bukan akumulasi).
-  const todayRec = state.todayInputs[tkuIdx];
+  // Kondisi TKU: Jml YL & Area hanya tampilan (diedit di Profil TKU). JWP, Absen, Freq, <250, <300 diisi MANUAL lalu disimpan dengan tombol
+  // "Simpan Kondisi TKU" (bukan otomatis), dan menimpa nilai lama (bukan akumulasi).
   const cYl = tku.jumlahYl || 10;
   const cAr = tku.jumlahArea || 10;
-  const chipRec = state.pjd[state.activeDate]?.[tkuIdx] || todayRec;
-  const cL250 = chipRec?.l250 ?? tku.l250 ?? 0;
-  const cL300 = chipRec?.l300 ?? tku.l300 ?? 0;
-  const cAbsen = chipRec?.absen ?? tku.absenYl ?? 0;
-  const cFrek = chipRec?.frek ?? tku.frekuensiAbsen ?? 0;
-  const autoJwp = cYl * day;
 
-  const commitChip = (patch: Partial<DailySalesRecord>) => {
+  const editOps = (patch: { absen?: number; frek?: number; l250?: number; l300?: number; jwp?: number }) => {
     if (patch.frek !== undefined) setFrek(patch.frek);
     if (patch.absen !== undefined) setAbsen(patch.absen);
     if (patch.l250 !== undefined) setL250(patch.l250);
     if (patch.l300 !== undefined) setL300(patch.l300);
+    if (patch.jwp !== undefined) setJwpCustom(patch.jwp);
+    setOpsDirty(true);
+  };
 
-    const savedToday = state.pjd[state.activeDate]?.[tkuIdx];
-    const base: DailySalesRecord = savedToday || todayRec || {
+  const handleSaveOps = () => {
+    if (isBackdate && (inputDate < minInputDate || inputDate > maxInputDate)) {
+      showToast('Tanggal di luar rentang bulan kerja / melewati tanggal update.', 'error');
+      return;
+    }
+    const saved = state.pjd[inputDate]?.[tkuIdx] || (inputDate === state.activeDate ? state.todayInputs[tkuIdx] : undefined);
+    const base: DailySalesRecord = saved || {
       v: [0, 0, 0, 0], b: [0, 0, 0, 0], sold: 0, bb: 0, pdmV: [0, 0, 0, 0], pdm: 0
     };
     const rec: DailySalesRecord = {
       ...base,
       yl: cYl,
       ar: cAr,
-      l250: patch.l250 !== undefined ? patch.l250 : cL250,
-      l300: patch.l300 !== undefined ? patch.l300 : cL300,
-      absen: patch.absen !== undefined ? patch.absen : cAbsen,
-      frek: patch.frek !== undefined ? patch.frek : cFrek,
-      jwp: autoJwp,
-      jwpm: autoJwp,
-      ...patch
+      l250,
+      l300,
+      absen,
+      frek,
+      jwpManual: Math.max(0, Number(jwpCustom) || 0),
     };
-    saveTkuInputDraft(inputDate, tkuIdx, salesV, bbV, pdmV, {
-      yl: cYl,
-      ar: cAr,
-      l250: patch.l250 !== undefined ? patch.l250 : cL250,
-      l300: patch.l300 !== undefined ? patch.l300 : cL300,
-      jwpCustom,
-      absen: patch.absen !== undefined ? patch.absen : cAbsen,
-      frek: patch.frek !== undefined ? patch.frek : cFrek
-    });
-    onSaveTkuInput(tkuIdx, rec);
+    saveTkuInputDraft(inputDate, tkuIdx, salesV, bbV, pdmV, { yl: cYl, ar: cAr, l250, l300, jwpCustom, absen, frek });
+    if (isBackdate) {
+      onReviseDailyData(inputDate, tkuIdx, rec);
+    } else {
+      onSaveTkuInput(tkuIdx, rec);
+    }
+    setOpsDirty(false);
+    showToast(`Kondisi ${tku.nama} tanggal ${formatDateIndo(inputDate)} berhasil disimpan!`, 'success');
   };
 
   // Card Kondisi & Parameter Operasional (Dipindah dari menu Realisasi ke menu Input Penjualan Harian setelah PDM)
-  // Berfungsi otomatis dan tidak ikut simpan harian
+  // Disimpan lewat tombol "Simpan Kondisi TKU" sendiri (terpisah dari tombol simpan penjualan)
   const renderOpsCard = () => (
     <div className="p-4 md:p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
       <div className="space-y-0.5">
         <h2 className="text-base font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
           <SlidersHorizontal className="w-5 h-5 text-emerald-600" />
           Kondisi TKU
+          {opsDirty && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+              belum disimpan
+            </span>
+          )}
         </h2>
       </div>
       
@@ -1154,19 +1101,24 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
           <span className="font-mono font-bold text-neutral-900 dark:text-neutral-100">{cAr}</span>
         </div>
 
-        {/* 3. JWP (Otomatis Mengikuti Tanggal: YL × Tgl) */}
-        <div className="px-2.5 py-1 rounded-xl border flex items-center gap-1.5 text-xs bg-sky-50/60 dark:bg-sky-950/30 border-sky-200/60 dark:border-sky-900/40" title={`JWP Otomatis = ${cYl} YL × Tgl ${day}`}>
+        {/* 3. JWP (diisi manual oleh TKU: total hari kerja semua YL sampai hari ini) */}
+        <div className="px-2.5 py-1 rounded-xl border flex items-center gap-1.5 text-xs bg-sky-50/60 dark:bg-sky-950/30 border-sky-200/60 dark:border-sky-900/40" title="JWP diisi manual: akumulasi hari kerja semua YL sampai tanggal ini (YL lama × hari berjalan, YL baru × hari ia mulai berjualan)">
           <span className="text-sky-700 dark:text-sky-400 font-semibold">JWP:</span>
-          <span className="font-mono font-bold text-sky-700 dark:text-sky-300 px-1">{autoJwp}</span>
+          <OpsNumberField
+            value={jwpCustom}
+            min={0}
+            onCommit={(n) => editOps({ jwp: n })}
+            className="w-16 px-1.5 py-0.5 rounded-lg border font-mono font-bold text-center text-xs bg-white dark:bg-neutral-900 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-700 focus:ring-sky-500"
+          />
         </div>
 
         {/* 4. Absen (Memperbarui nilai) */}
         <div className="px-2.5 py-1 rounded-xl border flex items-center gap-1.5 text-xs bg-purple-50/60 dark:bg-purple-950/30 border-purple-200/60 dark:border-purple-900/40">
           <span className="text-purple-700 dark:text-purple-400 font-semibold">Absen:</span>
           <OpsNumberField
-            value={cAbsen}
+            value={absen}
             min={0}
-            onCommit={(n) => commitChip({ absen: n })}
+            onCommit={(n) => editOps({ absen: n })}
             className="w-14 px-1.5 py-0.5 rounded-lg border font-mono font-bold text-center text-xs bg-white dark:bg-neutral-900 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-700 focus:ring-purple-500"
           />
         </div>
@@ -1175,9 +1127,9 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
         <div className="px-2.5 py-1 rounded-xl border flex items-center gap-1.5 text-xs bg-indigo-50/60 dark:bg-indigo-950/30 border-indigo-200/60 dark:border-indigo-900/40">
           <span className="text-indigo-700 dark:text-indigo-400 font-semibold">Freq:</span>
           <OpsNumberField
-            value={cFrek}
+            value={frek}
             min={0}
-            onCommit={(n) => commitChip({ frek: n })}
+            onCommit={(n) => editOps({ frek: n })}
             className="w-14 px-1.5 py-0.5 rounded-lg border font-mono font-bold text-center text-xs bg-white dark:bg-neutral-900 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700 focus:ring-indigo-500"
           />
         </div>
@@ -1186,9 +1138,9 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
         <div className="px-2.5 py-1 rounded-xl border flex items-center gap-1.5 text-xs bg-red-50/60 dark:bg-red-950/30 border-red-200/60 dark:border-red-900/40">
           <span className="text-red-700 dark:text-red-400 font-semibold">YL &lt; 250:</span>
           <OpsNumberField
-            value={cL250}
+            value={l250}
             min={0}
-            onCommit={(n) => commitChip({ l250: n })}
+            onCommit={(n) => editOps({ l250: n })}
             className="w-14 px-1.5 py-0.5 rounded-lg border font-mono font-bold text-center text-xs bg-white dark:bg-neutral-900 text-red-700 dark:text-red-300 border-red-300 dark:border-red-700 focus:ring-red-500"
           />
         </div>
@@ -1197,12 +1149,22 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
         <div className="px-2.5 py-1 rounded-xl border flex items-center gap-1.5 text-xs bg-amber-50/60 dark:bg-amber-950/30 border-amber-200/60 dark:border-amber-900/40">
           <span className="text-amber-700 dark:text-amber-400 font-semibold">YL &lt; 300:</span>
           <OpsNumberField
-            value={cL300}
+            value={l300}
             min={0}
-            onCommit={(n) => commitChip({ l300: n })}
+            onCommit={(n) => editOps({ l300: n })}
             className="w-14 px-1.5 py-0.5 rounded-lg border font-mono font-bold text-center text-xs bg-white dark:bg-neutral-900 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700 focus:ring-amber-500"
           />
         </div>
+
+        {/* 8. Tombol simpan kondisi TKU (terpisah dari simpan penjualan) */}
+        <button
+          type="button"
+          onClick={handleSaveOps}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-transform active:scale-95 ${opsDirty ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-700'}`}
+        >
+          <Save className="w-3.5 h-3.5" />
+          <span>{isBackdate ? `Simpan Kondisi Tgl ${inputDay}` : 'Simpan Kondisi TKU'}</span>
+        </button>
       </div>
     </div>
   );
@@ -1218,8 +1180,6 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     let periodTotalBb = 0;
     let periodTotalPdmV = [0, 0, 0, 0];
     let periodTotalPdm = 0;
-    let periodTotalAbs = 0;
-    let periodTotalFrk = 0;
 
     realisasiDaysToShow.forEach(d => {
       if (d <= day) {
@@ -1242,8 +1202,6 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
         periodTotalPdmV[2] += opsD.pdmV[2];
         periodTotalPdmV[3] += opsD.pdmV[3];
         periodTotalPdm += opsD.pdm;
-
-        if (opsD.absen > 0 || opsD.frek > 0) { periodTotalAbs = opsD.absen; periodTotalFrk = opsD.frek; }
       }
     });
 
@@ -1350,7 +1308,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                   const opsD = getDailyOpsDetail(d);
 
                   const dayDivider = d;
-                  const avgDaily = (isPast && dayDivider > 0) ? Math.round(cum.cumTotal / dayDivider) : 0;
+                  const avgDaily = (isPast && dayDivider > 0) ? Math.floor(cum.cumTotal / dayDivider) : 0;
 
                   const vsTgPct = (isPast && targetHarian > 0) ? (avgDaily / targetHarian) : 0;
                    const vsTgAkmDiff = cum.cumTotal - targetHarian * dayDivider;
@@ -1840,7 +1798,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                     {formatNumber(periodTotalSold)} btl
                   </td>
                   <td colSpan={5} className="py-3 px-2.5 text-right text-neutral-500 font-normal font-sans text-xs">
-                    Rata: <strong className="text-neutral-900 dark:text-white font-mono">{formatNumber(breakdownDaysToShow.length > 0 ? Math.round(periodTotalSold / breakdownDaysToShow.length) : 0)} btl/hr</strong>
+                    Rata: <strong className="text-neutral-900 dark:text-white font-mono">{formatNumber(breakdownDaysToShow.length > 0 ? Math.floor(periodTotalSold / breakdownDaysToShow.length) : 0)} btl/hr</strong>
                   </td>
 
                   {/* Total BB per varian & total */}
@@ -1902,7 +1860,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
         </div>
 
         {/* Informasi Ringkas: 2x2 Kanan Kiri Atas Bawah */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        <div className="grid grid-cols-2 @xl:grid-cols-4 gap-2 text-xs">
           <div className="p-2 px-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-100 dark:border-neutral-800 flex items-center gap-2">
             <Users className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
             <div className="min-w-0">
@@ -2017,7 +1975,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 @2xl:grid-cols-4 gap-3">
               {VARIANTS.map((v, i) => (
                 <div key={v.code} className="p-4 rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50/60 dark:bg-neutral-800/40 hover:border-neutral-300 dark:hover:border-neutral-700 transition-colors min-w-0">
                   <div className="mb-2 min-w-0">
@@ -2063,7 +2021,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 @2xl:grid-cols-4 gap-3">
               {VARIANTS.map((v, i) => (
                 <div key={v.code} className="p-4 rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50/60 dark:bg-neutral-800/40 min-w-0">
                   <div className="mb-2 min-w-0">
@@ -2112,7 +2070,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 @2xl:grid-cols-4 gap-3">
               {VARIANTS.map((v, i) => (
                 <div key={v.code} className="p-4 rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white/90 dark:bg-neutral-800/70 shadow-2xs">
                   <div className="mb-2 min-w-0">
@@ -2170,32 +2128,32 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
               </h2>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-6 lg:grid-cols-5 gap-3 font-mono text-xs items-stretch">
-              <div className="p-3.5 bg-white/90 dark:bg-neutral-800/90 rounded-2xl border border-brand-100/80 dark:border-neutral-700/80 shadow-2xs flex flex-col justify-between min-w-0 h-full overflow-hidden col-span-1 md:col-span-2 lg:col-span-1">
+            <div className="grid grid-cols-2 @2xl:grid-cols-6 @4xl:grid-cols-5 gap-3 font-mono text-xs items-stretch">
+              <div className="p-3.5 bg-white/90 dark:bg-neutral-800/90 rounded-2xl border border-brand-100/80 dark:border-neutral-700/80 shadow-2xs flex flex-col justify-between min-w-0 h-full overflow-hidden col-span-1 @2xl:col-span-2 @4xl:col-span-1">
                 <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">Total Terjual</span>
                 <span className="text-base font-bold text-neutral-900 dark:text-neutral-100 truncate">
                   {formatNumber(totalSoldToday)} <span className="text-xs font-normal text-neutral-400 font-sans">btl</span>
                 </span>
               </div>
-              <div className="p-3.5 bg-white/90 dark:bg-neutral-800/90 rounded-2xl border border-brand-100/80 dark:border-neutral-700/80 shadow-2xs flex flex-col justify-between min-w-0 h-full overflow-hidden col-span-1 md:col-span-2 lg:col-span-1">
+              <div className="p-3.5 bg-white/90 dark:bg-neutral-800/90 rounded-2xl border border-brand-100/80 dark:border-neutral-700/80 shadow-2xs flex flex-col justify-between min-w-0 h-full overflow-hidden col-span-1 @2xl:col-span-2 @4xl:col-span-1">
                 <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">Total PDM</span>
                 <span className="text-base font-bold text-indigo-600 dark:text-indigo-400 truncate">
                   {formatNumber(totalPdmToday)} <span className="text-xs font-normal text-neutral-400 font-sans">btl</span>
                 </span>
               </div>
-              <div className="p-3.5 bg-white/90 dark:bg-neutral-800/90 rounded-2xl border border-brand-100/80 dark:border-neutral-700/80 shadow-2xs flex flex-col justify-between min-w-0 h-full overflow-hidden col-span-1 md:col-span-2 lg:col-span-1">
+              <div className="p-3.5 bg-white/90 dark:bg-neutral-800/90 rounded-2xl border border-brand-100/80 dark:border-neutral-700/80 shadow-2xs flex flex-col justify-between min-w-0 h-full overflow-hidden col-span-1 @2xl:col-span-2 @4xl:col-span-1">
                 <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">% BB</span>
                 <span className={`text-base font-bold truncate ${getBbStatusClass(bbPct)}`}>
                   {formatPercent(bbPct)}
                 </span>
               </div>
-              <div className="p-3.5 bg-white/90 dark:bg-neutral-800/90 rounded-2xl border border-brand-100/80 dark:border-neutral-700/80 shadow-2xs flex flex-col justify-between min-w-0 h-full overflow-hidden col-span-1 md:col-span-3 lg:col-span-1">
+              <div className="p-3.5 bg-white/90 dark:bg-neutral-800/90 rounded-2xl border border-brand-100/80 dark:border-neutral-700/80 shadow-2xs flex flex-col justify-between min-w-0 h-full overflow-hidden col-span-1 @2xl:col-span-3 @4xl:col-span-1">
                 <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">YL &lt; 250 / &lt; 300</span>
                 <span className="text-sm font-bold text-neutral-900 dark:text-neutral-100 truncate">
                   {formatPercent(pctL250)} / {formatPercent(pctL300)}
                 </span>
               </div>
-              <div className="p-3.5 bg-white/90 dark:bg-neutral-800/90 rounded-2xl border border-brand-100/80 dark:border-neutral-700/80 shadow-2xs flex flex-col justify-between min-w-0 h-full overflow-hidden col-span-2 md:col-span-3 lg:col-span-1">
+              <div className="p-3.5 bg-white/90 dark:bg-neutral-800/90 rounded-2xl border border-brand-100/80 dark:border-neutral-700/80 shadow-2xs flex flex-col justify-between min-w-0 h-full overflow-hidden col-span-2 @2xl:col-span-3 @4xl:col-span-1">
                 <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">s/YL</span>
                 <span className="text-base font-bold text-neutral-900 dark:text-neutral-100 truncate">
                   {syl ? formatNumber(syl) : '—'}
@@ -2318,11 +2276,11 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                         curVPlan[3] += p.yt;
 
                         const dayDivider = d;
-                        const avgYo = dayDivider > 0 ? Math.round(cum.cumYo / dayDivider) : 0;
-                        const avgOm = dayDivider > 0 ? Math.round(cum.cumOm / dayDivider) : 0;
-                        const avgOs = dayDivider > 0 ? Math.round(cum.cumOs / dayDivider) : 0;
-                        const avgYt = dayDivider > 0 ? Math.round(cum.cumYt / dayDivider) : 0;
-                        const avgDaily = dayDivider > 0 ? Math.round(cum.cumTotal / dayDivider) : 0;
+                        const avgYo = dayDivider > 0 ? Math.floor(cum.cumYo / dayDivider) : 0;
+                        const avgOm = dayDivider > 0 ? Math.floor(cum.cumOm / dayDivider) : 0;
+                        const avgOs = dayDivider > 0 ? Math.floor(cum.cumOs / dayDivider) : 0;
+                        const avgYt = dayDivider > 0 ? Math.floor(cum.cumYt / dayDivider) : 0;
+                        const avgDaily = dayDivider > 0 ? Math.floor(cum.cumTotal / dayDivider) : 0;
 
                         // Perbandingan dengan Minggu lalu di hari yang sama (tanggal d-7)
                         const hasPrevWeek = d > 7;
@@ -2373,7 +2331,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                               </span>
                             </td>
                             {(() => {
-                              const isDaySaved = hasActualSavedSalesForDay(d);
+                              const isDaySaved = hasActualSavedSalesForDay(d) || isPastDayLocked(d);
                               return VARIANTS.map(v => (
                                 <td key={v.code} className="py-1 px-1 text-right">
                                   <input
@@ -2406,6 +2364,9 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                             })()}
                             <td className={`py-2 px-2.5 text-right font-bold ${wkDiff === null ? 'text-neutral-900 dark:text-neutral-100' : wkTone}`}>
                               {formatNumber(p.total)} btl
+                              {(hasActualSavedSalesForDay(d) || isPastDayLocked(d)) && (
+                                <span className="ml-1.5 align-middle text-[9px] px-1 py-px rounded bg-emerald-600 text-white font-sans font-semibold leading-none">Real</span>
+                              )}
                             </td>
                             <td className="py-2 px-2.5 text-right font-bold text-brand-600 dark:text-brand-400">
                               {formatNumber(cum.cumTotal)} btl
@@ -2485,7 +2446,13 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       )}
 
 
-      {activeSubMenu === 'realisasi' && renderRealisasiSection()}
+      {activeSubMenu === 'realisasi' && (
+        <div className="space-y-6">
+          {renderRealisasiSection()}
+          {/* Evaluasi vs minggu lalu, tren M1-M5, capaian & proyeksi, posisi di cabang */}
+          <EvaluasiPanel state={state} weeks={WEEKS} mode="tku" focusIdx={tkuIdx} showToast={showToast} />
+        </div>
+      )}
 
 
       {/* ========================================================================= */}
@@ -2518,7 +2485,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
               <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 block mb-3">
                 1. Performa Penjualan & Capaian Target
               </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              <div className="grid grid-cols-1 @lg:grid-cols-2 @4xl:grid-cols-4 gap-3.5">
                 {/* 1.1 Akumulasi Penjualan */}
                 <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/70 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full">
                   <div>
@@ -2599,15 +2566,15 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
               <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 block mb-3">
                 2. Kondisi Operasional (Absensi, JWP, S/YL, PDM, YL &lt; 250, YL &lt; 300)
               </span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3 font-mono items-stretch">
+              <div className="grid grid-cols-2 @xl:grid-cols-4 @6xl:grid-cols-8 gap-3 font-mono items-stretch">
                 {/* 2.1 Jumlah YL */}
                 <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
                   <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">Jumlah YL</span>
                   <span className="text-base md:text-lg leading-tight truncate font-bold text-neutral-900 dark:text-neutral-100">
                     {yl} <span className="text-xs font-normal text-neutral-400 font-sans">/ {ar} area</span>
                   </span>
-                  <span className="text-[10px] text-neutral-400 block mt-auto pt-1 leading-snug font-sans truncate" title={`Cover: ${ar > 0 ? ((yl / ar) * 100).toFixed(0) : 100}%`}>
-                    Cover: {ar > 0 ? ((yl / ar) * 100).toFixed(0) : 100}%
+                  <span className="text-[10px] text-neutral-400 block mt-auto pt-1 leading-snug font-sans truncate" title={`Cover: ${ar > 0 ? truncFixed(((yl / ar) * 100), 0) : 100}%`}>
+                    Cover: {ar > 0 ? truncFixed(((yl / ar) * 100), 0) : 100}%
                   </span>
                 </div>
 
@@ -2628,8 +2595,8 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                   <span className="text-base md:text-lg leading-tight truncate font-bold text-sky-600 dark:text-sky-400">
                     {formatNumber(effectiveJwp)}
                   </span>
-                  <span className="text-[10px] text-neutral-600 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans truncate" title={`EWP: ${effectiveJwp > 0 ? (((effectiveJwp - akmOps.akmFrek) / effectiveJwp) * 100).toFixed(1) : '0.0'}% ((${formatNumber(effectiveJwp)} - ${akmOps.akmFrek}) ÷ ${formatNumber(effectiveJwp)})`}>
-                    EWP: <strong className="text-neutral-900 dark:text-neutral-100 font-mono font-bold">{effectiveJwp > 0 ? (((effectiveJwp - akmOps.akmFrek) / effectiveJwp) * 100).toFixed(1) : '0.0'}%</strong> <span className="text-neutral-400 font-normal">({effectiveJwp - akmOps.akmFrek}/{formatNumber(effectiveJwp)})</span>
+                  <span className="text-[10px] text-neutral-600 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans truncate" title={`EWP: ${effectiveJwp > 0 ? truncFixed((((effectiveJwp - akmOps.akmFrek) / effectiveJwp) * 100), 1) : '0.0'}% ((${formatNumber(effectiveJwp)} - ${akmOps.akmFrek}) ÷ ${formatNumber(effectiveJwp)})`}>
+                    EWP: <strong className="text-neutral-900 dark:text-neutral-100 font-mono font-bold">{effectiveJwp > 0 ? truncFixed((((effectiveJwp - akmOps.akmFrek) / effectiveJwp) * 100), 1) : '0.0'}%</strong> <span className="text-neutral-400 font-normal">({effectiveJwp - akmOps.akmFrek}/{formatNumber(effectiveJwp)})</span>
                   </span>
                 </div>
 
@@ -2637,7 +2604,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                 <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
                   <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">s/YL</span>
                   <span className="text-base md:text-lg leading-tight truncate font-bold text-brand-600 dark:text-brand-400">
-                    {formatNumber(Math.round(syl !== null ? syl : (effectiveJwp > 0 ? (tkuAkmTotal / effectiveJwp) : 0)))} <span className="text-xs font-normal text-neutral-400 font-sans">btl</span>
+                    {formatNumber(syl !== null ? syl : (effectiveJwp > 0 ? (tkuAkmTotal / effectiveJwp) : 0))} <span className="text-xs font-normal text-neutral-400 font-sans">btl</span>
                   </span>
                   <span className="text-[10px] text-neutral-500 dark:text-neutral-400 block mt-auto pt-1 leading-snug font-sans truncate">
                     Akm Pjl &divide; Akm JWP
@@ -2651,7 +2618,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                     {formatNumber(akmOps.akmPdm)} <span className="text-xs font-normal text-neutral-400 font-sans">btl</span>
                   </span>
                   <span className="text-[10px] text-neutral-400 block mt-auto pt-1 leading-snug font-sans truncate">
-                    Rata: {divider > 0 ? (akmOps.akmPdm / divider).toFixed(1) : 0} btl/hr
+                    Rata: {divider > 0 ? truncFixed((akmOps.akmPdm / divider), 1) : 0} btl/hr
                   </span>
                 </div>
 
@@ -2731,7 +2698,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                         {formatNumber(item.akm)}
                       </td>
                       <td className="py-3 px-3 text-right text-neutral-600 dark:text-neutral-400">
-                        {item.share.toFixed(1)}%
+                        {truncFixed(item.share, 1)}%
                       </td>
                       <td className="py-3 px-3 text-right font-bold">
                         {formatNumber(item.avg)}
@@ -2786,6 +2753,9 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
               </table>
             </div>
           </div>
+
+          {/* Evaluasi mingguan TKU: capaian vs target, proyeksi, minggu ini vs lalu, tren, posisi di cabang */}
+          <EvaluasiPanel state={state} weeks={WEEKS} mode="tku" focusIdx={tkuIdx} showToast={showToast} />
 
           {/* Grafik Tren Penjualan Harian TKU */}
           <div className="p-4 sm:p-6 bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-sm space-y-4 min-w-0">

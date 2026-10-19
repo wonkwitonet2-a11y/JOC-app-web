@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, Calendar, Download } from 'lucide-react';
+import { ArrowDown, ArrowUp, Calendar, ChevronDown, Download } from 'lucide-react';
+import { EvaluasiPanel } from '../components/EvaluasiPanel';
 import { AppState, VariantCode, DailySalesRecord } from '../types';
 import {
   formatNumber,
@@ -12,7 +13,7 @@ import {
   getPembagiBreakdownMingguan,
   getDaysInActiveMonth,
   getWeeksOfMonth,
-  getSeedDailyBranchTotal
+  truncFixed
 } from '../services/storage';
 
 interface BreakdownRealisasiViewProps {
@@ -63,9 +64,28 @@ interface Ops {
 const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 const VCODES: VariantCode[] = ['YO', 'OM', 'OS', 'YT'];
 
+// Warna varian (sama seperti menu Penjualan Harian): YO merah, OM kuning, OS pink, YT biru muda
+const VCOL: Record<string, string> = {
+  YO: 'text-red-600 dark:text-red-400',
+  OM: 'text-amber-600 dark:text-amber-400',
+  OS: 'text-pink-600 dark:text-pink-400',
+  YT: 'text-sky-600 dark:text-sky-400',
+  Total: 'text-neutral-900 dark:text-white font-extrabold'
+};
+
+// Warna latar lembut per blok kolom: [baris TKU, baris subtotal rayon]. Baris Total Cabang (gelap) tidak diberi.
+const TINT: Record<string, [string, string]> = {
+  acc: ['bg-brand-50/60 dark:bg-brand-950/25', 'bg-brand-100/70 dark:bg-brand-900/30'],
+  avg: ['bg-indigo-50/60 dark:bg-indigo-950/25', 'bg-indigo-100/70 dark:bg-indigo-900/30'],
+  wk: ['bg-sky-50/60 dark:bg-sky-950/20', 'bg-sky-100/70 dark:bg-sky-900/25'],
+  pct: ['bg-amber-50/60 dark:bg-amber-950/20', 'bg-amber-100/70 dark:bg-amber-900/25'],
+  diff: ['bg-emerald-50/60 dark:bg-emerald-950/20', 'bg-emerald-100/70 dark:bg-emerald-900/25']
+};
+
 export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
   state,
-  onUpdateRayon
+  onUpdateRayon,
+  showToast
 }) => {
   const [tab, setTab] = useState<DataTab>('breakdown');
   const [viewMode, setViewMode] = useState<ViewMode>('bulanan');
@@ -109,8 +129,6 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
       : getPembagiBreakdownBulanan(state);
 
   // ---- Data penjualan ----
-  const activeTkus = state.tkus.filter(t => t.aktif);
-  const totalBranchTarget = activeTkus.reduce((a, b) => a + b.targetHarian, 0) || 1;
 
   const getRecordFor = (dateStr: string, tkuIdx: number): DailySalesRecord | null => {
     if (state.pjd[dateStr] && state.pjd[dateStr][tkuIdx]) return state.pjd[dateStr][tkuIdx];
@@ -157,9 +175,12 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
         // - Jika tanggal tsb BELUM ada simpan penjualan: TETAP TAMPILKAN RENCANA TARGET (getPlan)! Jangan hilang!
         // Pada menu realisasi:
         // - Tampilkan hasil riil, atau [0, 0, 0, 0] jika belum tersimpan
+        // Tanggal yang sudah lewat (<= tanggal update) SELALU memakai realisasi, walaupun TKU itu 0 / belum input.
+        // Rencana target hanya untuk tanggal yang belum datang (> tanggal update).
+        const isPastDay = d <= updateDay;
         const val = isReal
           ? (hasRealized ? getSales(idx, d) : [0, 0, 0, 0])
-          : (hasRealized ? getSales(idx, d) : getPlan(idx, d));
+          : ((hasRealized || isPastDay) ? getSales(idx, d) : getPlan(idx, d));
         arr.push(val);
       }
       map[idx] = arr;
@@ -167,6 +188,13 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.tkus, state.pjd, state.todayInputs, state.breakdown, state.breakdownPerVariant, state.activeDate, state.activePeriod, updateDay, daysInMonth, tab]);
+
+  // Tanggal dianggap "Real" (tab Breakdown) bila minimal satu TKU aktif pada rayon yang tampil
+  // sudah punya penjualan tersimpan, sehingga angka rencananya digantikan data realisasi.
+  const isRealDate = (d: number): boolean =>
+    d <= updateDay || state.tkus.some((t, i) =>
+      t.aktif && (selectedRayon === 0 || t.rayon === selectedRayon) && hasSavedSalesFor(d, i)
+    );
 
   const build = (idxs: number[]): Agg => {
     const daily: number[][] = [[0, 0, 0, 0]];
@@ -234,7 +262,8 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
         o.l250 = t.l250 ?? 0;
         o.l300 = t.l300 ?? 0;
       }
-      o.jwp = (last?.jwp && last.jwp > 0) ? last.jwp : (o.yl * updateDay);
+      // JWP diisi manual oleh TKU (t.akmJwp)
+      o.jwp = t.akmJwp || 0;
       o.absen = latestAbsen;
       o.frek = latestFrek;
       const baseBbSum = t.bbAkm ? t.bbAkm.reduce((a, b) => a + b, 0) : 0;
@@ -258,7 +287,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
       ...o,
       pdm: accSold + o.bb, // Akm PDM = Penjualan Akm + BB Akm
       pctBb: o.bb + accSold > 0 ? o.bb / (o.bb + accSold) : null,
-      syl: o.jwp > 0 ? Math.round(accSold / o.jwp) : null,
+      syl: o.jwp > 0 ? Math.floor(accSold / o.jwp) : null,
       cover: o.area > 0 ? o.yl / o.area : null,
       pctL250: o.yl > 0 ? o.l250 / o.yl : null,
       pctL300: o.yl > 0 ? o.l300 / o.yl : null
@@ -300,19 +329,19 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
       shownDays.forEach(d => r.agg.daily[d].forEach(x => line.push(isReal && d > updateDay ? '' : x)));
       r.agg.acc.forEach(x => line.push(x));
       line.push(r.agg.accTotal);
-      r.agg.avg.forEach(x => line.push(Math.round(x)));
-      line.push(Math.round(r.agg.avgTotal));
+      r.agg.avg.forEach(x => line.push(Math.floor(x)));
+      line.push(Math.floor(r.agg.avgTotal));
       if (showWeekCmp) {
         const wc = weekCmp(r.agg);
-        line.push(wc.pct === null ? '' : (wc.pct * 100).toFixed(1) + '%', wc.diff === null ? '' : Math.round(wc.diff));
+        line.push(wc.pct === null ? '' : truncFixed((wc.pct * 100), 1) + '%', wc.diff === null ? '' : Math.trunc(wc.diff));
       }
-      line.push(...[r.agg.pct.tg, r.agg.pct.bl, r.agg.pct.ty].map(p => (p === null ? '' : (p * 100).toFixed(1) + '%')));
-      line.push(Math.round(r.agg.diff.tg), Math.round(r.agg.diff.bl), Math.round(r.agg.diff.ty));
+      line.push(...[r.agg.pct.tg, r.agg.pct.bl, r.agg.pct.ty].map(p => (p === null ? '' : truncFixed((p * 100), 1) + '%')));
+      line.push(Math.trunc(r.agg.diff.tg), Math.trunc(r.agg.diff.bl), Math.trunc(r.agg.diff.ty));
       if (isReal) {
         const o = opsOf(r.idxs, r.agg.accTotal);
         line.push(
-          o.bb, o.pctBb === null ? '' : (o.pctBb * 100).toFixed(1) + '%', o.pdm, o.absen, o.frek,
-          o.jwp, o.syl === null ? '' : o.syl, o.yl, o.area, o.cover === null ? '' : (o.cover * 100).toFixed(1) + '%'
+          o.bb, o.pctBb === null ? '' : truncFixed((o.pctBb * 100), 1) + '%', o.pdm, o.absen, o.frek,
+          o.jwp, o.syl === null ? '' : o.syl, o.yl, o.area, o.cover === null ? '' : truncFixed((o.cover * 100), 1) + '%'
         );
       }
       lines.push(line.map(String));
@@ -352,6 +381,28 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
   const th = 'px-2 py-1.5 text-center font-semibold whitespace-nowrap border-l border-neutral-200 dark:border-neutral-800';
   // Semua sel angka: ukuran & ketebalan sama
   const td = 'px-2 py-2 text-right font-mono text-[11px] font-bold whitespace-nowrap';
+
+  const tint = (k: string, kind: TableRow['kind']) => (kind === 'tku' ? TINT[k][0] : kind === 'rayon' ? TINT[k][1] : '');
+  // Latar kolom tanggal: Minggu = merah muda, tanggal genap = abu sangat tipis (pemisah antar tanggal)
+  const dayTint = (d: number, kind: TableRow['kind']) => {
+    if (kind === 'total') return '';
+    if (dow(d) === 0) return kind === 'tku' ? 'bg-red-50/70 dark:bg-red-950/20' : 'bg-red-100/60 dark:bg-red-950/30';
+    if (kind === 'tku' && d % 2 === 0) return 'bg-neutral-50 dark:bg-neutral-800/30';
+    return '';
+  };
+  // Aksen warna per rayon: Rayon 1 biru, Rayon 2 ungu (garis di kiri nama TKU)
+  const rayonOfRow = (r: TableRow): number =>
+    r.kind === 'rayon' ? Number(r.key.slice(1)) : r.kind === 'tku' ? (state.tkus[r.idxs[0]]?.rayon || 0) : 0;
+  const accentCls = (r: TableRow) => {
+    const ry = rayonOfRow(r);
+    return ry === 1 ? 'border-l-[3px] border-l-sky-500' : ry === 2 ? 'border-l-[3px] border-l-violet-500' : '';
+  };
+  const labelTone = (r: TableRow) => {
+    if (r.kind !== 'rayon') return '';
+    return rayonOfRow(r) === 1 ? 'text-sky-700 dark:text-sky-300' : 'text-violet-700 dark:text-violet-300';
+  };
+  // Warna teks aman untuk baris gelap (Total Cabang)
+  const hue = (kind: TableRow['kind'], light: string, dark: string) => (kind === 'total' ? dark : light);
 
   // ---- Perbandingan dengan Minggu lalu (hari yang sama = tanggal - 7) ----
   // Hanya tab Breakdown & tampilan Mingguan. Tanggal 1-7 belum punya pembanding.
@@ -417,105 +468,126 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">{isReal ? 'Realisasi' : 'Breakdown'}</h1>
-          <p className="text-xs text-neutral-500">
-            {monthName}{isReal ? ` • s/d Tgl ${updateDay}` : ''}
-          </p>
+      <div className="p-4 sm:p-5 space-y-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
+        {/* Baris 1: judul (kiri) + ekspor (kanan) */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">{isReal ? 'Realisasi' : 'Breakdown'}</h1>
+            <p className="text-xs text-neutral-500 truncate">
+              {monthName}{isReal ? ` • s/d Tgl ${updateDay}` : ''}
+            </p>
+          </div>
+          <button
+            onClick={handleExportCsv}
+            className="shrink-0 inline-flex items-center justify-center gap-1.5 h-9 px-2.5 sm:px-3.5 text-xs font-semibold rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-200 transition-colors"
+            title="Unduh tabel format CSV"
+            aria-label="Ekspor CSV"
+          >
+            <Download className="w-4 h-4" />
+            <span className="hidden sm:inline">Ekspor</span>
+          </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl shrink-0">
-            {([
-              { id: 'mingguan', label: 'Mingguan' },
-              { id: 'bulanan', label: 'Bulanan' }
-            ] as const).map(m => (
-              <button
-                key={m.id}
-                onClick={() => setViewMode(m.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  viewMode === m.id
-                    ? 'bg-brand-600 text-white shadow-sm'
-                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-
-          {viewMode === 'mingguan' && (
-            <div className="flex items-center gap-1.5 overflow-x-auto max-w-full">
-              <Calendar className="w-3.5 h-3.5 text-brand-600 shrink-0" />
-              {weeks.map((w, i) => (
+        {/* Baris 2: kontrol. HP = 2 toggle sebaris + dropdown; tablet/desktop = semua satu baris */}
+        <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-3">
+          {([
+            {
+              value: viewMode as string,
+              onChange: (v: string) => setViewMode(v as ViewMode),
+              options: [
+                { id: 'mingguan', label: 'Mingguan' },
+                { id: 'bulanan', label: 'Bulanan' }
+              ]
+            },
+            {
+              value: tab as string,
+              onChange: (v: string) => setTab(v as DataTab),
+              options: [
+                { id: 'breakdown', label: 'Breakdown' },
+                { id: 'realisasi', label: 'Realisasi' }
+              ]
+            }
+          ]).map((group, gi) => (
+            <div key={gi} className="grid grid-cols-2 p-1 h-10 bg-neutral-100 dark:bg-neutral-800 rounded-xl md:w-56">
+              {group.options.map(o => (
                 <button
-                  key={i}
-                  onClick={() => setSelectedWeek(i)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                    i === weekIdx
-                      ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900'
-                      : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                  key={o.id}
+                  onClick={() => group.onChange(o.id)}
+                  className={`px-2 text-xs font-semibold rounded-lg transition-all ${
+                    group.value === o.id
+                      ? 'bg-brand-600 text-white shadow-sm'
+                      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
                   }`}
                 >
-                  Mgg {i + 1} <span className="font-normal opacity-70">({w.start}–{w.end})</span>
+                  {o.label}
                 </button>
               ))}
             </div>
-          )}
+          ))}
 
-          <div className="inline-flex p-1 bg-neutral-900 dark:bg-neutral-100 rounded-xl shrink-0">
-            {([
-              { id: 'breakdown', label: 'Breakdown' },
-              { id: 'realisasi', label: 'Realisasi' }
-            ] as const).map(m => (
-              <button
-                key={m.id}
-                onClick={() => setTab(m.id)}
-                className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                  tab === m.id
-                    ? 'bg-brand-600 text-white shadow-sm'
-                    : 'text-neutral-300 dark:text-neutral-600 hover:text-white dark:hover:text-neutral-900'
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
+          <div className="relative col-span-2 md:col-span-1 md:w-44">
+            <select
+              value={selectedRayon}
+              onChange={e => onUpdateRayon(parseInt(e.target.value, 10))}
+              aria-label="Pilih rayon"
+              className="w-full h-10 pl-3 pr-9 appearance-none text-xs font-semibold rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+            >
+              <option value={0}>Semua Rayon (Cabang)</option>
+              <option value={1}>Rayon 1</option>
+              <option value={2}>Rayon 2</option>
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
           </div>
-
-          <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl shrink-0">
-            {[
-              { id: 0, label: 'Semua' },
-              { id: 1, label: 'Rayon 1' },
-              { id: 2, label: 'Rayon 2' }
-            ].map(r => (
-              <button
-                key={r.id}
-                onClick={() => onUpdateRayon(r.id)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                  selectedRayon === r.id
-                    ? 'bg-brand-600 text-white shadow-sm'
-                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-                }`}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-
-          <button
-            onClick={handleExportCsv}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 transition-colors"
-            title="Unduh tabel format CSV"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Ekspor</span>
-          </button>
         </div>
+
+        {/* Baris 3 (hanya Mingguan): pilih minggu */}
+        {viewMode === 'mingguan' && (
+          <div className="flex items-center gap-1.5 overflow-x-auto -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <Calendar className="w-4 h-4 text-brand-600 dark:text-brand-300 shrink-0 mr-1" />
+            {weeks.map((w, i) => (
+              <button
+                key={i}
+                onClick={() => setSelectedWeek(i)}
+                className={`px-3 h-8 rounded-lg text-xs font-semibold whitespace-nowrap border transition-all ${
+                  i === weekIdx
+                    ? 'bg-brand-50 dark:bg-brand-950/40 border-brand-200 dark:border-brand-700 text-brand-700 dark:text-brand-200'
+                    : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                }`}
+              >
+                Mgg {i + 1} <span className="font-normal opacity-70">({w.start}–{w.end})</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Keterangan warna */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1 text-[11px] font-medium text-neutral-600 dark:text-neutral-300">
+        {(isReal
+          ? [
+              ['bg-emerald-500', '≥ 100% / di atas pembanding'],
+              ['bg-red-500', '< 100% / di bawah pembanding'],
+              ['bg-red-200 dark:bg-red-900', 'Hari Minggu'],
+              ['bg-sky-500', 'Rayon 1'],
+              ['bg-violet-500', 'Rayon 2']
+            ]
+          : [
+              ['bg-neutral-800 dark:bg-neutral-200', 'Realisasi (tanggal sudah lewat)'],
+              ['bg-sky-500', 'Rencana target (tanggal belum datang)'],
+              ['bg-emerald-500', 'Naik / di atas pembanding'],
+              ['bg-red-500', 'Turun / di bawah pembanding'],
+              ['bg-red-200 dark:bg-red-900', 'Hari Minggu']
+            ]
+        ).map(([c, l]) => (
+          <span key={l} className="inline-flex items-center gap-1.5">
+            <span className={`w-2.5 h-2.5 rounded-sm ${c}`} />
+            {l}
+          </span>
+        ))}
       </div>
 
       {/* Tabel */}
-      <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm overflow-hidden">
+      <div className={`bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 border-t-4 ${isReal ? 'border-t-emerald-500' : 'border-t-sky-500'} shadow-sm overflow-hidden`}>
         <div className="overflow-x-auto">
           <table className="text-xs border-collapse w-max min-w-full">
             <thead>
@@ -536,19 +608,22 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                     <th
                       key={d}
                       colSpan={4}
-                      className={`${th} ${w === 0 ? 'text-red-600 dark:text-red-400' : ''}`}
+                      className={`${th} ${w === 0 ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20' : ''}`}
                     >
                       <div className="flex items-center justify-center gap-1">
                         <span>{DAY_NAMES[w]} {d}</span>
+                        {!isReal && isRealDate(d) && (
+                          <span className="text-[9px] px-1 py-px rounded bg-emerald-600 text-white font-semibold leading-none">Real</span>
+                        )}
                       </div>
                     </th>
                   );
                 })}
                 {[...VCODES, 'Total'].map(l => (
-                  <th key={`a${l}`} rowSpan={2} className={th}>{l}</th>
+                  <th key={`a${l}`} rowSpan={2} className={`${th} ${VCOL[l]}`}>{l}</th>
                 ))}
                 {[...VCODES, 'Total'].map(l => (
-                  <th key={`r${l}`} rowSpan={2} className={th}>{l}</th>
+                  <th key={`r${l}`} rowSpan={2} className={`${th} ${VCOL[l]}`}>{l}</th>
                 ))}
                 {showWeekCmp && ['Persen', 'Selisih'].map(l => (
                   <th key={`w${l}`} rowSpan={2} className={th}>{l}</th>
@@ -565,7 +640,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                   VCODES.map((v, vi) => (
                     <th
                       key={`${d}${v}`}
-                      className={`px-1.5 py-1 text-center font-semibold text-[10px] min-w-[44px] ${vi === 0 ? 'border-l border-neutral-200 dark:border-neutral-800' : ''}`}
+                      className={`px-1.5 py-1 text-center font-bold text-[10px] min-w-[44px] ${VCOL[v]} ${vi === 0 ? 'border-l border-neutral-200 dark:border-neutral-800' : ''} ${dow(d) === 0 ? 'bg-red-50 dark:bg-red-950/20' : ''}`}
                     >
                       {v}
                     </th>
@@ -580,7 +655,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                 const sep = 'border-l border-neutral-200 dark:border-neutral-700';
                 return (
                   <tr key={r.key} className={rowBg(r.kind)}>
-                    <td className={`sticky left-0 z-10 px-3 py-2 font-semibold whitespace-nowrap border-r border-neutral-200 dark:border-neutral-700 ${stickyBg(r.kind)}`}>
+                    <td className={`sticky left-0 z-10 px-3 py-2 font-semibold whitespace-nowrap border-r border-neutral-200 dark:border-neutral-700 ${stickyBg(r.kind)} ${accentCls(r)} ${labelTone(r)}`}>
                       {r.label}
                     </td>
 
@@ -593,10 +668,19 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                         const isHolidayEmpty = !future && val === 0 && isHoliday(d);
                         // Warna angka per tanggal vs hari yang sama minggu lalu (baris TKU, tampilan mingguan)
                         const dayTone: Tone = showWeekCmp && r.kind === 'tku' && !future && !isHolidayEmpty ? toneOf(dayDiff(a, d)) : 'none';
+                        // Tab Breakdown: tanggal yang belum datang = rencana target -> biru
+                        const isPlanDay = !isReal && !isRealDate(d);
+                        const valTone = future || isHolidayEmpty
+                          ? 'text-neutral-300 dark:text-neutral-600'
+                          : dayTone !== 'none'
+                            ? dayToneClass(dayTone)
+                            : isPlanDay
+                              ? hue(r.kind, 'text-sky-700 dark:text-sky-300', 'text-sky-300')
+                              : '';
                         return (
                           <td
                             key={`${d}${v}`}
-                            className={`${td} ${vi === 0 ? sep : ''} ${future || isHolidayEmpty ? 'text-neutral-300 dark:text-neutral-600' : dayToneClass(dayTone)}`}
+                            className={`${td} ${vi === 0 ? sep : ''} ${dayTint(d, r.kind)} ${valTone}`}
                           >
                             {future ? '·' : isHolidayEmpty ? '-' : formatNumber(val)}
                           </td>
@@ -606,15 +690,15 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
 
                     {/* 2. Akumulasi */}
                     {a.acc.map((x, i) => (
-                      <td key={`a${i}`} className={`${td} ${i === 0 ? sep : ''}`}>{formatNumber(x)}</td>
+                      <td key={`a${i}`} className={`${td} ${i === 0 ? sep : ''} ${tint('acc', r.kind)}`}>{formatNumber(x)}</td>
                     ))}
-                    <td className={td}>{formatNumber(a.accTotal)}</td>
+                    <td className={`${td} ${tint('acc', r.kind)} font-extrabold ${hue(r.kind, 'text-brand-700 dark:text-brand-300', 'text-sky-300')}`}>{formatNumber(a.accTotal)}</td>
 
                     {/* 3. Rata-rata */}
                     {a.avg.map((x, i) => (
-                      <td key={`r${i}`} className={`${td} ${i === 0 ? sep : ''}`}>{formatNumber(x)}</td>
+                      <td key={`r${i}`} className={`${td} ${i === 0 ? sep : ''} ${tint('avg', r.kind)}`}>{formatNumber(x)}</td>
                     ))}
-                    <td className={td}>{formatNumber(a.avgTotal)}</td>
+                    <td className={`${td} ${tint('avg', r.kind)} font-extrabold ${hue(r.kind, 'text-indigo-700 dark:text-indigo-300', 'text-indigo-200')}`}>{formatNumber(a.avgTotal)}</td>
 
                     {/* 4. Vs Minggu lalu (hanya mingguan, tab Breakdown) */}
                     {showWeekCmp && (() => {
@@ -623,13 +707,13 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                       const tonePct: Tone = wc.pct === null ? 'none' : toneDiff;
                       return (
                         <>
-                          <td className={`${td} ${sep} ${toneText(tonePct, r.kind)}`}>
+                          <td className={`${td} ${sep} ${tint('wk', r.kind)} ${toneText(tonePct, r.kind)}`}>
                             <span className="inline-flex items-center justify-end gap-0.5">
                               {wc.pct === null ? '—' : formatPercent(wc.pct)}
                               <TrendArrow tone={tonePct} />
                             </span>
                           </td>
-                          <td className={`${td} ${toneText(toneDiff, r.kind)}`}>
+                          <td className={`${td} ${tint('wk', r.kind)} ${toneText(toneDiff, r.kind)}`}>
                             {wc.diff === null ? '—' : `${wc.diff > 0 ? '+' : wc.diff < 0 ? '−' : ''}${formatNumber(Math.abs(wc.diff))}`}
                           </td>
                         </>
@@ -638,14 +722,14 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
 
                     {/* 5. Vs target / bulan lalu / tahun lalu */}
                     {[a.pct.tg, a.pct.bl, a.pct.ty].map((p, i) => (
-                      <td key={`p${i}`} className={`${td} ${i === 0 ? sep : ''} ${pctClass(p, r.kind)}`}>
+                      <td key={`p${i}`} className={`${td} ${i === 0 ? sep : ''} ${tint('pct', r.kind)} ${pctClass(p, r.kind)}`}>
                         {formatPercent(p)}
                       </td>
                     ))}
 
                     {/* 6. Selisih botol */}
                     {[a.diff.tg, a.diff.bl, a.diff.ty].map((x, i) => (
-                      <td key={`s${i}`} className={`${td} ${i === 0 ? sep : ''} ${diffClass(x, r.kind)}`}>
+                      <td key={`s${i}`} className={`${td} ${i === 0 ? sep : ''} ${tint('diff', r.kind)} ${diffClass(x, r.kind)}`}>
                         {formatDiff(x)}
                       </td>
                     ))}
@@ -656,9 +740,13 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
           </table>
         </div>
       </div>
+      {/* Evaluasi: capaian vs target & proyeksi, minggu ini vs lalu (penjualan, BB, absen, s/YL), tren antar-minggu.
+          Tampil di tab Breakdown DAN Realisasi, mengikuti pilihan rayon. */}
+      <EvaluasiPanel state={state} weeks={weeks} mode="admin" rayon={selectedRayon} showToast={showToast} />
+
       {/* Tabel operasional akumulatif (hanya di tab Realisasi) */}
       {isReal && (
-        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 border-t-4 border-t-indigo-500 shadow-sm overflow-hidden">
           <div className="p-4 border-b border-neutral-200 dark:border-neutral-800">
             <h2 className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
               Kondisi TKU
@@ -669,8 +757,24 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
               <thead>
                 <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/40 text-neutral-600 dark:text-neutral-300">
                   <th className="sticky left-0 z-20 px-3 py-2 text-left font-semibold bg-neutral-50 dark:bg-neutral-800 border-r border-neutral-200 dark:border-neutral-700 min-w-[130px]">Nama TKU</th>
-                  {['Penjualan Akm', 'BB Akm', '% BB', 'PDM Akm', 'Absen Akm', 'Frek Akm', 'JWP', 's/YL', 'Jml YL', 'Jml Area', '% Cover Area', 'YL < 250', '% < 250', 'YL < 300', '% < 300'].map(l => (
-                    <th key={l} className={th}>{l}</th>
+                  {([
+                    ['Penjualan Akm', 'text-brand-700 dark:text-brand-300'],
+                    ['BB Akm', 'text-amber-600 dark:text-amber-400'],
+                    ['% BB', 'text-amber-600 dark:text-amber-400'],
+                    ['PDM Akm', 'text-sky-600 dark:text-sky-400'],
+                    ['Absen Akm', 'text-violet-600 dark:text-violet-400'],
+                    ['Frek Akm', 'text-violet-600 dark:text-violet-400'],
+                    ['JWP', 'text-brand-700 dark:text-brand-300'],
+                    ['s/YL', 'text-brand-700 dark:text-brand-300'],
+                    ['Jml YL', 'text-emerald-600 dark:text-emerald-400'],
+                    ['Jml Area', 'text-emerald-600 dark:text-emerald-400'],
+                    ['% Cover Area', 'text-emerald-600 dark:text-emerald-400'],
+                    ['YL < 250', 'text-red-600 dark:text-red-400'],
+                    ['% < 250', 'text-red-600 dark:text-red-400'],
+                    ['YL < 300', 'text-amber-600 dark:text-amber-400'],
+                    ['% < 300', 'text-amber-600 dark:text-amber-400']
+                  ] as const).map(([l, c]) => (
+                    <th key={l} className={`${th} ${c}`}>{l}</th>
                   ))}
                 </tr>
               </thead>
@@ -685,17 +789,17 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                       : (o.cover >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400');
                   return (
                     <tr key={`o${r.key}`} className={rowBg(r.kind)}>
-                      <td className={`sticky left-0 z-10 px-3 py-2 font-semibold whitespace-nowrap border-r border-neutral-200 dark:border-neutral-700 ${stickyBg(r.kind)}`}>
+                      <td className={`sticky left-0 z-10 px-3 py-2 font-semibold whitespace-nowrap border-r border-neutral-200 dark:border-neutral-700 ${stickyBg(r.kind)} ${accentCls(r)} ${labelTone(r)}`}>
                         {r.label}
                       </td>
-                      <td className={`${td} ${sep}`}>{formatNumber(r.agg.accTotal)}</td>
-                      <td className={`${td} ${sep}`}>{formatNumber(o.bb)}</td>
+                      <td className={`${td} ${sep} ${hue(r.kind, 'text-brand-700 dark:text-brand-300', 'text-sky-300')}`}>{formatNumber(r.agg.accTotal)}</td>
+                      <td className={`${td} ${sep} ${hue(r.kind, 'text-amber-600 dark:text-amber-400', 'text-amber-300')}`}>{formatNumber(o.bb)}</td>
                       <td className={`${td} ${getBbStatusClass(o.pctBb)}`}>{formatPercent(o.pctBb)}</td>
-                      <td className={`${td} ${sep}`}>{formatNumber(o.pdm)}</td>
+                      <td className={`${td} ${sep} ${hue(r.kind, 'text-sky-600 dark:text-sky-400', 'text-sky-300')}`}>{formatNumber(o.pdm)}</td>
                       <td className={`${td} ${sep}`}>{formatNumber(o.absen)}</td>
                       <td className={td}>{formatNumber(o.frek)}</td>
                       <td className={`${td} ${sep}`}>{formatNumber(o.jwp)}</td>
-                      <td className={td}>{o.syl === null ? '—' : formatNumber(o.syl)}</td>
+                      <td className={`${td} ${hue(r.kind, 'text-brand-700 dark:text-brand-300', 'text-sky-300')}`}>{o.syl === null ? '—' : formatNumber(o.syl)}</td>
                       <td className={`${td} ${sep}`}>{formatNumber(o.yl)}</td>
                       <td className={td}>{formatNumber(o.area)}</td>
                       <td className={`${td} font-semibold ${coverCls}`}>{formatPercent(o.cover)}</td>

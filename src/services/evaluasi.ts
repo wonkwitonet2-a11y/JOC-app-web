@@ -1,4 +1,4 @@
-import { AppState, TkuItem, VARIANTS, DailySalesRecord } from '../types';
+import { AppState, TkuItem, DailySalesRecord } from '../types';
 import { getPeriodInfo, getPembagiHari, SEED_PERIOD } from './storage';
 
 export interface EvaluasiRow {
@@ -39,14 +39,6 @@ export interface EvaluasiRow {
   pctL250: number;
   l300: number;
   pctL300: number;
-}
-
-export interface EvaluasiGroup {
-  key: string;
-  label: string;
-  kind: 'tku' | 'rayon' | 'cabang';
-  rows: EvaluasiRow[];
-  total: EvaluasiRow;
 }
 
 export interface EvaluasiHighlights {
@@ -157,8 +149,9 @@ export function buildEvaluasiData(state: AppState): {
     const area = lastRec?.ar || t.jumlahArea || 10;
     const yl = lastRec?.yl || t.jumlahYl || 10;
     const cover = area > 0 ? yl / area : 1.0;
-    const jwp = (lastRec?.jwp && lastRec.jwp > 0) ? lastRec.jwp : (isSeed ? (t.akmJwp || (yl * divider)) : (yl * divider));
-    const syl = jwp > 0 ? Math.round(akmPjl / jwp) : 0;
+    // JWP diisi manual oleh TKU (sudah dihitung di synchronizeAppState -> t.akmJwp)
+    const jwp = t.akmJwp || 0;
+    const syl = jwp > 0 ? Math.floor(akmPjl / jwp) : 0;
 
     // YL < 250 & YL < 300 (murni dari input riil atau baseline spreadsheet resmi)
     const l250 = lastRec?.l250 ?? t.l250 ?? 0;
@@ -229,7 +222,7 @@ export function buildEvaluasiData(state: AppState): {
     const pctBb = akmPjl + akmBb > 0 ? akmBb / (akmPjl + akmBb) : 0;
     const akmPdm = akmPjl + akmBb;
     const jwp = rows.reduce((s, r) => s + r.jwp, 0);
-    const syl = jwp > 0 ? Math.round(akmPjl / jwp) : 0;
+    const syl = jwp > 0 ? Math.floor(akmPjl / jwp) : 0;
     const absen = rows.reduce((s, r) => s + r.absen, 0);
     const frek = rows.reduce((s, r) => s + r.frek, 0);
     const area = rows.reduce((s, r) => s + r.area, 0);

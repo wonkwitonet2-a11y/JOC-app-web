@@ -1,12 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  Archive, 
-  Save, 
-  Lock, 
-  Unlock, 
-  Upload, 
-  FileSpreadsheet, 
-  CheckCircle2, 
+import {
+  Archive,
+  Save,
+  Lock,
+  Unlock,
+  Upload,
+  FileSpreadsheet,
   History,
   TrendingUp,
   Calendar,
@@ -16,17 +15,11 @@ import {
   RotateCcw,
   Users,
   Target,
-  Clock,
-  ShieldCheck,
-  Percent,
-  MapPin,
-  Sparkles,
   Database,
   RefreshCw,
-  Cloud,
   Trash2
 } from 'lucide-react';
-import { AppState, VARIANTS, ArchiveRecord, ArchiveRow } from '../types';
+import { AppState } from '../types';
 import { formatNumber, formatDecimal, round2, formatPercent, getPeriodInfo, getBbStatusClass } from '../services/storage';
 import { INITIAL_ARCHIVES } from '../data/initialData';
 
@@ -34,6 +27,28 @@ import { INITIAL_ARCHIVES } from '../data/initialData';
 const normNama = (n: string) => {
   const x = (n || '').trim().toLowerCase().replace(/\s+/g, ' ');
   return x === 'jember' ? 'jember 1' : x;
+};
+
+// Ambil rata-rata harian TKU tanpa pembulatan ke atas (Math.floor).
+// Jika ada data lama yang sempat tersimpan dengan Math.round (misal 4249.5 jadi 4250),
+// fungsi ini membatasi maksimumnya ke Math.floor(total / d) = 4249.
+const getRowRataHarian = (row: { total?: number; rataHarian?: number }, d: number): number => {
+  const days = d || 30;
+  const floorVal = Math.floor((row.total || 0) / days);
+  if (row.rataHarian !== undefined && !isNaN(row.rataHarian)) {
+    return Math.min(Math.floor(row.rataHarian), floorVal);
+  }
+  return floorVal;
+};
+
+const getRowRataVarian = (row: { varian?: number[]; rataVarian?: [number, number, number, number] }, vIdx: number, d: number): number => {
+  const days = d || 30;
+  const v = row.varian?.[vIdx] || 0;
+  const floorVal = Math.floor(v / days);
+  if (row.rataVarian && row.rataVarian[vIdx] !== undefined && !isNaN(row.rataVarian[vIdx])) {
+    return Math.min(Math.floor(row.rataVarian[vIdx]), floorVal);
+  }
+  return floorVal;
 };
 
 interface ArsipViewProps {
@@ -77,14 +92,36 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
 
   // Sort descending for selector (Agustus down to Januari)
   const archiveKeysDesc = Object.keys(state.archives).sort((a, b) => b.localeCompare(a));
-  // Sort ascending for chronological trend table (Januari to Agustus)
-  const archiveKeysAsc = Object.keys(state.archives).sort((a, b) => a.localeCompare(b));
+
+  // Daftar tahun yang tersedia di arsip (default 2026 dan 2025)
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    Object.keys(state.archives).forEach(k => {
+      const y = k.slice(0, 4);
+      if (/^\d{4}$/.test(y)) years.add(y);
+    });
+    years.add('2026');
+    years.add('2025');
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }, [state.archives]);
 
   const activeKey = state.activeArchiveKey || archiveKeysDesc[0] || '2026-08';
   const activeArchive = state.archives[activeKey];
 
+  // Filter pilihan tahun (2026, 2025, dst)
+  const [selectedYear, setSelectedYear] = useState<string>(() => {
+    return activeKey ? activeKey.slice(0, 4) : '2026';
+  });
+
+  const filteredArchiveKeysDesc = useMemo(() => {
+    return archiveKeysDesc.filter(k => k.startsWith(selectedYear));
+  }, [archiveKeysDesc, selectedYear]);
+
+  // Urutan kronologis (Januari -> Desember) hanya untuk tahun yang dipilih
+  const yearKeysAsc = useMemo(() => [...filteredArchiveKeysDesc].reverse(), [filteredArchiveKeysDesc]);
+
   // Overall Statistics across all archives
-  const allArchives = Object.values(state.archives);
+  const allArchives = filteredArchiveKeysDesc.map(k => state.archives[k]).filter(Boolean);
   const totalMonths = allArchives.length;
   const grandTotalBottles = allArchives.reduce((sum, arc) => {
     return sum + arc.rows.reduce((rSum, row) => rSum + (row.total || 0), 0);
@@ -110,16 +147,16 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
     const d = activeArchive.d || 31;
 
     const totalSold = rows.reduce((s, r) => s + (r.total || 0), 0);
-    const avgDailySold = round2(totalSold / d);
+    const avgDailySold = rows.reduce((s, r) => s + getRowRataHarian(r, d), 0);
     const totalYo = rows.reduce((s, r) => s + (r.varian[0] || 0), 0);
     const totalOm = rows.reduce((s, r) => s + (r.varian[1] || 0), 0);
     const totalOs = rows.reduce((s, r) => s + (r.varian[2] || 0), 0);
     const totalYt = rows.reduce((s, r) => s + (r.varian[3] || 0), 0);
 
-    const totalRataYo = rows.reduce((s, r) => s + (r.rataVarian ? r.rataVarian[0] : round2(r.varian[0] / d)), 0);
-    const totalRataOm = rows.reduce((s, r) => s + (r.rataVarian ? r.rataVarian[1] : round2(r.varian[1] / d)), 0);
-    const totalRataOs = rows.reduce((s, r) => s + (r.rataVarian ? r.rataVarian[2] : round2(r.varian[2] / d)), 0);
-    const totalRataYt = rows.reduce((s, r) => s + (r.rataVarian ? r.rataVarian[3] : round2(r.varian[3] / d)), 0);
+    const totalRataYo = rows.reduce((s, r) => s + getRowRataVarian(r, 0, d), 0);
+    const totalRataOm = rows.reduce((s, r) => s + getRowRataVarian(r, 1, d), 0);
+    const totalRataOs = rows.reduce((s, r) => s + getRowRataVarian(r, 2, d), 0);
+    const totalRataYt = rows.reduce((s, r) => s + getRowRataVarian(r, 3, d), 0);
 
     const totalTargetHarian = rows.reduce((s, r) => s + (r.targetHarian || 0), 0);
     const totalBulanLalu = rows.reduce((s, r) => s + (r.bulanLalu || 0), 0);
@@ -135,7 +172,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
     const totalJwp = rows.reduce((s, r) => s + (r.akmJwp || 0), 0);
     const totalAbsen = rows.reduce((s, r) => s + (r.absenYl || 0), 0);
     const totalFrek = rows.reduce((s, r) => s + (r.frekuensiAbsen || 0), 0);
-    const avgSyl = totalJwp > 0 ? Math.round(totalSold / totalJwp) : 0;
+    const avgSyl = totalJwp > 0 ? Math.floor(totalSold / totalJwp) : 0;
 
     const vsTargetPct = totalTargetHarian > 0 ? (avgDailySold / totalTargetHarian) : 1;
     const vsLmPct = totalBulanLalu > 0 ? (avgDailySold / totalBulanLalu) : 1;
@@ -313,11 +350,11 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
             <Calendar className="w-4 h-4 text-blue-500 shrink-0" />
           </div>
           <div className="text-lg sm:text-xl break-words leading-tight font-bold text-neutral-900 dark:text-neutral-100">
-            {totalMonths} Bulan
+            {totalMonths} Bulan <span className="text-xs font-semibold text-neutral-500">({selectedYear})</span>
           </div>
           <div className="text-[11px] text-neutral-500 mt-auto pt-0.5 break-words">
-            {archiveKeysAsc.length > 0
-              ? `${(state.archives[archiveKeysAsc[0]]?.namaBulan || archiveKeysAsc[0]).replace(' 2026', '')} – ${state.archives[archiveKeysAsc[archiveKeysAsc.length - 1]]?.namaBulan || archiveKeysAsc[archiveKeysAsc.length - 1]}`
+            {yearKeysAsc.length > 0
+              ? `${(state.archives[yearKeysAsc[0]]?.namaBulan || yearKeysAsc[0]).replace(/\s*\d{4}$/, '')} – ${state.archives[yearKeysAsc[yearKeysAsc.length - 1]]?.namaBulan || yearKeysAsc[yearKeysAsc.length - 1]}`
               : '—'}
           </div>
         </div>
@@ -405,39 +442,94 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
         </form>
       )}
 
-      {/* Archive Month Selector Chips */}
+      {/* Archive Year & Month Selector */}
       {archiveKeysDesc.length > 0 && (
-        <div className="p-3 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-neutral-700 dark:text-neutral-300 uppercase tracking-wider">
-              Pilih Periode Arsip:
-            </span>
-            <span className="text-[11px] text-neutral-500">
-              {archiveKeysDesc.length} Periode Tersedia
-            </span>
+        <div className="p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm space-y-3">
+          {/* Level 1: Pilih Tahun */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-neutral-100 dark:border-neutral-800 pb-3">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-brand-600" />
+              <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 uppercase tracking-wider">
+                Pilih Tahun:
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {availableYears.map(yr => {
+                const countInYr = archiveKeysDesc.filter(k => k.startsWith(yr)).length;
+                const isYrActive = selectedYear === yr;
+                return (
+                  <button
+                    key={yr}
+                    onClick={() => {
+                      setSelectedYear(yr);
+                      const inYr = archiveKeysDesc.filter(k => k.startsWith(yr));
+                      if (inYr.length > 0 && (!activeKey || !activeKey.startsWith(yr))) {
+                        onSelectArchive(inYr[0]);
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      isYrActive
+                        ? 'bg-brand-600 text-white shadow-sm ring-1 ring-brand-600'
+                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+                    }`}
+                  >
+                    <span>Tahun {yr}</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                      isYrActive ? 'bg-brand-700 text-white' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
+                    }`}>
+                      {countInYr}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            {archiveKeysDesc.map(k => {
-              const arc = state.archives[k];
-              const isSelected = k === activeKey;
-              const totalBtl = arc?.rows ? arc.rows.reduce((sum, r) => sum + r.total, 0) : 0;
-              return (
-                <button
-                  key={k}
-                  onClick={() => onSelectArchive(k)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap flex flex-col items-start gap-0.5 ${
-                    isSelected
-                      ? 'bg-brand-600 text-white shadow-sm ring-2 ring-brand-600/30'
-                      : 'bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700'
-                  }`}
-                >
-                  <span className="font-bold">{arc?.namaBulan || k}</span>
-                  <span className={`text-[10px] font-mono ${isSelected ? 'text-brand-100' : 'text-neutral-500'}`}>
-                    {formatNumber(totalBtl)} btl
-                  </span>
-                </button>
-              );
-            })}
+
+          {/* Level 2: Pilih Bulan */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
+                Pilih Bulan ({selectedYear}):
+              </span>
+              <span className="text-[11px] text-neutral-500">
+                {filteredArchiveKeysDesc.length} Bulan Tersedia
+              </span>
+            </div>
+
+            {filteredArchiveKeysDesc.length > 0 ? (
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                {filteredArchiveKeysDesc.map(k => {
+                  const arc = state.archives[k];
+                  const isSelected = k === activeKey;
+                  const totalBtl = arc?.rows ? arc.rows.reduce((sum, r) => sum + r.total, 0) : 0;
+                  return (
+                    <button
+                      key={k}
+                      onClick={() => onSelectArchive(k)}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap flex flex-col items-start gap-0.5 ${
+                        isSelected
+                          ? 'bg-brand-600 text-white shadow-sm ring-2 ring-brand-600/30'
+                          : 'bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700'
+                      }`}
+                    >
+                      <span className="font-bold">{arc?.namaBulan || k}</span>
+                      <span className={`text-[10px] font-mono ${isSelected ? 'text-brand-100' : 'text-neutral-500'}`}>
+                        {formatNumber(totalBtl)} btl
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-4 text-center rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-dashed border-neutral-300 dark:border-neutral-700">
+                <p className="text-xs text-neutral-600 dark:text-neutral-400 font-medium">
+                  Belum ada data arsip untuk tahun {selectedYear}.
+                </p>
+                <p className="text-[11px] text-neutral-500 mt-1">
+                  Data dapat diisikan nanti dari file Excel (Oktober, November, Desember 2025).
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -605,18 +697,18 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                           </span>
                         </td>
                         <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(row.varian[0])}</td>
-                        <td className="py-3 px-3 text-right text-neutral-500">{formatDecimal(row.rataVarian ? row.rataVarian[0] : round2(row.varian[0]/activeArchive.d))}</td>
+                        <td className="py-3 px-3 text-right text-neutral-500">{formatDecimal(getRowRataVarian(row, 0, activeArchive.d))}</td>
                         <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(row.varian[1])}</td>
-                        <td className="py-3 px-3 text-right text-neutral-500">{formatDecimal(row.rataVarian ? row.rataVarian[1] : round2(row.varian[1]/activeArchive.d))}</td>
+                        <td className="py-3 px-3 text-right text-neutral-500">{formatDecimal(getRowRataVarian(row, 1, activeArchive.d))}</td>
                         <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">{row.varian[2] > 0 ? formatNumber(row.varian[2]) : '—'}</td>
-                        <td className="py-3 px-3 text-right text-neutral-500">{row.rataVarian && row.rataVarian[2] > 0 ? formatDecimal(row.rataVarian[2]) : (row.varian[2] > 0 ? formatDecimal(round2(row.varian[2]/activeArchive.d)) : '—')}</td>
+                        <td className="py-3 px-3 text-right text-neutral-500">{row.varian[2] > 0 ? formatDecimal(getRowRataVarian(row, 2, activeArchive.d)) : '—'}</td>
                         <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(row.varian[3])}</td>
-                        <td className="py-3 px-3 text-right text-neutral-500">{formatDecimal(row.rataVarian ? row.rataVarian[3] : round2(row.varian[3]/activeArchive.d))}</td>
+                        <td className="py-3 px-3 text-right text-neutral-500">{formatDecimal(getRowRataVarian(row, 3, activeArchive.d))}</td>
                         <td className="py-3 px-4 text-right font-bold text-neutral-900 dark:text-neutral-100 bg-neutral-100/30 dark:bg-neutral-800/30">
                           {formatNumber(row.total)}
                         </td>
                         <td className="py-3 px-3 text-right font-semibold text-neutral-700 dark:text-neutral-300">
-                          {formatDecimal(row.rataHarian || round2(row.total / activeArchive.d))}
+                          {formatDecimal(getRowRataHarian(row, activeArchive.d))}
                         </td>
                       </tr>
                     ))}
@@ -679,7 +771,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                           {formatNumber(row.total)}
                         </td>
                         <td className="py-3 px-3 text-right font-semibold text-neutral-700 dark:text-neutral-300">
-                          {formatDecimal(row.rataHarian || round2(row.total / activeArchive.d))}
+                          {formatDecimal(row.rataHarian ?? (row.total / activeArchive.d))}
                         </td>
                         <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">
                           {row.targetHarian ? formatDecimal(row.targetHarian) : '—'}
@@ -898,7 +990,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                         <td className="py-2.5 px-3 text-right font-bold text-neutral-900 dark:text-neutral-100 bg-neutral-50 dark:bg-neutral-800/30">
                           {formatNumber(row.total)}
                         </td>
-                        <td className="py-2.5 px-2 text-right font-semibold">{formatDecimal(row.rataHarian || round2(row.total/activeArchive.d))}</td>
+                        <td className="py-2.5 px-2 text-right font-semibold">{formatDecimal(row.rataHarian ?? (row.total / activeArchive.d))}</td>
                         <td className="py-2.5 px-2 text-right">{row.targetHarian ? formatDecimal(row.targetHarian) : '—'}</td>
                         <td className="py-2.5 px-2 text-right font-bold">{row.vsTargetPct ? formatPercent(row.vsTargetPct) : '—'}</td>
                         <td className="py-2.5 px-2 text-right">{row.bulanLalu ? formatDecimal(row.bulanLalu) : '—'}</td>
@@ -957,14 +1049,15 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
         </div>
       )}
 
-      {/* Record TKU History Table Across All Archived Months (Januari - Agustus 2026) */}
-      {archiveKeysAsc.length > 0 && (
+      {/* Riwayat Tahunan: tabel TKU per bulan, hanya untuk tahun yang dipilih */}
+      {yearKeysAsc.length > 0 && (
         <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm overflow-hidden p-5 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-neutral-100 dark:border-neutral-800 pb-3">
             <div>
               <h2 className="text-base font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
                 <History className="w-4 h-4 text-brand-600" />
-                <span>Riwayat Bulanan</span>
+                <span>Riwayat Tahunan</span>
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300">{selectedYear}</span>
               </h2>
             </div>
 
@@ -1028,13 +1121,13 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
               <thead>
                 <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 text-xs bg-neutral-50 dark:bg-neutral-800/40">
                   <th className="py-2.5 px-4 font-semibold sticky left-0 bg-neutral-50 dark:bg-neutral-800 z-10">Nama Unit TKU</th>
-                  {archiveKeysAsc.map(k => (
+                  {yearKeysAsc.map(k => (
                     <th key={k} className="py-2.5 px-3 text-right font-semibold">
-                      {state.archives[k]?.namaBulan.replace(' 2026', '') || k}
+                      {state.archives[k]?.namaBulan.replace(/\s*\d{4}$/, '') || k}
                     </th>
                   ))}
                   <th className="py-2.5 px-4 text-right font-bold text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-950/20">
-                    {histMetric === 'total' || histMetric === 'bb' ? 'Total 8 Bulan' : 'Rata-rata 8 Bulan'}
+                    {histMetric === 'total' || histMetric === 'bb' ? `Total ${yearKeysAsc.length} Bulan` : `Rata-rata ${yearKeysAsc.length} Bulan`}
                   </th>
                   <th className="py-2.5 px-4 text-right font-semibold text-neutral-900 dark:text-neutral-100">
                     {histMetric === 'total' ? 'Rata-rata/Bln' : 'Nilai Terakhir'}
@@ -1052,7 +1145,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                       <td className="py-3 px-4 font-sans font-semibold text-neutral-900 dark:text-neutral-100 sticky left-0 bg-white dark:bg-neutral-900 z-10 border-r border-neutral-100 dark:border-neutral-800">
                         {t.nama}
                       </td>
-                      {archiveKeysAsc.map(k => {
+                      {yearKeysAsc.map(k => {
                         const arc = state.archives[k];
                         const row = arc?.rows.find(r => normNama(r.nama) === normNama(t.nama));
                         let displayVal = '—';
@@ -1063,7 +1156,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                             latestVal = row.total;
                             displayVal = formatNumber(row.total);
                           } else if (histMetric === 'rata') {
-                            const rVal = row.rataHarian || round2(row.total / (arc?.d || 31));
+                            const rVal = row.rataHarian ?? (row.total / (arc?.d || 31));
                             sumVal += rVal;
                             latestVal = rVal;
                             displayVal = formatDecimal(rVal);
@@ -1115,7 +1208,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                   <td className="py-3.5 px-4 font-sans text-brand-700 dark:text-brand-400 sticky left-0 bg-brand-50/90 dark:bg-brand-950/90 z-10 border-r border-brand-200 dark:border-brand-900">
                     Total Cabang Jember
                   </td>
-                  {archiveKeysAsc.map(k => {
+                  {yearKeysAsc.map(k => {
                     const arc = state.archives[k];
                     if (!arc || !arc.rows) return <td key={k} className="py-3.5 px-3 text-right">—</td>;
                     const d = arc.d || 31;
@@ -1130,7 +1223,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                     } else if (histMetric === 'syl') {
                       const totalSold = arc.rows.reduce((s, r) => s + r.total, 0);
                       const totalJwp = arc.rows.reduce((s, r) => s + (r.akmJwp || 0), 0);
-                      mVal = totalJwp > 0 ? String(Math.round(totalSold / totalJwp)) : '—';
+                      mVal = totalJwp > 0 ? String(Math.floor(totalSold / totalJwp)) : '—';
                     } else if (histMetric === 'coverage') {
                       const totalArea = arc.rows.reduce((s, r) => s + (r.jumlahArea || 0), 0);
                       const totalYl = arc.rows.reduce((s, r) => s + (r.jumlahYl || 0), 0);

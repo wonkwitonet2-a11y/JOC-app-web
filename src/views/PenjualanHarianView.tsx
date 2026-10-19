@@ -1,11 +1,7 @@
 import React, { useState } from 'react';
-import { 
-  Calendar, 
-  Download, 
-  CheckCircle2,
-  TrendingUp,
-  PackageCheck,
-  RotateCcw
+import {
+  Calendar,
+  Download
 } from 'lucide-react';
 import { AppState, VARIANTS, VariantCode, DailySalesRecord } from '../types';
 import { 
@@ -14,7 +10,8 @@ import {
   formatDateIndo,
   getPeriodInfo,
   getSeedDailyBranchTotal,
-  getBbStatusClass
+  getBbStatusClass,
+  truncFixed
 } from '../services/storage';
 
 interface PenjualanHarianViewProps {
@@ -153,8 +150,33 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
   const r2Sum = computeDailySums(2);
   const cabangSum = computeDailySums(null);
 
-  const r1Target = state.tkus.filter(t => t.aktif && t.rayon === 1).reduce((a, b) => a + b.targetHarian, 0);
-  const r2Target = state.tkus.filter(t => t.aktif && t.rayon === 2).reduce((a, b) => a + b.targetHarian, 0);
+  // Pengali target (sama seperti grafik tren): hari Minggu = libur (target 0). Hari kerja setelah
+  // hari libur / hari tanpa transaksi dikali (jumlah hari yang dilewati + 1). Mis. Senin setelah Minggu = x2,
+  // kalau Sabtu juga kosong = x3. Dihitung per TKU dari transaksi TKU itu sendiri, dan menengok
+  // sampai ke bulan sebelumnya (tanggal 1 yang jatuh hari Senin = x2).
+  const getTkuDayMult = (tkuIdx: number, d: number): number => {
+    if (new Date(PY, PM0, d).getDay() === 0) return 0;
+    let skipped = 0;
+    for (let step = 1; step <= 7; step++) {
+      const prevD = d - step;
+      const prevIsSun = new Date(PY, PM0, prevD).getDay() === 0;
+      if (prevD >= 1) {
+        if (prevIsSun || getTkuDailySales(tkuIdx, prevD, 'ALL') === 0) skipped++;
+        else break;
+      } else {
+        if (prevIsSun) skipped++;
+        else break;
+      }
+    }
+    return skipped + 1;
+  };
+  // Target efektif hari terpilih = target harian x pengali
+  const effT = (t: (typeof state.tkus)[number]): number =>
+    t.targetHarian * getTkuDayMult(state.tkus.indexOf(t), selectedDay);
+
+  const r1Target = state.tkus.filter(t => t.aktif && t.rayon === 1).reduce((a, b) => a + effT(b), 0);
+  const r2Target = state.tkus.filter(t => t.aktif && t.rayon === 2).reduce((a, b) => a + effT(b), 0);
+  const branchTarget = activeTkus.reduce((a, b) => a + effT(b), 0);
 
   // CSV Export for Selected Day
   const handleExportCsv = () => {
@@ -179,13 +201,13 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
       ];
       const sold = rec?.sold ?? getTkuDailySales(idx, selectedDay, 'ALL');
       const bb = rec?.bb ?? 0;
-      const pctBb = (bb + sold) > 0 ? ((bb / (bb + sold)) * 100).toFixed(2) + '%' : '0%';
+      const pctBb = (bb + sold) > 0 ? truncFixed(((bb / (bb + sold)) * 100), 2) + '%' : '0%';
       const pdm = rec ? ((rec.pdm ?? 0) || (rec.pdmV ? rec.pdmV.reduce((a, b) => a + b, 0) : 0)) : 0;
       const absen = rec?.absen ?? 0;
       const frek = rec?.frek ?? 0;
       const l250 = rec?.l250 ?? t.l250 ?? 0;
       const l300 = rec?.l300 ?? t.l300 ?? 0;
-      const pctCapaian = t.targetHarian > 0 ? ((sold / t.targetHarian) * 100).toFixed(2) + '%' : '0%';
+      const pctCapaian = effT(t) > 0 ? truncFixed(((sold / effT(t)) * 100), 2) + '%' : '0%';
 
       rows.push([
         i + 1,
@@ -193,7 +215,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
         `Rayon ${t.rayon}`,
         v[0], v[1], v[2], v[3],
         sold,
-        t.targetHarian,
+        effT(t),
         pctCapaian,
         bb,
         pctBb,
@@ -211,9 +233,9 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
       r1Sum.vTotal[0], r1Sum.vTotal[1], r1Sum.vTotal[2], r1Sum.vTotal[3],
       r1Sum.sold,
       r1Target,
-      r1Target > 0 ? ((r1Sum.sold / r1Target) * 100).toFixed(2) + '%' : '0%',
+      r1Target > 0 ? truncFixed(((r1Sum.sold / r1Target) * 100), 2) + '%' : '0%',
       r1Sum.bb,
-      (r1Sum.bb + r1Sum.sold) > 0 ? ((r1Sum.bb / (r1Sum.bb + r1Sum.sold)) * 100).toFixed(2) + '%' : '0%',
+      (r1Sum.bb + r1Sum.sold) > 0 ? truncFixed(((r1Sum.bb / (r1Sum.bb + r1Sum.sold)) * 100), 2) + '%' : '0%',
       r1Sum.pdm,
       r1Sum.absen,
       r1Sum.frek,
@@ -227,9 +249,9 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
       r2Sum.vTotal[0], r2Sum.vTotal[1], r2Sum.vTotal[2], r2Sum.vTotal[3],
       r2Sum.sold,
       r2Target,
-      r2Target > 0 ? ((r2Sum.sold / r2Target) * 100).toFixed(2) + '%' : '0%',
+      r2Target > 0 ? truncFixed(((r2Sum.sold / r2Target) * 100), 2) + '%' : '0%',
       r2Sum.bb,
-      (r2Sum.bb + r2Sum.sold) > 0 ? ((r2Sum.bb / (r2Sum.bb + r2Sum.sold)) * 100).toFixed(2) + '%' : '0%',
+      (r2Sum.bb + r2Sum.sold) > 0 ? truncFixed(((r2Sum.bb / (r2Sum.bb + r2Sum.sold)) * 100), 2) + '%' : '0%',
       r2Sum.pdm,
       r2Sum.absen,
       r2Sum.frek,
@@ -242,10 +264,10 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
       '', 'TOTAL CABANG JEMBER', 'Cabang',
       cabangSum.vTotal[0], cabangSum.vTotal[1], cabangSum.vTotal[2], cabangSum.vTotal[3],
       cabangSum.sold,
-      totalBranchTarget,
-      totalBranchTarget > 0 ? ((cabangSum.sold / totalBranchTarget) * 100).toFixed(2) + '%' : '0%',
+      branchTarget,
+      branchTarget > 0 ? truncFixed(((cabangSum.sold / branchTarget) * 100), 2) + '%' : '0%',
       cabangSum.bb,
-      (cabangSum.bb + cabangSum.sold) > 0 ? ((cabangSum.bb / (cabangSum.bb + cabangSum.sold)) * 100).toFixed(2) + '%' : '0%',
+      (cabangSum.bb + cabangSum.sold) > 0 ? truncFixed(((cabangSum.bb / (cabangSum.bb + cabangSum.sold)) * 100), 2) + '%' : '0%',
       cabangSum.pdm,
       cabangSum.absen,
       cabangSum.frek,
@@ -276,12 +298,12 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
     const idx = state.tkus.indexOf(t);
     const rec = getRecordFor(currentDateIso, idx);
     const sold = rec?.sold ?? getTkuDailySales(idx, selectedDay, 'ALL');
-    return sold >= t.targetHarian;
+    return effT(t) > 0 && sold >= effT(t);
   }).length;
   const activeCount = state.tkus.filter(t => t.aktif).length;
-  const pctCapaian = cabangSum.sold / (totalBranchTarget || 1);
+  const pctCapaian = cabangSum.sold / (branchTarget || 1);
   const pctBb = (cabangSum.bb + cabangSum.sold) > 0 ? cabangSum.bb / (cabangSum.bb + cabangSum.sold) : 0;
-  const diffFromTarget = cabangSum.sold - totalBranchTarget;
+  const diffFromTarget = cabangSum.sold - branchTarget;
 
   return (
     <div className="space-y-5">
@@ -326,10 +348,10 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
           <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1 truncate">
             Penjualan
           </span>
-          <div className="text-xl sm:text-2xl font-black font-mono tracking-tight text-brand-600 dark:text-brand-400 truncate">
+          <div className="text-xl font-black font-mono tracking-tight text-brand-600 dark:text-brand-400 leading-tight break-words">
             {formatNumber(cabangSum.sold)} <span className="text-xs font-normal text-neutral-400">btl</span>
           </div>
-          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between text-[11px]">
+          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-x-2 text-[11px]">
             <span className="text-neutral-400 font-medium">Capaian</span>
             <span className={`font-mono font-bold ${pctCapaian >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
               {formatPercent(pctCapaian)}
@@ -342,10 +364,10 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
           <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1 truncate">
             Target
           </span>
-          <div className="text-xl sm:text-2xl font-black font-mono tracking-tight text-neutral-900 dark:text-neutral-100 truncate">
-            {formatNumber(totalBranchTarget)} <span className="text-xs font-normal text-neutral-400">btl</span>
+          <div className="text-xl font-black font-mono tracking-tight text-neutral-900 dark:text-neutral-100 leading-tight break-words">
+            {formatNumber(branchTarget)} <span className="text-xs font-normal text-neutral-400">btl</span>
           </div>
-          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between text-[11px]">
+          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-x-2 text-[11px]">
             <span className="text-neutral-400 font-medium">Selisih</span>
             <span className={`font-mono font-bold ${diffFromTarget >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
               {diffFromTarget >= 0 ? '+' : ''}{formatNumber(diffFromTarget)} btl
@@ -358,10 +380,10 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
           <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1 truncate">
             BB
           </span>
-          <div className="text-xl sm:text-2xl font-black font-mono tracking-tight text-amber-600 dark:text-amber-400 truncate">
+          <div className="text-xl font-black font-mono tracking-tight text-amber-600 dark:text-amber-400 leading-tight break-words">
             {formatNumber(cabangSum.bb)} <span className="text-xs font-normal text-neutral-400">btl</span>
           </div>
-          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between text-[11px]">
+          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-x-2 text-[11px]">
             <span className="text-neutral-400 font-medium">Rasio BB</span>
             <span className={`font-mono font-bold ${getBbStatusClass(pctBb)}`}>
               {formatPercent(pctBb)}
@@ -374,10 +396,10 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
           <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1 truncate">
             PDM
           </span>
-          <div className="text-xl sm:text-2xl font-black font-mono tracking-tight text-sky-600 dark:text-sky-400 truncate">
+          <div className="text-xl font-black font-mono tracking-tight text-sky-600 dark:text-sky-400 leading-tight break-words">
             {formatNumber(cabangSum.pdm)} <span className="text-xs font-normal text-neutral-400">btl</span>
           </div>
-          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between text-[11px]">
+          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-x-2 text-[11px]">
             <span className="text-neutral-400 font-medium">Porsi PDM</span>
             <span className="font-mono font-bold text-sky-600 dark:text-sky-400">
               {cabangSum.sold > 0 ? formatPercent(cabangSum.pdm / cabangSum.sold) : '0%'}
@@ -390,11 +412,11 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
           <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1 truncate">
             Capai Target
           </span>
-          <div className="text-xl sm:text-2xl font-black font-mono tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5 truncate">
+          <div className="text-xl font-black font-mono tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5 leading-tight break-words">
             <span className="text-emerald-600">{onTrackCount}</span>
             <span className="text-neutral-400 text-xs font-normal">/ {activeCount} TKU</span>
           </div>
-          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between text-[11px]">
+          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-x-2 text-[11px]">
             <span className="text-neutral-400 font-medium">Tingkat Capai</span>
             <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
               {formatPercent(activeCount > 0 ? onTrackCount / activeCount : 0)}
@@ -415,10 +437,10 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse min-w-[760px]">
+          <table className="w-full text-left text-[11px] border-collapse min-w-[600px] [&_th]:!px-1.5 [&_td]:!px-1.5">
             <thead>
               <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 text-[11px] bg-neutral-50 dark:bg-neutral-800/40">
-                <th className="py-2.5 px-3 font-semibold min-w-[120px]">Nama TKU</th>
+                <th className="py-2.5 px-3 font-semibold min-w-[84px]">Nama TKU</th>
                 <th className="py-2.5 px-2 text-right font-semibold text-red-600 dark:text-red-400">YO</th>
                 <th className="py-2.5 px-2 text-right font-semibold text-amber-600 dark:text-amber-400">OM</th>
                 <th className="py-2.5 px-2 text-right font-semibold text-pink-600 dark:text-pink-400">OS</th>
@@ -458,7 +480,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
                 const pdm = rec ? ((rec.pdm ?? 0) || (rec.pdmV ? rec.pdmV.reduce((a, b) => a + b, 0) : 0)) : undefined;
                 const absen = rec?.absen;
                 const frek = rec?.frek;
-                const pctCapaianTku = t.targetHarian > 0 ? (sold || 0) / t.targetHarian : 0;
+                const pctCapaianTku = effT(t) > 0 ? (sold || 0) / effT(t) : 0;
 
                 return (
                   <tr
@@ -486,7 +508,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
                       {sold !== undefined ? formatNumber(sold) : '—'}
                     </td>
                     <td className="py-2.5 px-2.5 text-right text-neutral-500">
-                      {formatNumber(t.targetHarian)}
+                      {formatNumber(effT(t))}{getTkuDayMult(idx, selectedDay) > 1 && (<span className="ml-1 text-[9px] font-sans font-bold text-brand-600 dark:text-brand-400">×{getTkuDayMult(idx, selectedDay)}</span>)}
                     </td>
                     <td className={`py-2.5 px-2.5 text-right font-bold border-r border-neutral-200 dark:border-neutral-800 ${
                       pctCapaianTku >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
@@ -569,7 +591,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
                 const pdm = rec ? ((rec.pdm ?? 0) || (rec.pdmV ? rec.pdmV.reduce((a, b) => a + b, 0) : 0)) : undefined;
                 const absen = rec?.absen;
                 const frek = rec?.frek;
-                const pctCapaianTku = t.targetHarian > 0 ? (sold || 0) / t.targetHarian : 0;
+                const pctCapaianTku = effT(t) > 0 ? (sold || 0) / effT(t) : 0;
 
                 return (
                   <tr
@@ -597,7 +619,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
                       {sold !== undefined ? formatNumber(sold) : '—'}
                     </td>
                     <td className="py-2.5 px-2.5 text-right text-neutral-500">
-                      {formatNumber(t.targetHarian)}
+                      {formatNumber(effT(t))}{getTkuDayMult(idx, selectedDay) > 1 && (<span className="ml-1 text-[9px] font-sans font-bold text-brand-600 dark:text-brand-400">×{getTkuDayMult(idx, selectedDay)}</span>)}
                     </td>
                     <td className={`py-2.5 px-2.5 text-right font-bold border-r border-neutral-200 dark:border-neutral-800 ${
                       pctCapaianTku >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
@@ -669,12 +691,12 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
                   {formatNumber(cabangSum.sold)}
                 </td>
                 <td className="py-3 px-2.5 text-right font-bold text-brand-700 dark:text-brand-300">
-                  {formatNumber(totalBranchTarget)}
+                  {formatNumber(branchTarget)}
                 </td>
                 <td className={`py-3 px-2.5 text-right font-black border-r border-neutral-200 dark:border-neutral-800 ${
-                  cabangSum.sold >= totalBranchTarget ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+                  cabangSum.sold >= branchTarget ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
                 }`}>
-                  {formatPercent(cabangSum.sold / (totalBranchTarget || 1))}
+                  {formatPercent(cabangSum.sold / (branchTarget || 1))}
                 </td>
                 <td className="py-3 px-2.5 text-right text-amber-600 dark:text-amber-400">{formatNumber(cabangSum.bb)}</td>
                 <td className={`py-3 px-2.5 text-right ${getBbStatusClass((cabangSum.bb + cabangSum.sold) > 0 ? (cabangSum.bb / (cabangSum.bb + cabangSum.sold)) : 0)}`}>

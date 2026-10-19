@@ -357,8 +357,8 @@ export const TrendChart: React.FC<Props> = ({ days, today, year, monthIndex, mon
               {selected.target > 0 && (
                 <Cell
                   label="Target"
-                  value={`${formatNumber(Math.round(selected.target))} btl`}
-                  sub={`${selected.sold - selected.target >= 0 ? '+' : '−'}${formatNumber(Math.abs(Math.round(selected.sold - selected.target)))} btl`}
+                  value={`${formatNumber(selected.target)} btl`}
+                  sub={`${selected.sold - selected.target >= 0 ? '+' : '−'}${formatNumber(Math.abs(selected.sold - selected.target))} btl`}
                   subClass={selected.sold - selected.target >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}
                   valueClass="text-neutral-900 dark:text-white"
                 />
@@ -366,8 +366,8 @@ export const TrendChart: React.FC<Props> = ({ days, today, year, monthIndex, mon
               {selected.lm > 0 && (
                 <Cell
                   label="Bulan lalu (LM)"
-                  value={`${formatNumber(Math.round(selected.lm))} btl`}
-                  sub={`${selected.sold - selected.lm >= 0 ? '+' : '−'}${formatNumber(Math.abs(Math.round(selected.sold - selected.lm)))} btl`}
+                  value={`${formatNumber(selected.lm)} btl`}
+                  sub={`${selected.sold - selected.lm >= 0 ? '+' : '−'}${formatNumber(Math.abs(selected.sold - selected.lm))} btl`}
                   subClass={selected.sold - selected.lm >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}
                   valueClass="text-yellow-600 dark:text-yellow-400"
                 />
@@ -375,8 +375,8 @@ export const TrendChart: React.FC<Props> = ({ days, today, year, monthIndex, mon
               {selected.ly > 0 && (
                 <Cell
                   label="Tahun lalu (LY)"
-                  value={`${formatNumber(Math.round(selected.ly))} btl`}
-                  sub={`${selected.sold - selected.ly >= 0 ? '+' : '−'}${formatNumber(Math.abs(Math.round(selected.sold - selected.ly)))} btl`}
+                  value={`${formatNumber(selected.ly)} btl`}
+                  sub={`${selected.sold - selected.ly >= 0 ? '+' : '−'}${formatNumber(Math.abs(selected.sold - selected.ly))} btl`}
                   subClass={selected.sold - selected.ly >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}
                   valueClass="text-violet-600 dark:text-violet-400"
                 />

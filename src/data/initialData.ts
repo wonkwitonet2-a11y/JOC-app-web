@@ -1,4 +1,4 @@
-import { TkuItem, ArchiveRecord, MotivationQuote, DailySalesRecord } from '../types';
+import { TkuItem, MotivationQuote, DailySalesRecord } from '../types';
 
 export const INITIAL_TKUS: TkuItem[] = [
   {
@@ -339,31 +339,6 @@ export const INITIAL_DAILY_HISTORY: number[] = [
   44885, 32930, 32835, 35750, 32605, 0, 51765,
   42155, 32270, 34695, 32930, 31170, 0, 55510,
   41490, 36115, 32535, 31395, 30645
-];
-
-// Weekly sales totals: [Cabang, Rayon 1, Rayon 2] across weeks
-export const INITIAL_WEEKLY_SALES: number[][] = [
-  [238575, 231790, 228385, 77605], // Cabang
-  [114585, 117735, 109110, 32985], // Rayon 1
-  [123990, 114055, 119275, 44620], // Rayon 2
-];
-
-// Weekly per-variant sales for [Rayon 1, Rayon 2]
-export const INITIAL_WEEKLY_VARIANT: number[][][] = [
-  // Rayon 1: [YO, OM, OS, YT] x weeks
-  [
-    [84720, 88845, 82290, 24910],
-    [10710, 10600, 9710, 2820],
-    [12585, 12810, 11430, 3370],
-    [6570, 5480, 5680, 1885]
-  ],
-  // Rayon 2: [YO, OM, OS, YT] x weeks
-  [
-    [98670, 90885, 95535, 35910],
-    [9120, 8435, 9030, 3520],
-    [11995, 10825, 10590, 3865],
-    [4205, 3910, 4120, 1325]
-  ]
 ];
 
 export const INITIAL_QUOTES: MotivationQuote[] = [

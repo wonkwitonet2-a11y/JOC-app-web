@@ -8,19 +8,6 @@ export interface StepAxis {
   showLabel: (v: number) => boolean; // label hanya jika muat (tidak bertumpuk)
 }
 
-// Admin: label 1k, 2k, 3k, 4k, 5k, lalu kelipatan 5k (10k, 15k, ...)
-export function makeStepAxis(maxVal: number, plotPx: number): StepAxis {
-  const top = Math.max(5000, Math.ceil(Math.max(1, maxVal) / 5000) * 5000);
-  const scale = (v: number) => (v <= 0 ? 0 : Math.min(1.2, v / top));
-  const ticks: number[] = [1000, 2000, 3000, 4000, 5000];
-  for (let t = 10000; t <= top; t += 5000) ticks.push(t);
-  const pxPer1k = (plotPx / top) * 1000;
-  const everyLow = [1, 2, 5].find(k => pxPer1k * k >= 12) ?? 5;
-  const showLabel = (v: number) =>
-    v <= 5000 ? (v / 1000) % everyLow === 0 : (pxPer1k * 5 >= 12 || v % 10000 === 0);
-  return { top, scale, ticks, showLabel };
-}
-
 // TKU: kelipatan tetap (default 1k): 1k, 2k, 3k, ... 6k, 7k, dst
 export function makeUnitAxis(maxVal: number, plotPx: number, unit = 1000): StepAxis {
   const top = Math.max(unit, Math.ceil(Math.max(1, maxVal) / unit) * unit);

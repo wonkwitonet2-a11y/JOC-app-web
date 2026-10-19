@@ -78,12 +78,3 @@ export function loadTkuInputDraft(date: string, tkuIdx: number): TkuInputDraft |
   }
   return null;
 }
-
-export function clearTkuInputDraft(date: string, tkuIdx: number) {
-  try {
-    const key = makeKey(date, tkuIdx);
-    localStorage.removeItem(key);
-  } catch (err) {
-    console.warn('Gagal menghapus draft input:', err);
-  }
-}

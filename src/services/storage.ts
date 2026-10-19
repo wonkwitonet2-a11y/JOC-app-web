@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { AppState, TkuItem, DailySalesRecord, DailyOpsRecord, SupabaseConfig, ArchiveRecord, MonthSnapshot, TkuMonthlyFields } from '../types';
+import { AppState, TkuItem, DailySalesRecord, SupabaseConfig, ArchiveRecord, MonthSnapshot, TkuMonthlyFields } from '../types';
 import {
   INITIAL_TKUS,
   INITIAL_TARGET_BL,
@@ -234,10 +234,8 @@ export function computeSyncHash(state: AppState): string {
 
 // Buat payload bersih untuk cloud: buang kredensial supabaseConfig, preferensi UI lokal, dll.
 // Buat payload bersih untuk cloud: buang kredensial supabaseConfig, preferensi UI lokal, dll.
-// Poin 4 (Egress): Buang arsip statis bawaan 2025/2026 yang sudah terkompilasi di kode aplikasi
-// Hanya simpan arsip bulanan baru buatan pengguna agar payload hemat ~30-40 KB per upload/download
-// Arsip bawaan aplikasi (sudah ada di kode) tidak ikut ke cloud.
-const isStaticArchiveKey = (k: string): boolean => k.startsWith('2025') || k === '2026-08';
+// Hanya arsip yang memang ada di INITIAL_ARCHIVES bawaan yang dianggap statis
+const isStaticArchiveKey = (k: string): boolean => Boolean(INITIAL_ARCHIVES[k]);
 
 export function sanitizeStateForCloud(state: AppState): Partial<AppState> {
   const clean: Record<string, unknown> = { ...(state as unknown as Record<string, unknown>) };
@@ -595,29 +593,76 @@ export async function testSupabaseConnection(u: string, k: string): Promise<{ su
   }
 }
 
-export const floorInt = (n: number | null | undefined): number => {
-  if (n === null || n === undefined || isNaN(n)) return 0;
-  return Math.floor(n);
-};
-
 export const formatNumber = (n: number | null | undefined): string => {
   if (n === null || n === undefined || isNaN(n)) return '—';
   return Math.floor(n).toLocaleString('id-ID');
 };
 
-// Poin 5: Semua angka desimal (di belakang koma) dihapus, DIBULATKAN KE BAWAH (300,89 jadi 300)
-// formatDecimal disamakan dengan formatNumber bulat ke bawah tanpa desimal
-export const formatDecimal = (n: number | null | undefined, _digits = 0): string => {
-  if (n === null || n === undefined || isNaN(n)) return '—';
-  return Math.floor(n).toLocaleString('id-ID');
+// Format angka desimal hingga 2 angka di belakang koma TANPA pembulatan ke atas (dipotong/floor).
+// Jika bulat (misal 330), tampil "330". Jika ada desimal (misal 330.78), tampil "330,78" (BUKAN jadi 331).
+export const formatDecimal = (n: number | null | undefined, digits = 2): string => {
+  if (n === null || n === undefined || isNaN(n) || !isFinite(n)) return '—';
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  const factor = Math.pow(10, digits);
+  // Potong tanpa pembulatan ke atas
+  const floored = Math.floor(abs * factor + 1e-9) / factor;
+  const whole = Math.floor(floored);
+  const fracNum = Math.round((floored - whole) * factor);
+  const wholeStr = whole.toLocaleString('id-ID');
+  if (fracNum === 0 || digits === 0) return `${sign}${wholeStr}`;
+  let fracStr = String(fracNum).padStart(digits, '0');
+  if (fracStr.endsWith('0')) fracStr = fracStr.slice(0, -1);
+  return `${sign}${wholeStr},${fracStr}`;
 };
 
 // Bulatkan ke bawah tanpa desimal (300,89 jadi 300)
 export const round2 = (n: number): number => Math.floor(Number(n) || 0);
 
+// Potong ke 2 desimal TANPA pembulatan ke atas (5160.679 -> 5160.67). Toleransi kecil untuk floating point.
+export const potong2Desimal = (n: number): number => {
+  const v = Number(n) || 0;
+  return Math.floor(v * 100 + 1e-9) / 100;
+};
+
+// Rata-rata per hari tiap varian [YO, OM, OS, YT] dari satu baris arsip, TANPA dibulatkan ke bilangan bulat
+// (hanya dipotong 2 desimal). Dihitung ulang dari total botol per varian / jumlah hari arsip, karena
+// field rataVarian di arsip lama sudah terlanjur dibulatkan. Fallback ke rataVarian bila total varian tidak ada.
+export const getArsipRataVarian = (
+  row: { varian?: number[]; rataVarian?: number[] },
+  d: number
+): [number, number, number, number] => {
+  if (d > 0 && Array.isArray(row.varian) && row.varian.length === 4) {
+    return [0, 1, 2, 3].map(i => potong2Desimal((Number(row.varian![i]) || 0) / d)) as [number, number, number, number];
+  }
+  if (Array.isArray(row.rataVarian) && row.rataVarian.length === 4) {
+    return [0, 1, 2, 3].map(i => potong2Desimal(Number(row.rataVarian![i]) || 0)) as [number, number, number, number];
+  }
+  return [0, 0, 0, 0];
+};
+
+// Rata-rata total satu TKU = jumlah rata 4 varian (yang sudah desimal), mis. 5160,67 + 500,75 + 788,09 + 500,22 = 6949,73.
+export const getArsipRataTotal = (
+  row: { varian?: number[]; rataVarian?: number[] },
+  d: number
+): number => {
+  const sum = getArsipRataVarian(row, d).reduce((a, b) => a + b, 0);
+  return Math.round(sum * 100) / 100; // hanya membuang sisa floating point, bukan membulatkan data
+};
+
+// Potong (BUKAN bulatkan) ke `digits` angka di belakang koma: 250,7989 -> "250.79" (digits 2) atau "250" (digits 0).
+// Titik desimal sama seperti toFixed. Toleransi kecil menghindari salah hitung floating point (0.29*100 = 28.999...).
+export const truncFixed = (n: number, digits = 1): string => {
+  if (n === null || n === undefined || !isFinite(n) || isNaN(n)) return '—';
+  const f = Math.pow(10, digits);
+  const eps = n >= 0 ? 1e-9 : -1e-9;
+  const t = Math.trunc(n * f + eps * Math.max(1, Math.abs(n * f))) / f;
+  return (Object.is(t, -0) ? 0 : t).toFixed(digits);
+};
+
 export const formatPercent = (x: number | null | undefined): string => {
   if (x === null || x === undefined || !isFinite(x) || isNaN(x)) return '—';
-  return (x * 100).toFixed(1).replace('.', ',') + '%';
+  return truncFixed(x * 100, 1).replace('.', ',') + '%';
 };
 
 export const formatDiff = (n: number | null | undefined): string => {
@@ -629,13 +674,6 @@ export const formatDiff = (n: number | null | undefined): string => {
 export const getStatusClass = (n: number | null | undefined): string => {
   if (n === null || n === undefined || isNaN(n)) return 'text-neutral-500';
   return n >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
-};
-
-export const getStatusBg = (n: number | null | undefined): string => {
-  if (n === null || n === undefined || isNaN(n)) return 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400';
-  return n >= 0
-    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-    : 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300';
 };
 
 /**
@@ -653,18 +691,6 @@ export const getBbStatusClass = (pct: number | null | undefined): string => {
     return 'text-amber-600 dark:text-amber-400 font-bold';
   } else {
     return 'text-red-600 dark:text-red-400 font-bold';
-  }
-};
-
-export const getBbStatusBg = (pct: number | null | undefined): string => {
-  if (pct === null || pct === undefined || isNaN(pct)) return 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400';
-  const p = (pct <= 1.0 && pct >= 0) ? pct * 100 : pct;
-  if (p < 5.0) {
-    return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800';
-  } else if (p < 10.0) {
-    return 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800';
-  } else {
-    return 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 border border-red-200 dark:border-red-800';
   }
 };
 
@@ -687,11 +713,6 @@ export function getTodayDateString(): string {
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const d = String(now.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
-}
-
-export function getTodayDayNum(): number {
-  const d = new Date().getDate();
-  return d >= 1 && d <= 31 ? d : 28;
 }
 
 // Jumlah hari di bulan kerja (activePeriod). Bulan kerja TIDAK ikut berganti otomatis
@@ -797,7 +818,20 @@ export const getWeeksOfMonth = (state: AppState): { start: number; end: number }
 // Contoh: Hari ini tanggal 5 Oktober, tetapi transaksi terakhir yang tersimpan adalah tanggal 3 Oktober,
 // maka pembagi otomatis = 3 hari (bukan 5), sehingga rata-rata harian tetap akurat.
 // Ketika tanggal 5 sudah diinput dan disimpan, pembagi otomatis bertambah menjadi 5.
-export const getLatestSalesDay = (state: AppState): number => {
+// Tanggal pilihan manual dari Dashboard admin (null = otomatis). Hanya berlaku untuk bulan kerja yang sama.
+export const getPembagiManualDay = (state: AppState): number | null => {
+  const m = state.pembagiManual;
+  if (!m || typeof m.day !== 'number') return null;
+  const period = getPeriodInfo(state);
+  if (m.period !== period.key) return null;
+  if (m.day < 1 || m.day > period.daysInMonth) return null;
+  return Math.floor(m.day);
+};
+
+export const isPembagiManual = (state: AppState): boolean => getPembagiManualDay(state) !== null;
+
+// Tanggal otomatis = tanggal terakhir yang punya transaksi penjualan (tanpa memperhatikan pilihan manual).
+export const getAutoSalesDay = (state: AppState): number => {
   const period = getPeriodInfo(state);
   const pjd = state.pjd || {};
   let latestDay = 0;
@@ -835,15 +869,38 @@ export const getLatestSalesDay = (state: AppState): number => {
   return latestDay > 0 ? latestDay : 1;
 };
 
+// Pembagi rata2: tanggal pilihan manual (Dashboard admin) jika ada,
+// kalau tidak, tanggal transaksi terakhir. (JWP tidak memakai pembagi ini: diisi manual oleh TKU.)
+export const getLatestSalesDay = (state: AppState): number => {
+  const manual = getPembagiManualDay(state);
+  return manual !== null ? manual : getAutoSalesDay(state);
+};
+
 export const getPembagiHari = (state: AppState): number => {
   return getLatestSalesDay(state);
 };
 
-export const getTanggalUpdate = (state: AppState): number => {
-  return getPembagiHari(state);
+// JWP kumulatif per TKU: diisi MANUAL oleh TKU (kolom JWP di card Kondisi TKU), tidak ada rumus otomatis.
+// Nilai yang berlaku = isian manual pada catatan terbaru s/d tanggal `upToDay`.
+// `useLegacy`: bila belum ada isian manual, pakai JWP lama yang tersimpan di catatan harian (data sebelum fitur ini).
+export const getJwpAsOf = (state: AppState, tkuIdx: number, upToDay: number, useLegacy = true): number | null => {
+  const period = getPeriodInfo(state);
+  const last = Math.min(Math.max(0, Math.floor(upToDay)), period.daysInMonth);
+  let manual: number | null = null;
+  let legacy: number | null = null;
+  for (let d = 1; d <= last; d++) {
+    const dStr = `${period.key}-${String(d).padStart(2, '0')}`;
+    let rec = state.pjd?.[dStr]?.[tkuIdx];
+    if (!rec && dStr === state.activeDate) rec = state.todayInputs?.[tkuIdx];
+    if (!rec) continue;
+    if (rec.jwpManual !== undefined && rec.jwpManual !== null && !isNaN(Number(rec.jwpManual))) manual = Number(rec.jwpManual);
+    else if (rec.jwp !== undefined && Number(rec.jwp) > 0) legacy = Number(rec.jwp);
+  }
+  if (manual !== null) return manual;
+  return useLegacy ? legacy : null;
 };
 
-export const getPembagiRealisasi = (state: AppState): number => {
+export const getTanggalUpdate = (state: AppState): number => {
   return getPembagiHari(state);
 };
 
@@ -859,11 +916,6 @@ export const getPembagiBreakdownMingguan = (weekIdx: number, state?: AppState): 
 
 export const getPembagiBreakdownBulanan = (state: AppState): number => {
   return getDaysInActiveMonth(state);
-};
-
-// Backward compatible aliases
-export const getPembagiBreakdown = (state: AppState): number => {
-  return getPembagiBreakdownBulanan(state);
 };
 
 export const getPembagiKhususTku = (state: AppState, _tkuIdx?: number): number => {
@@ -986,19 +1038,23 @@ export function buildBlankSnapshot(state: AppState, key: string): MonthSnapshot 
   const act = computeActiveDate(`${key}-01`);
   const prevArc = state.archives?.[shiftPeriodKey(key, -1)];
   const lyArc = state.archives?.[shiftPeriodKey(key, -12)];
+  const norm = (str: string) => {
+    const s = (str || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    if (s === 'jember' || s === 'jember 1') return 'jember 1';
+    if (s === 'dp jempat 4' || s === 'dp jember 4') return 'dp jember 4';
+    return s;
+  };
   const avgFrom = (arc: ArchiveRecord | undefined, nama: string): number => {
     if (!arc) return 0;
-    const row = arc.rows.find(r => r.nama.toLowerCase() === nama.toLowerCase());
+    const row = arc.rows.find(r => norm(r.nama) === norm(nama));
     if (!row) return 0;
-    if (row.rataHarian && row.rataHarian > 0) return round2(row.rataHarian);
-    return arc.d > 0 ? round2(row.total / arc.d) : 0;
+    return getArsipRataTotal(row, arc.d);
   };
   const avgVarFrom = (arc: ArchiveRecord | undefined, nama: string, vi: number): number => {
     if (!arc) return 0;
-    const row = arc.rows.find(r => r.nama.toLowerCase() === nama.toLowerCase());
+    const row = arc.rows.find(r => norm(r.nama) === norm(nama));
     if (!row) return 0;
-    if (row.rataVarian && row.rataVarian[vi] !== undefined) return round2(row.rataVarian[vi]);
-    return arc.d > 0 ? round2((row.varian?.[vi] || 0) / arc.d) : 0;
+    return getArsipRataVarian(row, arc.d)[vi];
   };
 
   const codes: Array<'YO' | 'OM' | 'OS' | 'YT'> = ['YO', 'OM', 'OS', 'YT'];
@@ -1043,7 +1099,6 @@ export function buildBlankSnapshot(state: AppState, key: string): MonthSnapshot 
       pdm: 0,
       yl,
       ar,
-      jwp: yl * act.day,
     };
   });
 
@@ -1275,7 +1330,6 @@ export function getDefaultState(): AppState {
 
   // PJD diisi dengan data resmi September 2026 dari spreadsheet
   const pjd: Record<string, Record<number, DailySalesRecord>> = JSON.parse(JSON.stringify(INITIAL_PJD || {}));
-  const hjd: Record<string, Record<number, DailyOpsRecord>> = {};
   const todayInputs: Record<number, DailySalesRecord> = {};
   const ylCounts = [11, 11, 11, 10, 7, 11, 9, 9, 10, 8];
   const areaCounts = [12, 12, 11, 10, 7, 12, 11, 10, 10, 8];
@@ -1290,7 +1344,6 @@ export function getDefaultState(): AppState {
       pdm: 0,
       yl: ylCounts[idx] || 10,
       ar: areaCounts[idx] || 10,
-      jwp: (ylCounts[idx] || 10) * dayNum,
     };
   });
 
@@ -1372,6 +1425,7 @@ export function getDefaultState(): AppState {
     todayInputs,
     pjd,
     hjd: {},
+    sisaStock: {},
     bbHarian,
     quotes: [...INITIAL_QUOTES],
     archives: { ...INITIAL_ARCHIVES },
@@ -1471,7 +1525,7 @@ export function loadAppState(): AppState {
         };
         const userArchives: Record<string, ArchiveRecord> = {};
         Object.keys(parsed.archives || {}).forEach(k => {
-          if (!defaultState.archives[k] && !k.startsWith('2025')) userArchives[k] = parsed.archives[k];
+          if (!defaultState.archives[k]) userArchives[k] = parsed.archives[k];
         });
         return {
           ...defaultState,
@@ -1482,6 +1536,7 @@ export function loadAppState(): AppState {
           monthStore: carriedStore,
           pjd: { ...defaultState.pjd, ...keepOtherMonths(parsed.pjd) },
           hjd: { ...(defaultState.hjd || {}), ...keepOtherMonths(parsed.hjd) },
+          sisaStock: parsed.sisaStock || {},
           archives: { ...defaultState.archives, ...userArchives }
         };
       }
@@ -1525,7 +1580,6 @@ export function loadAppState(): AppState {
             pdm: 0,
             yl: merged.tkus[idx]?.jumlahYl || 10,
             ar: merged.tkus[idx]?.jumlahArea || 10,
-            jwp: (merged.tkus[idx]?.jumlahYl || 10) * act.day,
           };
         }
       });
@@ -1582,7 +1636,7 @@ export function loadAppState(): AppState {
 
       if (parsed.archives) {
         Object.keys(parsed.archives).forEach(key => {
-          if (!key.startsWith('2025') && !safeArchives[key]) {
+          if (!safeArchives[key]) {
             safeArchives[key] = parsed.archives[key];
           }
         });
@@ -1610,6 +1664,49 @@ export function loadAppState(): AppState {
 const isNamaJemberLama = (n: unknown): boolean =>
   typeof n === 'string' && n.trim().toLowerCase() === 'jember';
 
+function sanitizeArchivesRounding(archives: Record<string, ArchiveRecord> | undefined): { changed: boolean; archives: Record<string, ArchiveRecord> } {
+  if (!archives) return { changed: false, archives: {} };
+  let changed = false;
+  const next: Record<string, ArchiveRecord> = {};
+  Object.keys(archives).forEach(k => {
+    const arc = archives[k];
+    if (!arc || !Array.isArray(arc.rows) || !arc.d) {
+      next[k] = arc;
+      return;
+    }
+    const d = arc.d;
+    let rowChanged = false;
+    const nextRows = arc.rows.map(r => {
+      let rCopy = { ...r };
+      const expectedFloor = Math.floor((r.total || 0) / d);
+      // Jika rataHarian dibulatkan ke atas (misal 127.485 / 30 = 4249.5 jadi 4250), koreksi ke 4249 (Math.floor)
+      if (r.rataHarian !== undefined && r.rataHarian > expectedFloor) {
+        rCopy.rataHarian = expectedFloor;
+        rowChanged = true;
+      }
+      if (Array.isArray(r.varian)) {
+        const nextRataVarian = r.varian.map((v, vIdx) => {
+          const fv = Math.floor((v || 0) / d);
+          if (r.rataVarian && r.rataVarian[vIdx] !== undefined && r.rataVarian[vIdx] > fv) {
+            rowChanged = true;
+            return fv;
+          }
+          return r.rataVarian ? r.rataVarian[vIdx] : fv;
+        }) as [number, number, number, number];
+        rCopy.rataVarian = nextRataVarian;
+      }
+      return rCopy;
+    });
+    if (rowChanged) {
+      changed = true;
+      next[k] = { ...arc, rows: nextRows };
+    } else {
+      next[k] = arc;
+    }
+  });
+  return { changed, archives: next };
+}
+
 function normalizeNamaJember1(state: AppState): AppState {
   let changed = false;
   const tkus = (state.tkus || []).map(t => {
@@ -1629,6 +1726,11 @@ function normalizeNamaJember1(state: AppState): AppState {
       }
     });
     archives = next;
+  }
+  const sanitized = sanitizeArchivesRounding(archives);
+  if (sanitized.changed) {
+    changed = true;
+    archives = sanitized.archives;
   }
   return changed ? { ...state, tkus, archives } : state;
 }
@@ -1651,9 +1753,7 @@ export function synchronizeAppState(state: AppState): AppState {
     let latestAbsen = isSeed ? (t.absenYl ?? 0) : 0;
     let latestFrek = isSeed ? (t.frekuensiAbsen ?? 0) : 0;
     const sumB: [number, number, number, number] = [0, 0, 0, 0];
-    let latestJwp = 0;
     let latestYl = masterYl;
-    let latestArea = masterArea;
     let latestL250 = t.l250 ?? 0;
     let latestL300 = t.l300 ?? 0;
 
@@ -1672,12 +1772,10 @@ export function synchronizeAppState(state: AppState): AppState {
         if (rec.b && Array.isArray(rec.b)) {
           for (let k = 0; k < 4; k++) sumB[k] += Number(rec.b[k]) || 0;
         }
-        if (rec.jwp !== undefined && rec.jwp > 0) latestJwp = rec.jwp;
         akmBb += Number(rec.bb) || 0;
         if (rec.absen !== undefined) latestAbsen = Number(rec.absen) || 0;
         if (rec.frek !== undefined) latestFrek = Number(rec.frek) || 0;
         if (rec.yl !== undefined && rec.yl > 0) latestYl = rec.yl;
-        if (rec.ar !== undefined && rec.ar > 0) latestArea = rec.ar;
         if (rec.l250 !== undefined) latestL250 = Number(rec.l250) || 0;
         if (rec.l300 !== undefined) latestL300 = Number(rec.l300) || 0;
       }
@@ -1691,8 +1789,6 @@ export function synchronizeAppState(state: AppState): AppState {
       if (todayRec.l250 !== undefined) latestL250 = Number(todayRec.l250) || 0;
       if (todayRec.l300 !== undefined) latestL300 = Number(todayRec.l300) || 0;
       if (todayRec.yl !== undefined && todayRec.yl > 0) latestYl = todayRec.yl;
-      if (todayRec.ar !== undefined && todayRec.ar > 0) latestArea = todayRec.ar;
-      if (todayRec.jwp !== undefined && todayRec.jwp > 0) latestJwp = todayRec.jwp;
     }
 
     const totalV = sumV[0] + sumV[1] + sumV[2] + sumV[3];
@@ -1701,9 +1797,9 @@ export function synchronizeAppState(state: AppState): AppState {
       : sumV; // bulan selain data resmi: murni dari input harian (kosong kalau belum ada input)
 
     const totalSold = finalV[0] + finalV[1] + finalV[2] + finalV[3];
-    const finalAkmJwp = isSeed
-      ? (t.akmJwp || (latestYl * divider))
-      : (latestJwp > 0 ? latestJwp : latestYl * divider);
+    // JWP diisi manual oleh TKU (tanpa rumus). Bulan data resmi (September) tanpa isian manual tetap memakai angka dasar spreadsheet.
+    const jwpScan = getJwpAsOf(state, idx, period.daysInMonth, !isSeed);
+    const finalAkmJwp = isSeed ? (jwpScan ?? (t.akmJwp || 0)) : (jwpScan ?? 0);
     const calculatedSYl = finalAkmJwp > 0 ? Math.floor(totalSold / finalAkmJwp) : 0;
     const finalSYl = isSeed ? (t.sYl || calculatedSYl) : calculatedSYl;
 
@@ -1754,16 +1850,6 @@ export function synchronizeAppState(state: AppState): AppState {
     tkus: nextTkus,
     bbHarian: nextBbHarian,
   };
-}
-
-export function resetToDefaultState(): AppState {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(SESSION_KEY);
-    localStorage.removeItem(LAST_ACTIVE_KEY);
-    localStorage.removeItem(SESSION_EXPIRED_FLAG_KEY);
-  } catch (_) {}
-  return getDefaultState();
 }
 
 export function saveAppState(state: AppState) {

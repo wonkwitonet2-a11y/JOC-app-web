@@ -1,42 +1,26 @@
 import React, { useState } from 'react';
-import { 
-  BarChart3, 
+import {  
   TrendingUp, 
   Award, 
   Calendar, 
   Users, 
-  Filter,
-  CheckCircle2,
-  RotateCcw,
-  AlertCircle,
-  Clock,
-  Sparkles,
-  ChevronRight,
-  ShieldCheck,
-  Target,
-  MapPin,
-  UserCheck,
-  UserX,
-  Zap,
-  Layers,
-  FileSpreadsheet
+  Target
 } from 'lucide-react';
-import { AppState, VARIANTS, TkuItem, DailySalesRecord } from '../types';
+import { AppState, VARIANTS, DailySalesRecord } from '../types';
 import { 
-  formatNumber, formatDecimal, 
+  formatNumber, formatDecimal, truncFixed, 
   formatPercent, 
   formatDiff, 
   getStatusClass,
   getBbStatusClass,
-  getStatusBg,
   formatDateIndo,
   getPembagiHari,
+  getAutoSalesDay,
+  isPembagiManual,
   getPeriodInfo,
   getSeedDailyBranchTotal,
   SEED_PERIOD
 } from '../services/storage';
-import { makeUnitAxis, makeNiceAxis, formatAxisLabel } from '../services/chartAxis';
-import { PembagiHariControl } from '../components/PembagiHariControl';
 import { TrendChart } from '../components/TrendChart';
 
 interface DashboardViewProps {
@@ -44,22 +28,26 @@ interface DashboardViewProps {
   onUpdateRayon: (rayon: number) => void;
   onUpdatePembagiHari?: () => void;
   onUpdateActiveDay?: (day: number) => void;
+  /** Pilih tanggal pembagi rata2 (null = kembali otomatis ke tanggal transaksi terakhir) */
+  onSetPembagiManual?: (day: number | null) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({ 
   state, 
   onUpdateRayon,
   onUpdatePembagiHari,
-  onUpdateActiveDay
+  onUpdateActiveDay,
+  onSetPembagiManual
 }) => {
-  const [hoveredPoint, setHoveredPoint] = useState<{ day: number; val: number; bb?: number; x: number; y: number } | null>(null);
   const [tableTab, setTableTab] = useState<'penjualan' | 'operasional'>('penjualan');
   const [rankingCriteria, setRankingCriteria] = useState<'gabungan' | 'target' | 'bulanLalu' | 'tahunLalu'>('gabungan');
 
   const selectedRayon = state.selectedRayon; // 0: Cabang, 1: Rayon 1, 2: Rayon 2
   const day = state.currentDayNum;
   const divider = getPembagiHari(state);
-  const dividerLabel = 'Tanggal Update';
+  const manualDivider = isPembagiManual(state);
+  const autoDivider = getAutoSalesDay(state);
+  const dividerLabel = manualDivider ? 'Tanggal Update (manual)' : 'Tanggal Update';
   // Info bulan kerja (tidak lagi di-hard-code September 2026)
   const period = getPeriodInfo(state);
   const isSeed = period.key === SEED_PERIOD;
@@ -109,7 +97,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const tyDiff = totalSold - tySum * divider;
   const tyPct = avgPerDay / (tySum || 1);
   const formatAkmDiffPair = (diff: number) =>
-    `${formatDiff(diff)}/${formatDiff(Math.round(diff / Math.max(1, divider)))}`;
+    `${formatDiff(diff)}/${formatDiff(Math.trunc(diff / Math.max(1, divider)))}`;
 
   // 1. Area & Yakult Lady (YL) & Coverage Area
   const totalArea = filteredTkus.reduce((a, t) => a + (t.jumlahArea || 10), 0);
@@ -139,18 +127,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
 
     const tkuYl = t.jumlahYl || 10;
-    const effectiveTkuJwp = (lastRec?.jwp !== undefined && lastRec.jwp > 0)
-      ? lastRec.jwp
-      : (tkuYl * day);
+    // JWP diisi manual oleh masing-masing TKU; admin hanya menjumlahkan (t.akmJwp)
+    const effectiveTkuJwp = t.akmJwp || 0;
 
     totalAbsenSpreadsheet += latestAbsen;
     totalFrekSpreadsheet += latestFrek;
     totalJwpSpreadsheet += effectiveTkuJwp;
   });
 
-  const hadirYl = Math.max(0, totalYl - totalAbsenSpreadsheet);
-  const kehadiranPct = totalYl > 0 ? (hadirYl / totalYl) : 1;
-  const avgJwpPerDay = divider > 0 ? Math.round(totalJwpSpreadsheet / divider) : 0;
   const ewpPct = totalJwpSpreadsheet > 0 ? ((totalJwpSpreadsheet - totalFrekSpreadsheet) / totalJwpSpreadsheet) * 100 : 0;
 
   // 3. Akumulasi BB
@@ -181,7 +165,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   // Rasio BB = BB ÷ (Penjualan + BB), sama dengan tabel Dashboard, Evaluasi, dan Breakdown
   const bbPercent = (totalSold + totalAkmBb) > 0 ? (totalAkmBb / (totalSold + totalAkmBb)) : 0;
-  const avgBbPerDay = totalAkmBb / divider;
   const totalAkmPdm = totalSold + totalAkmBb;
   const avgPdmPerDay = divider > 0 ? (totalAkmPdm / divider) : 0;
 
@@ -191,7 +174,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const pctTotalL250 = totalYl > 0 ? totalL250 / totalYl : 0;
   const pctTotalL300 = totalYl > 0 ? totalL300 / totalYl : 0;
   const sylVal = totalJwpSpreadsheet > 0 ? (totalSold / totalJwpSpreadsheet) : 0;
-  const botolPerYlPerHari = totalYl > 0 ? (avgPerDay / totalYl) : 0;
 
   // Daily points calculation for Chart
   const r1TodaySold = [0, 1, 2, 3, 4].reduce((a, idx) => a + (state.todayInputs[idx]?.sold || 0), 0);
@@ -285,15 +267,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return skipped + 1;
   };
 
-  // SVG Chart Geometry
-  const chartWidth = 820;
-  const chartHeight = 490;
-  const padLeft = 52;
-  const padRight = 30;
-  const graphWidth = chartWidth - padLeft - padRight;
-  const xInset = 14; // jarak tgl 1 dari garis sumbu Y
-  const stepX = (graphWidth - 2 * xInset) / Math.max(1, MD - 1);
-
   // Active contiguous day segments (excluding Sundays) for drawing trend reference polylines
   const activeSegments: number[][] = [];
   let currentActSeg: number[] = [];
@@ -311,21 +284,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   if (currentActSeg.length > 0) {
     activeSegments.push(currentActSeg);
   }
-
-  const maxDayVal = Math.max(
-    ...dailyPoints.map(p => p.val),
-    totalTarget * 2.2,
-    blSum * 2.2,
-    tySum * 2.2,
-    1
-  );
-  const maxValForScale = selectedRayon === 0 
-    ? Math.max(80000, maxDayVal * 1.08)
-    : Math.max(42000, maxDayVal * 1.12);
-
-  const axis = makeUnitAxis(maxValForScale, 300, 5000);
-  const getX = (d: number) => padLeft + xInset + (d - 1) * stepX;
-  const getY = (v: number) => 330 - axis.scale(v) * 300;
 
   // Perhitungan BB harian riil dari data transaksi unit TKU yang terfilter
   const getDayBb = (d: number): number => {
@@ -406,8 +364,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const cover = area > 0 ? (yl / area) : 1;
     const abs = inp?.absen !== undefined ? inp.absen : (t.absenYl !== undefined ? t.absenYl : 0);
     const frk = inp?.frek !== undefined ? inp.frek : (t.frekuensiAbsen !== undefined ? t.frekuensiAbsen : 0);
-    const jwp = inp?.jwp !== undefined ? inp.jwp : (t.akmJwp !== undefined ? t.akmJwp : (yl * 26));
-    const s_yl = jwp > 0 ? Math.round(akm / jwp) : (t.sYl || 0);
+    const jwp = t.akmJwp || 0;
+    const s_yl = jwp > 0 ? Math.floor(akm / jwp) : (t.sYl || 0);
 
     // Hitung akumulasi BB dan % BB untuk TKU ini secara riil (tanpa proration buatan)
     let tkuAkmBb = 0;
@@ -480,6 +438,41 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
             {formatDateIndo(state.activeDate)} &bull; Cabang Jember
           </p>
+          {/* Tanggal update = pembagi rata2 (JWP diisi manual TKU). Default: tanggal transaksi terakhir; admin bisa memilih tanggal lain. */}
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-neutral-50 dark:bg-neutral-800/90 border border-neutral-200 dark:border-neutral-700">
+              <Calendar className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+              <span className="text-neutral-600 dark:text-neutral-400 font-medium">Tgl update (pembagi rata2):</span>
+              <input
+                type="date"
+                value={`${period.key}-${String(divider).padStart(2, '0')}`}
+                min={`${period.key}-01`}
+                max={`${period.key}-${String(MD).padStart(2, '0')}`}
+                disabled={!onSetPembagiManual}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!v || !v.startsWith(period.key)) return;
+                  const d = parseInt(v.slice(8, 10), 10);
+                  if (!d || !onSetPembagiManual) return;
+                  // Memilih tanggal yang sama dengan tanggal otomatis = kembali ke otomatis
+                  onSetPembagiManual(d === autoDivider ? null : d);
+                }}
+                className="font-mono font-bold text-neutral-900 dark:text-neutral-100 bg-transparent border-0 p-0 focus:ring-0 text-xs"
+              />
+            </span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${manualDivider ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' : 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'}`}>
+              {manualDivider ? `Manual \u2022 ${divider} hari` : `Otomatis \u2022 ${divider} hari`}
+            </span>
+            {manualDivider && onSetPembagiManual && (
+              <button
+                type="button"
+                onClick={() => onSetPembagiManual(null)}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+              >
+                Kembali otomatis (tgl {autoDivider})
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -638,8 +631,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span className="text-base md:text-lg leading-tight truncate font-bold text-sky-600 dark:text-sky-400">
                 {formatNumber(totalJwpSpreadsheet)}
               </span>
-              <span className="text-[10px] text-neutral-600 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans truncate" title={`EWP: ${ewpPct.toFixed(1)}% ((${formatNumber(totalJwpSpreadsheet)} - ${totalFrekSpreadsheet}) ÷ ${formatNumber(totalJwpSpreadsheet)})`}>
-                EWP: <strong className="text-neutral-900 dark:text-neutral-100 font-mono font-bold">{ewpPct.toFixed(1)}%</strong>
+              <span className="text-[10px] text-neutral-600 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans truncate" title={`EWP: ${truncFixed(ewpPct, 1)}% ((${formatNumber(totalJwpSpreadsheet)} - ${totalFrekSpreadsheet}) ÷ ${formatNumber(totalJwpSpreadsheet)})`}>
+                EWP: <strong className="text-neutral-900 dark:text-neutral-100 font-mono font-bold">{truncFixed(ewpPct, 1)}%</strong>
               </span>
             </div>
 
@@ -647,7 +640,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
               <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">s/YL</span>
               <span className="text-base md:text-lg leading-tight truncate font-bold text-brand-600 dark:text-brand-400">
-                {sylVal > 0 ? formatNumber(Math.round(sylVal)) : '—'} <span className="text-xs font-normal text-neutral-400 font-sans">btl</span>
+                {sylVal > 0 ? formatNumber(sylVal) : '—'} <span className="text-xs font-normal text-neutral-400 font-sans">btl</span>
               </span>
               <span className="text-[10px] text-neutral-500 dark:text-neutral-400 block mt-auto pt-1 leading-snug font-sans truncate">
                 Akm Pjl &divide; Akm JWP
@@ -1183,7 +1176,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     {formatNumber(totalJwpSpreadsheet)}
                   </td>
                   <td className="py-3 px-3 text-right font-mono text-sky-700 dark:text-sky-300">
-                    {totalJwpSpreadsheet > 0 ? Math.round(totalSold / totalJwpSpreadsheet) : 0}
+                    {totalJwpSpreadsheet > 0 ? Math.floor(totalSold / totalJwpSpreadsheet) : 0}
                   </td>
                   <td className="py-2.5 px-3 text-center font-mono border-l border-neutral-200 dark:border-neutral-700 bg-red-50/40 dark:bg-red-950/20">
                     <div className="font-bold text-red-600 dark:text-red-400 text-xs leading-tight">
