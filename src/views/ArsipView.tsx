@@ -17,7 +17,9 @@ import {
   Target,
   Database,
   RefreshCw,
-  Trash2
+  Trash2,
+  ChevronDown,
+  Settings2
 } from 'lucide-react';
 import { AppState } from '../types';
 import { formatNumber, formatDecimal, round2, formatPercent, getPeriodInfo, getBbStatusClass } from '../services/storage';
@@ -83,6 +85,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
 }) => {
   const [csvInput, setCsvInput] = useState('');
   const [showImport, setShowImport] = useState(false);
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [activeTab, setActiveTab] = useState<ArchiveTab>('item_sales');
   const [histMetric, setHistMetric] = useState<HistoricalMetric>('total');
   // Konfirmasi hapus memakai kotak di dalam aplikasi: window.confirm() diblokir diam-diam di APK/iframe.
@@ -241,63 +244,137 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
       )}
 
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="p-2 rounded-xl bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400">
-              <Archive className="w-5 h-5" />
-            </span>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
-                Arsip
-              </h1>
-            </div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm relative">
+        <div className="flex items-center gap-3">
+          <span className="p-2.5 rounded-xl bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400">
+            <Archive className="w-5 h-5" />
+          </span>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
+              Arsip Penjualan
+            </h1>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              Rekapitulasi tutup buku bulanan &amp; perbandingan kinerja
+            </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
+          {/* Tombol Utama: Simpan Bulan Ini */}
           <button
             onClick={() => {
               onSaveCurrentMonthArchive();
               showToast(`Bulan ${getPeriodInfo(state).label} berhasil diarsipkan!`, 'success');
             }}
-            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl bg-brand-600 hover:bg-brand-700 text-white shadow-sm shadow-brand-600/20 transition-all"
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold rounded-xl bg-brand-600 hover:bg-brand-700 active:scale-[0.99] text-white shadow-sm shadow-brand-600/20 transition-all cursor-pointer"
           >
-            <Save className="w-3.5 h-3.5" />
+            <Save className="w-4 h-4" />
             <span>Simpan Bulan Ini</span>
           </button>
 
-          {activeArchive && (
+          {/* Tombol Dropdown Opsi Arsip */}
+          <div className="relative">
             <button
-              onClick={() => {
-                onUnlockArchive(activeKey);
-                showToast(`Kunci arsip ${activeKey} dibuka untuk koreksi`, 'info');
-              }}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 transition-colors"
+              type="button"
+              onClick={() => setShowActionsMenu(prev => !prev)}
+              aria-label="Opsi Pengelolaan Arsip"
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold rounded-xl border transition-colors cursor-pointer ${
+                showActionsMenu
+                  ? 'bg-neutral-200 dark:bg-neutral-700 border-neutral-400 dark:border-neutral-600 text-neutral-900 dark:text-white'
+                  : 'bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+              }`}
             >
-              {activeArchive.terkunci ? <Lock className="w-3.5 h-3.5 text-amber-500" /> : <Unlock className="w-3.5 h-3.5 text-emerald-500" />}
-              <span>{activeArchive.terkunci ? 'Buka Kunci' : 'Terkunci (Siap Edit)'}</span>
+              <Settings2 className="w-3.5 h-3.5 text-neutral-500 dark:text-neutral-400" />
+              <span>Opsi</span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showActionsMenu ? 'rotate-180' : ''}`} />
             </button>
-          )}
 
-          {activeArchive && onDeleteArchive && !INITIAL_ARCHIVES[activeKey] && (
-            <button
-              onClick={() => setConfirmDeleteKey(activeKey)}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors"
-              title={`Hapus arsip ${activeKey}`}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Hapus Arsip Bulan Ini</span>
-            </button>
-          )}
+            {showActionsMenu && (
+              <>
+                {/* Backdrop dismiss */}
+                <div 
+                  className="fixed inset-0 z-20" 
+                  onClick={() => setShowActionsMenu(false)}
+                />
 
-          <button
-            onClick={() => setShowImport(!showImport)}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 transition-colors"
-          >
-            <Upload className="w-3.5 h-3.5 text-brand-600" />
-            <span>Impor CSV</span>
-          </button>
+                {/* Floating Menu Card */}
+                <div className="absolute right-0 top-full mt-2 z-30 w-56 p-1.5 bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 shadow-xl space-y-1 animate-in fade-in zoom-in-95">
+                  <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 border-b border-neutral-100 dark:border-neutral-700/60">
+                    Opsi Arsip ({activeKey})
+                  </div>
+
+                  {activeArchive && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowActionsMenu(false);
+                        onUnlockArchive(activeKey);
+                        showToast(
+                          activeArchive.terkunci 
+                            ? `Kunci arsip ${activeKey} dibuka untuk koreksi` 
+                            : `Arsip ${activeKey} telah dikunci`, 
+                          'info'
+                        );
+                      }}
+                      className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs font-medium rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 transition-colors cursor-pointer text-left"
+                    >
+                      {activeArchive.terkunci ? (
+                        <>
+                          <Unlock className="w-4 h-4 text-amber-500 shrink-0" />
+                          <div>
+                            <p className="font-semibold text-neutral-900 dark:text-neutral-100">Buka Kunci</p>
+                            <p className="text-[10px] text-neutral-500 dark:text-neutral-400">Izinkan koreksi angka arsip</p>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="w-4 h-4 text-emerald-500 shrink-0" />
+                          <div>
+                            <p className="font-semibold text-neutral-900 dark:text-neutral-100">Kunci Arsip</p>
+                            <p className="text-[10px] text-neutral-500 dark:text-neutral-400">Kunci data agar aman</p>
+                          </div>
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowActionsMenu(false);
+                      setShowImport(prev => !prev);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs font-medium rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 transition-colors cursor-pointer text-left"
+                  >
+                    <Upload className="w-4 h-4 text-brand-600 dark:text-brand-400 shrink-0" />
+                    <div>
+                      <p className="font-semibold text-neutral-900 dark:text-neutral-100">Impor Data CSV</p>
+                      <p className="text-[10px] text-neutral-500 dark:text-neutral-400">Unggah dari Excel/CSV</p>
+                    </div>
+                  </button>
+
+                  {activeArchive && onDeleteArchive && !INITIAL_ARCHIVES[activeKey] && (
+                    <div className="pt-1 border-t border-neutral-100 dark:border-neutral-700/60">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowActionsMenu(false);
+                          setConfirmDeleteKey(activeKey);
+                        }}
+                        className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs font-medium rounded-xl hover:bg-red-50 dark:hover:bg-red-950/40 text-red-600 dark:text-red-400 transition-colors cursor-pointer text-left"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-500 shrink-0" />
+                        <div>
+                          <p className="font-semibold">Hapus Arsip Ini</p>
+                          <p className="text-[10px] text-red-500/80">Hapus rekapan {activeKey}</p>
+                        </div>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
