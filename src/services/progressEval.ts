@@ -57,6 +57,10 @@ export interface WeekCompare {
   jwpPrev: number | null;
   sylNow: number | null;
   sylPrev: number | null;
+  vCur: number[]; // penjualan per varian [YO,OM,OS,YT] pada hari yang dibandingkan (minggu ini)
+  vPrev: number[]; // idem, minggu lalu
+  l250Cur: number | null; // rata-rata YL < 250 per hari yang dibandingkan (null = belum tercatat)
+  l250Prev: number | null;
 }
 
 export interface EvalUnit {
@@ -68,7 +72,7 @@ export interface EvalUnit {
   tgHarian: number;
   progress: ProgressSummary;
   week: WeekCompare;
-  /** rata-rata penjualan per hari jual untuk tiap minggu (null = belum ada data minggu itu) */
+  /** rata-rata penjualan per hari kalender (pembagi 7 untuk minggu Min–Sab penuh) untuk tiap minggu (null = belum ada data minggu itu) */
   trend: (number | null)[];
   weekSums: number[];
   /** jumlah botol per minggu per varian: [minggu][YO,OM,OS,YT] */
@@ -82,6 +86,7 @@ export interface WeekCol {
   start: number;
   end: number;
   days: number; // jumlah hari jual (<= tanggal update)
+  calDays: number; // jumlah hari kalender (Min–Sab, Minggu ikut dihitung) s/d tanggal update = pembagi rata-rata mingguan
   current: boolean; // minggu yang memuat tanggal update
   future: boolean; // belum ada hari jual sama sekali
 }
@@ -191,7 +196,8 @@ export function buildProgressEval(state: AppState, weeks: WeekDef[]): ProgressEv
   const weekCols: WeekCol[] = safeWeeks.map((w, i) => {
     let days = 0;
     for (let d = w.start; d <= Math.min(w.end, updateDay); d++) if (hasData(d)) days++;
-    return { id: i + 1, start: w.start, end: w.end, days, current: i === weekIdx, future: days === 0 };
+    const calDays = Math.max(0, Math.min(w.end, updateDay) - w.start + 1);
+    return { id: i + 1, start: w.start, end: w.end, days, calDays, current: i === weekIdx, future: days === 0 };
   });
 
   const streakOf = (trend: (number | null)[]): number => {
@@ -204,6 +210,10 @@ export function buildProgressEval(state: AppState, weeks: WeekDef[]): ProgressEv
     return n;
   };
 
+  // Minggu berjalan yang belum selesai tidak ikut menghitung "Turun N mgg" (rata-ratanya hanya dari sebagian hari)
+  const forStreak = (trend: (number | null)[]) =>
+    trend.map((v, wi) => (weekCols[wi].current && updateDay < weekCols[wi].end ? null : v));
+
   const units: EvalUnit[] = activeIdx.map(i => {
     const t = state.tkus[i];
     const accNow = (t.penjualanAkm || []).reduce((a, b) => a + (b || 0), 0);
@@ -214,6 +224,29 @@ export function buildProgressEval(state: AppState, weeks: WeekDef[]): ProgressEv
     const prev = cmpDays.reduce((s, d) => s + soldOf(recOf(i, d - 7)), 0);
     const bbCur = cmpDays.reduce((s, d) => s + (recOf(i, d)?.bb || 0), 0);
     const bbPrev = cmpDays.reduce((s, d) => s + (recOf(i, d - 7)?.bb || 0), 0);
+
+    const vCur = [0, 0, 0, 0];
+    const vPrev = [0, 0, 0, 0];
+    cmpDays.forEach(d => {
+      const a = recOf(i, d);
+      const b = recOf(i, d - 7);
+      for (let v = 0; v < 4; v++) {
+        vCur[v] += a?.v?.[v] || 0;
+        vPrev[v] += b?.v?.[v] || 0;
+      }
+    });
+    const avgL250 = (days: number[]): number | null => {
+      let sum = 0;
+      let cnt = 0;
+      days.forEach(d => {
+        const x = recOf(i, d)?.l250;
+        if (x !== undefined && x !== null) {
+          sum += Number(x) || 0;
+          cnt++;
+        }
+      });
+      return cnt > 0 ? sum / cnt : null;
+    };
 
     const hasPrevDay = updateDay - 7 >= 1;
     let last7 = 0;
@@ -244,7 +277,11 @@ export function buildProgressEval(state: AppState, weeks: WeekDef[]): ProgressEv
       jwpNow,
       jwpPrev,
       sylNow: jwpNow > 0 ? Math.floor(accNow / jwpNow) : null,
-      sylPrev: accPrev !== null && jwpPrev && jwpPrev > 0 ? Math.floor(accPrev / jwpPrev) : null
+      sylPrev: accPrev !== null && jwpPrev && jwpPrev > 0 ? Math.floor(accPrev / jwpPrev) : null,
+      vCur,
+      vPrev,
+      l250Cur: avgL250(cmpDays),
+      l250Prev: avgL250(cmpDays.map(d => d - 7))
     };
 
     const weekSums: number[] = [];
@@ -260,7 +297,7 @@ export function buildProgressEval(state: AppState, weeks: WeekDef[]): ProgressEv
       }
       weekSums.push(sum);
       variantSums.push(vs);
-      return weekCols[wi].days > 0 ? sum / weekCols[wi].days : null;
+      return weekCols[wi].days > 0 && weekCols[wi].calDays > 0 ? sum / weekCols[wi].calDays : null;
     });
 
     return {
@@ -275,7 +312,7 @@ export function buildProgressEval(state: AppState, weeks: WeekDef[]): ProgressEv
       trend,
       weekSums,
       variantSums,
-      streak: streakOf(trend)
+      streak: streakOf(forStreak(trend))
     };
   });
 
@@ -295,7 +332,7 @@ export function buildProgressEval(state: AppState, weeks: WeekDef[]): ProgressEv
     const cells = cmpDays.map((_, k) => wk.reduce((s, w) => s + (w.cells[k] || 0), 0));
     const weekSums = safeWeeks.map((_, wi) => list.reduce((s, u) => s + u.weekSums[wi], 0));
     const variantSums = safeWeeks.map((_, wi) => [0, 1, 2, 3].map(v => list.reduce((s, u) => s + u.variantSums[wi][v], 0)));
-    const trend = weekSums.map((s, wi) => (weekCols[wi].days > 0 ? s / weekCols[wi].days : null));
+    const trend = weekSums.map((s, wi) => (weekCols[wi].days > 0 && weekCols[wi].calDays > 0 ? s / weekCols[wi].calDays : null));
     return {
       key: `agg-${name}`,
       name,
@@ -326,12 +363,16 @@ export function buildProgressEval(state: AppState, weeks: WeekDef[]): ProgressEv
         jwpNow,
         jwpPrev,
         sylNow: jwpNow > 0 ? Math.floor(accNow / jwpNow) : null,
-        sylPrev: accPrev !== null && jwpPrev && jwpPrev > 0 ? Math.floor(accPrev / jwpPrev) : null
+        sylPrev: accPrev !== null && jwpPrev && jwpPrev > 0 ? Math.floor(accPrev / jwpPrev) : null,
+        vCur: [0, 1, 2, 3].map(v => wk.reduce((a, w) => a + (w.vCur[v] || 0), 0)),
+        vPrev: [0, 1, 2, 3].map(v => wk.reduce((a, w) => a + (w.vPrev[v] || 0), 0)),
+        l250Cur: sumNullable(wk.map(w => w.l250Cur)),
+        l250Prev: sumNullable(wk.map(w => w.l250Prev))
       },
       trend,
       weekSums,
       variantSums,
-      streak: streakOf(trend)
+      streak: streakOf(forStreak(trend))
     };
   };
 
@@ -339,7 +380,7 @@ export function buildProgressEval(state: AppState, weeks: WeekDef[]): ProgressEv
     VCODES.map((code, v) => ({
       code,
       avg: weekCols.map((c, wi) =>
-        c.days > 0 ? list.reduce((s, u) => s + u.variantSums[wi][v], 0) / c.days : null
+        c.days > 0 && c.calDays > 0 ? list.reduce((s, u) => s + u.variantSums[wi][v], 0) / c.calDays : null
       )
     }));
 

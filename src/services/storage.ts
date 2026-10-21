@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { AppState, TkuItem, DailySalesRecord, SupabaseConfig, ArchiveRecord, MonthSnapshot, TkuMonthlyFields } from '../types';
+import { AppState, TkuItem, DailySalesRecord, SupabaseConfig, ArchiveRecord, ArchiveRow, SisaStockRecord, MonthSnapshot, TkuMonthlyFields } from '../types';
 import {
   INITIAL_TKUS,
   INITIAL_TARGET_BL,
@@ -69,6 +69,34 @@ const DATA_VERSION = '20260930_OFFICIAL_SPREADSHEET_V11';
 // Bulan yang datanya sudah "ditanam" dari spreadsheet resmi (INITIAL_TKUS, INITIAL_PJD, dst.).
 // Bulan lain TIDAK boleh memakai angka dasar ini (supaya bulan baru benar-benar kosong).
 export const SEED_PERIOD = '2026-09';
+
+// ---- Vault Cadangan Abadi Sisa Stock & Data (Anti-Reset & Tahan Perubahan Kode) ----
+export const SISA_STOCK_BACKUP_KEY = 'yk_sisa_stock_vault_v1';
+export const SAFETY_STATE_BACKUP_KEY = 'yk_state_safety_vault_v1';
+
+export function saveSisaStockBackup(stock: Record<number, SisaStockRecord> | undefined): void {
+  try {
+    if (stock && typeof stock === 'object' && Object.keys(stock).length > 0) {
+      localStorage.setItem(SISA_STOCK_BACKUP_KEY, JSON.stringify({
+        savedAt: new Date().toISOString(),
+        stock
+      }));
+    }
+  } catch (_) {}
+}
+
+export function loadSisaStockBackup(): Record<number, SisaStockRecord> {
+  try {
+    const raw = localStorage.getItem(SISA_STOCK_BACKUP_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.stock && typeof parsed.stock === 'object') {
+        return parsed.stock;
+      }
+    }
+  } catch (_) {}
+  return {};
+}
 
 // ---- Supabase (cloud sync) ----
 // Data disimpan sebagai satu baris JSON di tabel app_store (key "main_state"),
@@ -341,7 +369,11 @@ const syncableOf = (state: AppState): Syncable => pickSyncable(sanitizeStateForC
 export function reapplyMergedState(prev: AppState, start: AppState, merged: AppState): AppState {
   if (prev === start) return merged;
   const r = mergeSyncable(syncableOf(start), syncableOf(prev), syncableOf(merged), { guard: false });
-  return applySyncable(prev, r.merged);
+  // Kalau gabungan ini membawa pindah bulan kerja dari cloud (lebih baru dari bulan di layar), terapkan juga.
+  const mKey = getPeriodInfo(merged).key;
+  const followPeriod = mKey !== getPeriodInfo(start).key && mKey > getPeriodInfo(prev).key;
+  const next = applySyncable(followPeriod ? { ...prev, activePeriod: `${mKey}-01` } : prev, r.merged);
+  return followPeriod ? followCloudPeriod(next, mKey) : next;
 }
 
 // Penerima hasil gabungan untuk SEMUA jalur simpan (termasuk simpan paksa), didaftarkan oleh App.
@@ -476,7 +508,15 @@ export async function loadStateFromSupabase(
     if (!base && localClean) base = syncableOf(local);
 
     const r = mergeSyncable(base, syncableOf(local), remoteSync, { guard: false });
-    let merged = applySyncable(local, r.merged);
+    // Bulan kerja (activePeriod) bukan bagian data yang digabung, jadi diikuti terpisah:
+    // kalau cloud sudah di bulan yang LEBIH BARU, HP ini ikut pindah (tidak pernah mundur otomatis).
+    const remotePeriodKey = String((full.value as any)?.activePeriod || '').slice(0, 7);
+    const followPeriod = shouldFollowCloudPeriod(local, remotePeriodKey);
+    const mergedSync = followPeriod
+      ? resolveMergeForFollow(r.merged, syncableOf(local), remoteSync, base, getPeriodInfo(local).key, remotePeriodKey)
+      : r.merged;
+    let merged = applySyncable(followPeriod ? { ...local, activePeriod: `${remotePeriodKey}-01` } : local, mergedSync);
+    if (followPeriod) merged = followCloudPeriod(merged, remotePeriodKey);
 
     // Tanggal aktif harus mengikuti bulan kerja yang tersimpan di cloud jika beda
     const remoteAct = computeActiveDate(merged.activePeriod);
@@ -538,7 +578,14 @@ export async function saveStateToSupabase(
         expectTok = full.tok;
         if (full.exists) {
           const r = mergeSyncable(base, localSync, pickSyncable(full.value || {}), { guard: !force });
-          working = applySyncable(state, r.merged);
+          // Jangan sampai HP yang masih di bulan lama menurunkan bulan kerja di cloud: ikuti bulan yang lebih baru.
+          const remotePeriodKey = String((full.value as any)?.activePeriod || '').slice(0, 7);
+          const followPeriod = shouldFollowCloudPeriod(state, remotePeriodKey);
+          const mergedSync = followPeriod
+            ? resolveMergeForFollow(r.merged, localSync, pickSyncable(full.value || {}), base, getPeriodInfo(state).key, remotePeriodKey)
+            : r.merged;
+          working = applySyncable(followPeriod ? { ...state, activePeriod: `${remotePeriodKey}-01` } : state, mergedSync);
+          if (followPeriod) working = followCloudPeriod(working, remotePeriodKey);
         }
       }
 
@@ -1194,6 +1241,119 @@ export function switchWorkingPeriod(state: AppState, newKey: string): AppState {
   });
 }
 
+// ---- Sinkron bulan kerja antar HP ----
+// Bulan kerja (activePeriod) dulu hanya tersimpan per HP, sehingga HP lain tetap di bulan lama.
+// Aturan sekarang: bulan kerja di cloud yang LEBIH BARU diikuti semua HP (hanya maju, tidak pernah mundur otomatis).
+// Kalau admin sengaja memilih bulan lain lewat Pengaturan, pilihan itu dihormati selama aplikasi belum dimuat ulang.
+let manualPeriodKey: string | null = null;
+
+export function markPeriodManualSwitch(key: string): void {
+  manualPeriodKey = isValidPeriodKey(key) ? key : null;
+}
+
+// Kunci bulan kalender HP saat ini ("2026-10").
+export function getCalendarPeriodKey(now: Date = new Date()): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// Bulan kerja sudah tertinggal dari bulan kalender (mis. kalender Oktober, bulan kerja masih September).
+export function isPeriodBehindCalendar(state: AppState, now: Date = new Date()): boolean {
+  return getPeriodInfo(state).key < getCalendarPeriodKey(now);
+}
+
+// Data yang terikat ke SATU bulan kerja dan tidak dihitung ulang dari penjualan harian:
+// rencana harian (breakdown) dan target. Saat HP pindah bulan mengikuti cloud, bagian ini WAJIB memakai
+// versi cloud (milik bulan baru), supaya sisa isian lama di HP ini tidak bercampur ke bulan baru.
+const MONTH_BOUND_KEYS = ['breakdown', 'breakdownPerVariant', 'targetPerVariant', 'targetBulanLalu', 'targetTahunLalu'] as const;
+const FOLLOW_BACKUP_KEY = 'yakult_period_follow_backup_v1';
+let followHadLocalEdits = false;
+
+// Dibaca sekali oleh tampilan untuk menambah catatan di pesan "bulan kerja otomatis pindah".
+export function consumeFollowLocalEditsFlag(): boolean {
+  const v = followHadLocalEdits;
+  followHadLocalEdits = false;
+  return v;
+}
+
+// Gabungan khusus saat ikut pindah bulan: penjualan harian, arsip, profil tetap digabung seperti biasa
+// (per tanggal, aman), tetapi target & rencana harian diambil dari cloud. Kalau HP ini punya ubahan
+// target/rencana yang belum terkirim, salinannya disimpan di HP ini (tidak dibuang diam-diam).
+function resolveMergeForFollow(
+  merged: Syncable,
+  local: Syncable,
+  remote: Syncable,
+  base: Syncable | null,
+  fromKey: string,
+  toKey: string
+): Syncable {
+  const out: Syncable = { ...merged };
+  const diverged: Syncable = {};
+  let any = false;
+  MONTH_BOUND_KEYS.forEach(k => {
+    if (remote[k] !== undefined) out[k] = remote[k];
+    if (base && local[k] !== undefined && !deepEq(local[k], base[k]) && !deepEq(local[k], remote[k])) {
+      diverged[k] = local[k];
+      any = true;
+    }
+  });
+  if (any) {
+    followHadLocalEdits = true;
+    try {
+      localStorage.setItem(
+        FOLLOW_BACKUP_KEY,
+        JSON.stringify({ savedAt: new Date().toISOString(), fromPeriod: fromKey, toPeriod: toKey, data: diverged })
+      );
+    } catch (_) {
+      // kuota penuh: abaikan, data bulan baru tetap aman
+    }
+  }
+  return out;
+}
+
+export function shouldFollowCloudPeriod(local: AppState, remoteKey: string): boolean {
+  if (!isValidPeriodKey(remoteKey)) return false;
+  const localKey = getPeriodInfo(local).key;
+  if (remoteKey <= localKey) return false;
+  if (manualPeriodKey === localKey) return false;
+  return true;
+}
+
+// Pindah bulan kerja HP ini mengikuti cloud. Data penjualan (pjd), arsip, dan monthStore tidak diubah:
+// bagian bulan kerja (target, breakdown, profil) sudah ikut tergabung dari cloud sebelum fungsi ini dipanggil.
+export function followCloudPeriod(state: AppState, remoteKey: string): AppState {
+  if (!isValidPeriodKey(remoteKey)) return state;
+  const period = `${remoteKey}-01`;
+  const act = computeActiveDate(period);
+  const pjdAct = state.pjd?.[act.date] || {};
+  const todayInputs: Record<number, DailySalesRecord> = {};
+  (state.tkus || []).forEach((t, idx) => {
+    todayInputs[idx] = pjdAct[idx]
+      ? { ...pjdAct[idx] }
+      : {
+          v: [0, 0, 0, 0],
+          b: [0, 0, 0, 0],
+          sold: 0,
+          bb: 0,
+          pdmV: [0, 0, 0, 0],
+          pdm: 0,
+          yl: t.jumlahYl || 10,
+          ar: t.jumlahArea || 10
+        };
+  });
+  return synchronizeAppState({
+    ...state,
+    activePeriod: period,
+    activeDate: act.date,
+    currentDayNum: act.day,
+    pembagiHari: act.day,
+    pembagiHariMode: 'tanggal',
+    pembagiBreakdown: act.day,
+    pembagiKhususTku: {},
+    pembagiKhususBreakdownTku: {},
+    todayInputs
+  });
+}
+
 // Daftar bulan yang boleh dipilih: dari bulan data resmi pertama sampai bulan kalender + 1,
 // ditambah bulan apa pun yang sudah punya data tersimpan.
 export function listSelectablePeriods(state: AppState, now: Date = new Date()): string[] {
@@ -1320,6 +1480,77 @@ export async function inspectCloudData(config: SupabaseConfig | undefined | null
   }
 }
 
+// Susun arsip satu bulan dari angka kerja saat ini.
+export function buildArchiveFromState(state: AppState): ArchiveRecord {
+  const curP = getPeriodInfo(state);
+  const currentKey = curP.key;
+  const divider = getPembagiHari(state) || state.pembagiHari || state.currentDayNum || 1;
+
+  // Potong ke 2 desimal tanpa pembulatan ke atas (Math.floor)
+  const trunc2 = (n: number): number => Math.floor(n * 100 + 1e-9) / 100;
+
+  const rows: ArchiveRow[] = state.tkus.filter(t => t.aktif).map((t) => {
+    const idx = state.tkus.indexOf(t);
+    const sold = t.penjualanAkm.reduce((a, b) => a + b, 0);
+    const akmBb = (t.bbAkm || [0, 0, 0, 0]).reduce((a, b) => a + (Number(b) || 0), 0);
+    const targetHarian = t.targetHarian || 0;
+    const bulanLalu = state.targetBulanLalu[idx] || 0;
+    const tahunLalu = state.targetTahunLalu[idx] || 0;
+    const rataHarian = divider > 0 ? Math.floor(sold / divider) : 0;
+    const vsTargetPct = targetHarian > 0 ? trunc2((rataHarian / targetHarian) * 1000) / 1000 : 1;
+    const vsLmPct = bulanLalu > 0 ? trunc2((rataHarian / bulanLalu) * 1000) / 1000 : 1;
+    const vsLyPct = tahunLalu > 0 ? trunc2((rataHarian / tahunLalu) * 1000) / 1000 : 1;
+    const akmBbPct = (sold + akmBb) > 0 ? trunc2((akmBb / (sold + akmBb)) * 1000) / 1000 : 0;
+    const akmJwp = t.akmJwp || 0;
+    const sYl = akmJwp > 0 ? Math.floor(sold / akmJwp) : 0;
+    const absenYl = t.absenYl || 0;
+    const frekuensiAbsen = t.frekuensiAbsen || 0;
+    const jumlahYl = t.jumlahYl || 0;
+    const jumlahArea = t.jumlahArea || 0;
+    const coverageArea = jumlahArea > 0 ? trunc2((jumlahYl / jumlahArea) * 1000) / 1000 : 1;
+    const rataVarian: [number, number, number, number] = [
+      divider > 0 ? Math.floor(t.penjualanAkm[0] / divider) : 0,
+      divider > 0 ? Math.floor(t.penjualanAkm[1] / divider) : 0,
+      divider > 0 ? Math.floor(t.penjualanAkm[2] / divider) : 0,
+      divider > 0 ? Math.floor(t.penjualanAkm[3] / divider) : 0
+    ];
+
+    return {
+      nama: t.nama,
+      rayon: t.rayon,
+      varian: [...t.penjualanAkm] as [number, number, number, number],
+      total: sold,
+      targetHarian,
+      vsTargetPct,
+      bulanLalu,
+      vsLmPct,
+      tahunLalu,
+      vsLyPct,
+      akmBb,
+      akmBbPct,
+      akmJwp,
+      sYl,
+      absenYl,
+      frekuensiAbsen,
+      jumlahYl,
+      jumlahArea,
+      coverageArea,
+      l250: t.l250 || 0,
+      l300: t.l300 || 0,
+      rataVarian,
+      rataHarian
+    };
+  });
+
+  return {
+    periode: currentKey,
+    namaBulan: curP.label,
+    d: curP.daysInMonth,
+    terkunci: true,
+    rows
+  };
+}
+
 export function getDefaultState(): AppState {
   // Bulan bawaan = bulan data resmi (SEED_PERIOD). Bulan lain dibuka lewat pilihan bulan di Pengaturan,
   // supaya angka September tidak tampil di bawah label bulan kalender yang berbeda.
@@ -1425,7 +1656,7 @@ export function getDefaultState(): AppState {
     todayInputs,
     pjd,
     hjd: {},
-    sisaStock: {},
+    sisaStock: loadSisaStockBackup(),
     bbHarian,
     quotes: [...INITIAL_QUOTES],
     archives: { ...INITIAL_ARCHIVES },
@@ -1438,7 +1669,21 @@ export function getDefaultState(): AppState {
     theme: 'light'
   };
 
-  return synchronizeAppState(baseState);
+  const seedState = synchronizeAppState(baseState);
+  const nowKey = getCalendarPeriodKey();
+  // Jika kalender sudah di bulan yang lebih baru (mis. Oktober 2026),
+  // arsipkan data September 2026 secara resmi dan mulai langsung di bulan berjalan!
+  if (nowKey > SEED_PERIOD) {
+    const sepArchive = buildArchiveFromState(seedState);
+    const withArchive: AppState = {
+      ...seedState,
+      archives: { ...seedState.archives, [SEED_PERIOD]: sepArchive },
+      monthStore: { ...seedState.monthStore, [SEED_PERIOD]: captureMonthSnapshot(seedState, SEED_PERIOD) }
+    };
+    return switchWorkingPeriod(withArchive, nowKey);
+  }
+
+  return seedState;
 }
 
 export function loadAppState(): AppState {
@@ -1507,6 +1752,11 @@ export function loadAppState(): AppState {
         !parsed.targetPerVariant?.YO || 
         Object.keys(parsed.targetPerVariant?.YO || {}).length < 10;
 
+      const backupStock = loadSisaStockBackup();
+      const userStock = (parsed.sisaStock && typeof parsed.sisaStock === 'object' && Object.keys(parsed.sisaStock).length > 0)
+        ? { ...backupStock, ...parsed.sisaStock }
+        : backupStock;
+
       if (needsFreshMaster) {
         const vaultCfg = loadSupabaseConfigFromVault();
         const finalCfg = (parsed.supabaseConfig && parsed.supabaseConfig.u) ? parsed.supabaseConfig : vaultCfg;
@@ -1518,11 +1768,6 @@ export function loadAppState(): AppState {
         if (parsedPeriodKey && parsedPeriodKey !== SEED_PERIOD && Array.isArray(parsed.tkus)) {
           try { carriedStore[parsedPeriodKey] = captureMonthSnapshot(parsed as AppState, parsedPeriodKey); } catch (_) {}
         }
-        const keepOtherMonths = <T,>(src: Record<string, T> | undefined): Record<string, T> => {
-          const out: Record<string, T> = {};
-          Object.keys(src || {}).forEach(d => { if (!d.startsWith(SEED_PERIOD + '-')) out[d] = (src as Record<string, T>)[d]; });
-          return out;
-        };
         const userArchives: Record<string, ArchiveRecord> = {};
         Object.keys(parsed.archives || {}).forEach(k => {
           if (!defaultState.archives[k]) userArchives[k] = parsed.archives[k];
@@ -1534,14 +1779,23 @@ export function loadAppState(): AppState {
           activeTkuId: activeSession?.tkuId ?? defaultState.activeTkuId,
           theme: parsed.theme || defaultState.theme,
           monthStore: carriedStore,
-          pjd: { ...defaultState.pjd, ...keepOtherMonths(parsed.pjd) },
-          hjd: { ...(defaultState.hjd || {}), ...keepOtherMonths(parsed.hjd) },
-          sisaStock: parsed.sisaStock || {},
+          pjd: { ...defaultState.pjd, ...(parsed.pjd || {}) },
+          hjd: { ...(defaultState.hjd || {}), ...(parsed.hjd || {}) },
+          sisaStock: userStock,
+          breakdown: parsed.breakdown || defaultState.breakdown,
+          breakdownPerVariant: parsed.breakdownPerVariant || defaultState.breakdownPerVariant,
+          targetBulanLalu: parsed.targetBulanLalu || defaultState.targetBulanLalu,
+          targetTahunLalu: parsed.targetTahunLalu || defaultState.targetTahunLalu,
+          targetPerVariant: parsed.targetPerVariant || defaultState.targetPerVariant,
+          todayInputs: parsed.todayInputs || defaultState.todayInputs,
           archives: { ...defaultState.archives, ...userArchives }
         };
       }
 
-      const merged: AppState = { ...defaultState, ...parsed };
+      const merged: AppState = { ...defaultState, ...parsed, sisaStock: userStock };
+      if (userStock && Object.keys(userStock).length > 0) {
+        saveSisaStockBackup(userStock);
+      }
       merged.role = activeSession ? activeSession.role : null;
       if (activeSession && activeSession.tkuId !== undefined) {
         merged.activeTkuId = activeSession.tkuId;
@@ -1855,6 +2109,27 @@ export function synchronizeAppState(state: AppState): AppState {
 export function saveAppState(state: AppState) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+
+    // 1. Cadangan abadi sisa stok ke vault terisolasi (tahan restart/update kode)
+    if (state.sisaStock && typeof state.sisaStock === 'object' && Object.keys(state.sisaStock).length > 0) {
+      saveSisaStockBackup(state.sisaStock);
+    }
+
+    // 2. Cadangan keselamatan data utama (anti-kehilangan jika STORAGE_KEY bermasalah)
+    try {
+      localStorage.setItem(SAFETY_STATE_BACKUP_KEY, JSON.stringify({
+        savedAt: new Date().toISOString(),
+        activePeriod: state.activePeriod,
+        pjd: state.pjd,
+        sisaStock: state.sisaStock,
+        archives: state.archives,
+        monthStore: state.monthStore,
+        targetPerVariant: state.targetPerVariant,
+        breakdown: state.breakdown,
+        breakdownPerVariant: state.breakdownPerVariant
+      }));
+    } catch (_) {}
+
     if (state.supabaseConfig?.u || state.supabaseConfig?.k) {
       saveSupabaseConfigToVault(state.supabaseConfig);
     }

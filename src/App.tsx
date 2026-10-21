@@ -22,6 +22,11 @@ import {
   switchWorkingPeriod,
   saveMonthBackupToSupabase,
   getDaysInMonthOfKey,
+  markPeriodManualSwitch,
+  consumeFollowLocalEditsFlag,
+  getCalendarPeriodKey,
+  isPeriodBehindCalendar,
+  periodLabelOf,
   round2,
   recordSessionActivity,
   clearAppSession,
@@ -29,11 +34,15 @@ import {
   isSessionExpired,
   INACTIVITY_TIMEOUT_MS,
   SESSION_EXPIRED_FLAG_KEY,
-  SEED_PERIOD
+  SEED_PERIOD,
+  buildArchiveFromState,
+  saveSisaStockBackup,
+  loadSisaStockBackup
 } from './services/storage';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { ToastContainer, ToastMessage } from './components/Toast';
+import { useConfirm } from './components/ConfirmDialog';
 
 import { PanelLeft } from 'lucide-react';
 
@@ -51,80 +60,10 @@ import { PengaturanView } from './views/PengaturanView';
 import { TkuInputView } from './views/TkuInputView';
 import { SisaStockView } from './views/SisaStockView';
 
-// Susun arsip satu bulan dari angka kerja saat ini.
-function buildArchiveFromState(state: AppState): ArchiveRecord {
-  const curP = getPeriodInfo(state);
-  const currentKey = curP.key;
-  const divider = getPembagiHari(state) || state.pembagiHari || state.currentDayNum || 1;
-
-  // Potong ke 2 desimal tanpa pembulatan ke atas (Math.floor)
-  const trunc2 = (n: number): number => Math.floor(n * 100 + 1e-9) / 100;
-
-  const rows: ArchiveRow[] = state.tkus.filter(t => t.aktif).map((t) => {
-    const idx = state.tkus.indexOf(t);
-    const sold = t.penjualanAkm.reduce((a, b) => a + b, 0);
-    const akmBb = (t.bbAkm || [0, 0, 0, 0]).reduce((a, b) => a + (Number(b) || 0), 0);
-    const targetHarian = t.targetHarian || 0;
-    const bulanLalu = state.targetBulanLalu[idx] || 0;
-    const tahunLalu = state.targetTahunLalu[idx] || 0;
-    const rataHarian = divider > 0 ? Math.floor(sold / divider) : 0;
-    const vsTargetPct = targetHarian > 0 ? trunc2((rataHarian / targetHarian) * 1000) / 1000 : 1;
-    const vsLmPct = bulanLalu > 0 ? trunc2((rataHarian / bulanLalu) * 1000) / 1000 : 1;
-    const vsLyPct = tahunLalu > 0 ? trunc2((rataHarian / tahunLalu) * 1000) / 1000 : 1;
-    const akmBbPct = (sold + akmBb) > 0 ? trunc2((akmBb / (sold + akmBb)) * 1000) / 1000 : 0;
-    const akmJwp = t.akmJwp || 0;
-    const sYl = akmJwp > 0 ? Math.floor(sold / akmJwp) : 0;
-    const absenYl = t.absenYl || 0;
-    const frekuensiAbsen = t.frekuensiAbsen || 0;
-    const jumlahYl = t.jumlahYl || 0;
-    const jumlahArea = t.jumlahArea || 0;
-    const coverageArea = jumlahArea > 0 ? trunc2((jumlahYl / jumlahArea) * 1000) / 1000 : 1;
-    const rataVarian: [number, number, number, number] = [
-      divider > 0 ? Math.floor(t.penjualanAkm[0] / divider) : 0,
-      divider > 0 ? Math.floor(t.penjualanAkm[1] / divider) : 0,
-      divider > 0 ? Math.floor(t.penjualanAkm[2] / divider) : 0,
-      divider > 0 ? Math.floor(t.penjualanAkm[3] / divider) : 0
-    ];
-
-    return {
-      nama: t.nama,
-      rayon: t.rayon,
-      varian: [...t.penjualanAkm] as [number, number, number, number],
-      total: sold,
-      targetHarian,
-      vsTargetPct,
-      bulanLalu,
-      vsLmPct,
-      tahunLalu,
-      vsLyPct,
-      akmBb,
-      akmBbPct,
-      akmJwp,
-      sYl,
-      absenYl,
-      frekuensiAbsen,
-      jumlahYl,
-      jumlahArea,
-      coverageArea,
-      l250: t.l250 || 0,
-      l300: t.l300 || 0,
-      rataVarian,
-      rataHarian
-    };
-  });
-
-  return {
-    periode: currentKey,
-    namaBulan: curP.label,
-    d: state.currentDayNum,
-    terkunci: true,
-    rows
-  };
-}
-
 export default function App() {
   const [state, setState] = useState<AppState>(() => loadAppState());
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const { ask: askConfirm, dialog: confirmDialog } = useConfirm();
   // Status sinkronisasi cloud
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
@@ -236,6 +175,11 @@ export default function App() {
           // Terapkan sebagai selisih supaya ketikan baru selama proses tarik tidak tertimpa
           setState(prev => reapplyMergedState(prev, currentState, result.state));
           setSyncStatus('synced');
+          const pBefore = getPeriodInfo(currentState);
+          const pAfter = getPeriodInfo(result.state);
+          if (pAfter.key !== pBefore.key) {
+            showToast(`Bulan kerja otomatis pindah ke ${pAfter.label} mengikuti cloud (admin sudah pindah bulan).${consumeFollowLocalEditsFlag() ? ' Ada ubahan target/rencana di HP ini yang belum terkirim; salinannya disimpan di HP ini, hubungi admin.' : ''}`, 'info');
+          }
           if (isManual) showToast('Sinkronisasi cloud berhasil! Seluruh data dan metrik telah disesuaikan.', 'success');
         } else {
           setState(prev => synchronizeAppState(prev));
@@ -341,6 +285,11 @@ export default function App() {
   useEffect(() => {
     setMergedStateHandler((merged, start) => {
       setState(prev => reapplyMergedState(prev, start, merged));
+      const pStart = getPeriodInfo(start);
+      const pMerged = getPeriodInfo(merged);
+      if (pMerged.key > pStart.key) {
+        showToast(`Bulan kerja otomatis pindah ke ${pMerged.label} mengikuti cloud (admin sudah pindah bulan).${consumeFollowLocalEditsFlag() ? ' Ada ubahan target/rencana di HP ini yang belum terkirim; salinannya disimpan di HP ini, hubungi admin.' : ''}`, 'info');
+      }
     });
     return () => setMergedStateHandler(null);
   }, []);
@@ -893,12 +842,24 @@ export default function App() {
     });
   };
 
-  // Sisa stock: simpan = MENIMPA rekaman TKU tsb (bukan dijumlah dengan data lama)
-  const handleSaveSisaStock = (tkuId: number, record: SisaStockRecord) => {
-    setState(prev => ({
-      ...prev,
-      sisaStock: { ...(prev.sisaStock || {}), [tkuId]: record }
-    }));
+  // Sisa stock: simpan = MENIMPA rekaman TKU tsb, aman tersimpan ke vault lokal & langsung dorong ke Supabase
+  const handleSaveSisaStock = async (tkuId: number, record: SisaStockRecord) => {
+    const nextStock = { ...(state.sisaStock || {}), [tkuId]: record };
+    // 1. Amankan ke vault terisolasi seketika (anti-kehilangan)
+    saveSisaStockBackup(nextStock);
+
+    // 2. Terapkan ke state dan simpan permanen
+    const nextState = { ...state, sisaStock: nextStock };
+    setState(nextState);
+    saveAppState(nextState);
+
+    const tkuName = state.tkus.find(t => t.id === tkuId)?.nama || `TKU ${tkuId}`;
+    showToast(`Sisa stock ${tkuName} berhasil disimpan & diamankan!`, 'success');
+
+    // 3. Langsung kirim ke database Supabase seketika jika terhubung
+    if (state.supabaseConfig.u && state.supabaseConfig.k) {
+      saveStateToSupabase(nextState, false);
+    }
   };
 
   const handleUpdateBreakdownDay = (tkuIdx: number, variant: 'ALL' | VariantCode, dayIdx: number, val: number) => {
@@ -1103,6 +1064,7 @@ export default function App() {
   const handleSwitchPeriod = async (newKey: string) => {
     const curKey = getPeriodInfo(state).key;
     if (!newKey || newKey === curKey) return;
+    markPeriodManualSwitch(newKey); // pilihan sengaja admin: tidak ditarik balik oleh sinkron bulan kerja
     const now = new Date();
     const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
@@ -1488,6 +1450,47 @@ export default function App() {
         {/* Content Viewport */}
         {/* @container: kolom di dalam halaman menyesuaikan lebar AREA ISI (bukan lebar layar), jadi tetap lega saat menu samping terbuka */}
         <main className={`flex-1 @container p-4 md:p-6 lg:p-8 min-w-0 pb-24 md:pb-6 lg:pb-8`}>
+          {isPeriodBehindCalendar(state) && (
+            <div className="mb-4 p-3.5 rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-xs space-y-2" role="alert">
+              <p className="font-bold">
+                Bulan kerja masih {getPeriodInfo(state).label}, padahal kalender sudah {periodLabelOf(getCalendarPeriodKey())}.
+              </p>
+              <p className="leading-relaxed">
+                Penjualan yang disimpan sekarang masuk ke {getPeriodInfo(state).label}, bukan {periodLabelOf(getCalendarPeriodKey())}.
+                {state.role === 'a'
+                  ? ' Pindahkan bulan kerja supaya semua HP ikut otomatis.'
+                  : ' Minta admin memindahkan bulan kerja, lalu tekan Sinkron agar HP ini ikut.'}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {state.role === 'a' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const toKey = getCalendarPeriodKey();
+                      askConfirm({
+                        title: `Pindah ke ${periodLabelOf(toKey)}?`,
+                        message: `Bulan kerja pindah dari ${getPeriodInfo(state).label} ke ${periodLabelOf(toKey)}.\nData ${getPeriodInfo(state).label} tersimpan utuh (diarsipkan otomatis), tidak ada yang dihapus. Semua HP yang tersambung akan ikut pindah setelah sinkron.`,
+                        tone: 'warning',
+                        confirmLabel: `Ya, pindah ke ${periodLabelOf(toKey)}`,
+                        onConfirm: () => handleSwitchPeriod(toKey)
+                      });
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer"
+                  >
+                    Pindah ke {periodLabelOf(getCalendarPeriodKey())}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => refreshFromCloud(true)}
+                  className="px-3 py-1.5 rounded-xl border border-amber-400 dark:border-amber-700 font-semibold cursor-pointer"
+                >
+                  Sinkron sekarang
+                </button>
+              </div>
+            </div>
+          )}
+          {confirmDialog}
           {state.role === 't' ? (
             tkuSubMenu === 'stok' ? (
             <SisaStockView
@@ -1537,7 +1540,7 @@ export default function App() {
                 />
               )}
               {state.currentMenu === 'Evaluasi' && (
-                <EvaluasiView state={state} onUpdateRayon={handleUpdateRayon} />
+                <EvaluasiView state={state} onUpdateRayon={handleUpdateRayon} showToast={showToast} />
               )}
               {state.currentMenu === 'Breakdown & Realisasi' && (
                 <BreakdownRealisasiView
@@ -1547,6 +1550,7 @@ export default function App() {
                   onUpdatePembagiHari={handleUpdatePembagiHari}
                   onUpdateActiveDay={handleUpdateActiveDay}
                   onUpdatePembagiKhususTku={handleUpdatePembagiKhususTku}
+                  onNavigateMenu={(menu) => setState(prev => ({ ...prev, currentMenu: menu }))}
                 />
               )}
               {state.currentMenu === 'Sisa Stock' && (

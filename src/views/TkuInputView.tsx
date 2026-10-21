@@ -35,8 +35,12 @@ import {
   getJwpAsOf,
   truncFixed,
   getPeriodInfo,
+  getCalendarPeriodKey,
+  isPeriodBehindCalendar,
+  periodLabelOf,
   SEED_PERIOD
 } from '../services/storage';
+import { useConfirm } from '../components/ConfirmDialog';
 import { REAL_TKU_DAILY_SALES } from '../data/realSalesSeptember2026';
 import { saveTkuInputDraft, loadTkuInputDraft } from '../services/inputDraft';
 
@@ -124,6 +128,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     `${formatDiff(diff)}/${formatDiff(Math.trunc(diff / Math.max(1, days)))}`;
   // Info bulan kerja (tidak lagi di-hard-code September 2026)
   const period = getPeriodInfo(state);
+  const { ask: askConfirm, dialog: confirmDialog } = useConfirm();
   const DIM = period.daysInMonth;
   const PY = period.year;
   const PM0 = period.monthIndex;
@@ -142,6 +147,24 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   const minInputDate = `${period.key}-01`;
   const maxInputDate = state.activeDate;
   const backdateExisting = isBackdate ? state.pjd[inputDate]?.[tkuIdx] : null;
+
+  // Pengaman: kalau kalender HP sudah pindah bulan tetapi bulan kerja aplikasi belum, penjualan yang disimpan
+  // akan masuk ke bulan kerja LAMA. Minta konfirmasi eksplisit sebelum menyimpan.
+  const guardPeriodSave = (proceed: () => void) => {
+    if (!isPeriodBehindCalendar(state)) {
+      proceed();
+      return;
+    }
+    const calLabel = periodLabelOf(getCalendarPeriodKey());
+    askConfirm({
+      title: `Bulan kerja masih ${period.label}`,
+      message: `Kalender sudah ${calLabel}, tetapi bulan kerja aplikasi masih ${period.label}.\nData ini akan tersimpan ke tanggal ${formatDateIndo(inputDate)}, BUKAN ke ${calLabel}.\n\nKalau Anda mengisi penjualan hari ini, pilih Batal, lalu minta admin memindahkan bulan kerja dan tekan Sinkron.`,
+      tone: 'danger',
+      confirmLabel: `Tetap simpan ke ${period.label}`,
+      cancelLabel: 'Batal',
+      onConfirm: proceed
+    });
+  };
 
   // Form states for Input Penjualan: inisialisasi awal bersih [0,0,0,0]
   const [salesV, setSalesV] = useState<[number, number, number, number]>([0, 0, 0, 0]);
@@ -280,7 +303,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   // Handle Save Input Penjualan Hari Ini (Data tetap muncul dan tidak hilang dari form setelah disimpan)
   // Tombol ini HANYA menyimpan penjualan (PJL, BB, PDM). Kondisi TKU (absen, frek, <250, <300)
   // punya tombol simpan sendiri; nilainya yang sudah tersimpan dipertahankan apa adanya.
-  const handleSave = () => {
+  const doSave = () => {
     const savedRec = state.pjd[inputDate]?.[tkuIdx] || (inputDate === state.activeDate ? state.todayInputs[tkuIdx] : undefined);
     const record: DailySalesRecord = {
       v: salesV,
@@ -336,6 +359,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
 
     showToast(`Penjualan ${tku.nama} tanggal ${formatDateIndo(inputDate)} berhasil disimpan!`, 'success');
   };
+  const handleSave = () => guardPeriodSave(doSave);
 
   // Helper: Retrieve actual daily sales for a specific date and variant (hanya membaca data yang sudah tersimpan di pjd)
   const getActualSalesForDay = (d: number, variant: 'ALL' | VariantCode): number => {
@@ -1042,7 +1066,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     setOpsDirty(true);
   };
 
-  const handleSaveOps = () => {
+  const doSaveOps = () => {
     if (isBackdate && (inputDate < minInputDate || inputDate > maxInputDate)) {
       showToast('Tanggal di luar rentang bulan kerja / melewati tanggal update.', 'error');
       return;
@@ -1070,6 +1094,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     setOpsDirty(false);
     showToast(`Kondisi ${tku.nama} tanggal ${formatDateIndo(inputDate)} berhasil disimpan!`, 'success');
   };
+  const handleSaveOps = () => guardPeriodSave(doSaveOps);
 
   // Card Kondisi & Parameter Operasional (Dipindah dari menu Realisasi ke menu Input Penjualan Harian setelah PDM)
   // Disimpan lewat tombol "Simpan Kondisi TKU" sendiri (terpisah dari tombol simpan penjualan)
@@ -1836,6 +1861,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
+      {confirmDialog}
       {/* 1. Card Profil Informasi Unit TKU (Ringkas & Sub-card Kanan Kiri Atas Bawah 2x2) */}
       <div className="p-3.5 md:p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs space-y-2.5">
         <div className="flex items-center justify-between gap-2 pb-2 border-b border-neutral-100 dark:border-neutral-800">
@@ -2446,13 +2472,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       )}
 
 
-      {activeSubMenu === 'realisasi' && (
-        <div className="space-y-6">
-          {renderRealisasiSection()}
-          {/* Evaluasi vs minggu lalu, tren M1-M5, capaian & proyeksi, posisi di cabang */}
-          <EvaluasiPanel state={state} weeks={WEEKS} mode="tku" focusIdx={tkuIdx} showToast={showToast} />
-        </div>
-      )}
+      {activeSubMenu === 'realisasi' && renderRealisasiSection()}
 
 
       {/* ========================================================================= */}

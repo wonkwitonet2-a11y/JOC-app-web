@@ -10,6 +10,7 @@ import {
   STATUS_LABEL,
   WeekDef
 } from '../services/progressEval';
+import { analyzeUnit, summarizeWeek, CAUSE_LABEL, WeekStatus } from '../services/weekAnalysis';
 import {
   buildExportDoc,
   buildNotes,
@@ -134,6 +135,64 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
   const nDown = cmpUnits.filter(u => u.week.diff < 0).length;
   const nSame = cmpUnits.length - nUp - nDown;
   const sortedUnits = [...units].sort((a, b) => b.week.diff - a.week.diff);
+
+  // ---- Status naik/turun + penyebab otomatis ----
+  const analyzed = units.map(u => ({ u, a: analyzeUnit(u) }));
+  const analyzedSorted = [...analyzed].sort((x, y) => {
+    if (x.a.status === 'nodata') return 1;
+    if (y.a.status === 'nodata') return -1;
+    return (x.a.pct ?? 0) - (y.a.pct ?? 0); // paling turun di atas
+  });
+  const analyzedTotal = total ? { u: total, a: analyzeUnit(total) } : null;
+  const wsum = summarizeWeek(analyzed);
+  const STATUS_CHIP: Record<WeekStatus, { cls: string; label: string }> = {
+    naik: { cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300', label: '▲ Naik' },
+    turun: { cls: 'bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-300', label: '▼ Turun' },
+    stabil: { cls: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300', label: '● Stabil' },
+    nodata: { cls: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400', label: '— Belum ada' }
+  };
+  const CAUSE_CHIP = {
+    bad: 'bg-red-50 text-red-700 border-red-200/70 dark:bg-red-950/30 dark:text-red-300 dark:border-red-900/50',
+    good: 'bg-emerald-50 text-emerald-700 border-emerald-200/70 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-900/50',
+    info: 'bg-neutral-50 text-neutral-600 border-neutral-200 dark:bg-neutral-800/50 dark:text-neutral-300 dark:border-neutral-700'
+  };
+  const analysisCard = (x: { u: EvalUnit; a: ReturnType<typeof analyzeUnit> }, strong = false) => {
+    const chip = STATUS_CHIP[x.a.status];
+    return (
+      <div
+        key={`an-${x.u.key}`}
+        className={`p-3 rounded-xl border bg-white dark:bg-neutral-900 space-y-2 ${strong ? 'border-indigo-300 dark:border-indigo-800' : 'border-neutral-200 dark:border-neutral-800'}`}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-bold text-neutral-900 dark:text-neutral-100 truncate">{x.u.name}</span>
+          <div className="flex items-center gap-2 shrink-0">
+            {x.a.status !== 'nodata' && (
+              <span className={`text-[11px] font-mono font-bold ${toneCls(x.a.diff === 0 ? null : x.a.diff > 0)}`}>
+                {signed(x.a.diff)} btl
+              </span>
+            )}
+            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap ${chip.cls}`}>
+              {chip.label}
+              {x.a.pct !== null && x.a.status !== 'stabil' ? ` ${Math.abs(x.a.pct * 100).toFixed(1).replace('.', ',')}%` : ''}
+            </span>
+          </div>
+        </div>
+        {x.a.causes.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {x.a.causes.map(c => (
+              <span key={c.key} className={`px-2 py-1 rounded-lg border text-[11px] leading-snug ${CAUSE_CHIP[c.tone]}`}>
+                <span className="font-bold">{CAUSE_LABEL[c.key]}:</span> {c.text}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[11px] text-neutral-500">
+            {x.a.status === 'turun' || x.a.status === 'naik' ? 'Belum ada faktor menonjol di data. Cek cuaca, libur, atau stok di lapangan.' : x.a.summary}
+          </p>
+        )}
+      </div>
+    );
+  };
 
   const weekRows = (list: EvalUnit[], isTotal = false) =>
     list.map(u => {
@@ -318,7 +377,7 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
                     <tr className="bg-neutral-50 dark:bg-neutral-800/50">
                       <th className={`${th} text-left px-3 sticky left-0 bg-neutral-50 dark:bg-neutral-800`}>TKU</th>
                       <th className={th}>Selisih btl</th>
-                      <th className={th}>% vs lalu</th>
+                      <th className={th} title="Penjualan hari yang sama di minggu ini dibanding minggu lalu. 100% = sama; di atas 100% = naik; di bawah 100% = turun">% vs Mgg Lalu</th>
                       <th className={th} title="BB / (penjualan + BB) pada hari yang dibandingkan. Panah = perubahan poin persen vs minggu lalu">% BB</th>
                       <th className={th} title="Posisi absen akumulatif; angka kecil = pertambahan vs 7 hari lalu">Absen</th>
                       <th className={th} title="s/YL akumulatif; angka kecil = perubahan vs 7 hari lalu">s/YL</th>
@@ -367,9 +426,44 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
           )}
         </section>
 
+        {/* B2. Status naik/turun + penyebab otomatis */}
+        {ev.cmp.days.length > 0 && (
+          <section className="space-y-2.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 block">
+              Status &amp; penyebab • tgl {ev.cmp.start}–{Math.min(ev.cmp.end, ev.updateDay)}
+            </span>
+            {!isTku && (wsum.nUp + wsum.nDown > 0) && (
+              <div className="p-3 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-200/60 dark:border-indigo-900/40 text-xs text-neutral-700 dark:text-neutral-200 space-y-1">
+                <p>
+                  <b>{wsum.nUp}</b> TKU naik, <b>{wsum.nDown}</b> turun, <b>{wsum.nSame}</b> stabil.
+                </p>
+                {wsum.topDown && (
+                  <p>Penurunan terbesar: <b>{wsum.topDown.name}</b> ({signed(wsum.topDown.diff)} btl).</p>
+                )}
+                {wsum.topUp && (
+                  <p>Kenaikan terbesar: <b>{wsum.topUp.name}</b> ({signed(wsum.topUp.diff)} btl).</p>
+                )}
+                {wsum.dominant.length > 0 && (
+                  <p>
+                    Penyebab penurunan yang paling sering:{' '}
+                    {wsum.dominant.map(d => `${CAUSE_LABEL[d.key]} (${d.count} TKU)`).join(', ')}.
+                  </p>
+                )}
+              </div>
+            )}
+            <div className="space-y-2">
+              {analyzedTotal && analysisCard(analyzedTotal, true)}
+              {(isTku ? analyzed : analyzedSorted).map(x => analysisCard(x))}
+            </div>
+            <p className="text-[10px] text-neutral-400">
+              Penyebab dihitung otomatis dari data yang tercatat (absen, BB, YL &lt; 250, s/YL, varian) pada hari yang sama dengan minggu lalu. Faktor di luar data, misalnya cuaca, libur, atau stok, perlu dicek langsung di lapangan. Stabil = selisih di bawah 3%.
+            </p>
+          </section>
+        )}
+
         {/* C. Tren antar-minggu */}
         <section className="space-y-2.5">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 block">Tren antar-minggu • rata-rata btl per hari jual</span>
+          <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 block">Tren antar-minggu • rata-rata btl per hari (pembagi 7 hari, Min–Sab)</span>
           <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 overflow-x-auto">
             <table className="w-full text-xs border-collapse">
               <thead>
@@ -378,6 +472,8 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
                   {ev.weekCols.map(c => (
                     <th key={c.id} className={`${th} ${c.current ? 'text-indigo-600 dark:text-indigo-300' : ''}`}>
                       M{c.id}<span className="block font-normal text-[9px] opacity-70">{c.start}–{c.end}</span>
+                      <span className="block font-normal text-[9px] opacity-70">÷{c.calDays}</span>
+                      {c.current && ev.updateDay < c.end && <span className="block font-normal text-[9px] text-amber-600 dark:text-amber-400">sementara</span>}
                     </th>
                   ))}
                   <th className={`${th} text-left`}>Catatan</th>
@@ -416,7 +512,7 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
               </tbody>
             </table>
           </div>
-          <p className="text-[10px] text-neutral-400">Panah = naik / turun dibanding minggu sebelumnya yang punya data. Minggu yang baru berjalan hanya menghitung hari jual sampai tgl {ev.updateDay}.</p>
+          <p className="text-[10px] text-neutral-400">Panah = naik / turun dibanding minggu sebelumnya yang punya data. Pembagi = jumlah hari kalender dalam minggu itu (Minggu–Sabtu = 7; Minggu ikut dihitung). Minggu yang baru berjalan atau terpotong awal/akhir bulan memakai jumlah harinya sampai tgl {ev.updateDay}. Angka ÷ di bawah M1, M2, … adalah pembaginya.</p>
         </section>
 
         {/* D. Catatan otomatis */}

@@ -115,7 +115,7 @@ export const EvalMiniTable: React.FC<EvalMiniTableProps> = ({
 
     return (
       <tr 
-        key={r.tku.id + (isSubtotal ? '-sub' : '') + (isTotal ? '-tot' : '')} 
+        key={`${r.tku.id}-${r.tku.nama}-${isSubtotal ? 'sub' : ''}${isTotal ? 'tot' : ''}`} 
         className={`group transition-colors font-mono text-xs ${rowBg} ${borderB}`}
       >
         {/* Kolom TKU Sticky di Kiri: Mepet ke huruf terakhir */}

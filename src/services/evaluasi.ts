@@ -198,7 +198,7 @@ export function buildEvaluasiData(state: AppState): {
   const r1Rows = allRows.filter(r => r.tku.aktif && r.tku.rayon === 1);
   const r2Rows = allRows.filter(r => r.tku.aktif && r.tku.rayon === 2);
 
-  const aggregateRows = (rows: EvaluasiRow[], label: string, rayon: 1 | 2): EvaluasiRow => {
+  const aggregateRows = (rows: EvaluasiRow[], label: string, rayon: 1 | 2, id = 999): EvaluasiRow => {
     const yo = rows.reduce((s, r) => s + r.yo, 0);
     const om = rows.reduce((s, r) => s + r.om, 0);
     const os = rows.reduce((s, r) => s + r.os, 0);
@@ -241,7 +241,7 @@ export function buildEvaluasiData(state: AppState): {
     const diffLw = lwPrev > 0 ? (lwCur - lwPrev) / 7 : null;
 
     const summaryTku: TkuItem = {
-      id: 999,
+      id,
       nama: label,
       rayon,
       targetHarian: tgHarian,
@@ -285,9 +285,9 @@ export function buildEvaluasiData(state: AppState): {
     };
   };
 
-  const r1Total = aggregateRows(r1Rows, 'Total Rayon 1', 1);
-  const r2Total = aggregateRows(r2Rows, 'Total Rayon 2', 2);
-  const cabangTotal = aggregateRows(allRows.filter(r => r.tku.aktif), 'Total Cabang', 1);
+  const r1Total = aggregateRows(r1Rows, 'Total Rayon 1', 1, 991);
+  const r2Total = aggregateRows(r2Rows, 'Total Rayon 2', 2, 992);
+  const cabangTotal = aggregateRows(allRows.filter(r => r.tku.aktif), 'Total Cabang', 1, 990);
 
   // Perhitungan Highlights Performa (mencantumkan semua TKU jika nilainya sama/seri)
   const activeOnly = allRows.filter(r => r.tku.aktif);

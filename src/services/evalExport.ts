@@ -156,7 +156,7 @@ export function buildExportDoc(
     ];
     blocks.push({
       type: 'table',
-      title: 'Tren rata-rata per hari jual (btl)',
+      title: 'Tren rata-rata per hari (btl, pembagi 7 hari Min–Sab)',
       head: ['TKU', ...cols.map(c => `M${c.id}`), 'Catatan'],
       rows: [...units.map(trendRow), ...(total ? [trendRow(total)] : [])],
       boldLast: Boolean(total)
@@ -165,7 +165,7 @@ export function buildExportDoc(
     const vt = ev.variantTrend(units);
     blocks.push({
       type: 'table',
-      title: 'Tren per varian (btl per hari jual)',
+      title: 'Tren per varian (btl per hari, pembagi 7 hari Min–Sab)',
       head: ['Varian', ...cols.map(c => `M${c.id}`)],
       rows: vt.map(v => [
         { t: v.code },

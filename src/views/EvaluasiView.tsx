@@ -18,17 +18,21 @@ import {
   UserCheck,
   MapPin,
   CheckCircle2,
-  Bookmark
+  Bookmark,
+  Users
 } from 'lucide-react';
 import { AppState } from '../types';
 import { buildEvaluasiData, EvaluasiHighlights } from '../services/evaluasi';
 import { EvalFullTable } from '../components/EvalFullTable';
 import { EvalMiniTable } from '../components/EvalMiniTable';
-import { formatNumber, formatPercent, getPeriodInfo, getPembagiHari, getBbStatusClass } from '../services/storage';
+import { EvalKondisiTable } from '../components/EvalKondisiTable';
+import { EvaluasiPanel } from '../components/EvaluasiPanel';
+import { formatNumber, formatPercent, getPeriodInfo, getPembagiHari, getBbStatusClass, getWeeksOfMonth } from '../services/storage';
 
 interface EvaluasiViewProps {
   state: AppState;
   onUpdateRayon: (rayon: number) => void;
+  showToast?: (message: string, type?: 'error' | 'info' | 'success') => void;
 }
 
 const abbreviateTkuName = (name: string): string => {
@@ -305,14 +309,15 @@ const RingkasanPrestasiPanel: React.FC<RingkasanPrestasiPanelProps> = ({
   );
 };
 
-export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon }) => {
-  const [evalMode, setEvalMode] = useState<'mini' | 'full' | 'analisa'>('mini');
+export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon, showToast }) => {
+  const [evalMode, setEvalMode] = useState<'mini' | 'full' | 'kondisi' | 'analisa'>('mini');
   const [mobileMiniMode, setMobileMiniMode] = useState<'table' | 'matrix'>('table');
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
   const selectedRayon = state.selectedRayon; // 0: Cabang, 1: Rayon 1, 2: Rayon 2
   const period = getPeriodInfo(state);
   const divider = getPembagiHari(state);
+  const weeks = React.useMemo(() => getWeeksOfMonth(state), [state.activePeriod, state.activeDate]);
 
   const {
     allRows,
@@ -373,7 +378,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
             ))}
           </div>
 
-          {/* View Mode Switcher: Mini Table (HP) vs Full Table vs Analisa */}
+          {/* View Mode Switcher: Mini Table (HP) vs Full Table vs Kondisi TKU vs Analisa */}
           <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl shrink-0 overflow-x-auto max-w-full">
             <button
               onClick={() => setEvalMode('mini')}
@@ -390,12 +395,23 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
               onClick={() => setEvalMode('full')}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
                 evalMode === 'full'
-                  ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs'
+                  ? 'bg-brand-600 text-white shadow-xs'
                   : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
               }`}
             >
               <TableIcon className="w-3.5 h-3.5" />
               <span>Tabel Utuh</span>
+            </button>
+            <button
+              onClick={() => setEvalMode('kondisi')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                evalMode === 'kondisi'
+                  ? 'bg-brand-600 text-white shadow-xs'
+                  : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Kondisi TKU</span>
             </button>
             <button
               onClick={() => setEvalMode('analisa')}
@@ -406,7 +422,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
               }`}
             >
               <TrendingUp className="w-3.5 h-3.5" />
-              <span>Tren Mingguan</span>
+              <span>Evaluasi Mingguan</span>
             </button>
           </div>
 
@@ -661,9 +677,43 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
         </div>
       )}
 
-      {/* MODE 3: TREN MINGGUAN & ANALISA */}
+      {/* MODE 3: KONDISI & OPERASIONAL TKU */}
+      {evalMode === 'kondisi' && (
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 p-4 sm:p-5 shadow-sm space-y-4">
+            <EvalKondisiTable
+              r1Rows={r1Rows}
+              r2Rows={r2Rows}
+              r1Total={r1Total}
+              r2Total={r2Total}
+              cabangTotal={cabangTotal}
+              selectedRayon={selectedRayon}
+              periodLabel={period.label}
+            />
+          </div>
+
+          {/* 9 KARTU RINGKASAN DI BAWAH KONDISI TKU */}
+          <div className="space-y-2.5">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+              Ringkasan 9 Metrik Performa Kunci
+            </h3>
+            <RingkasanPrestasiPanel highlights={highlights} layout="row" />
+          </div>
+        </div>
+      )}
+
+      {/* MODE 4: EVALUASI MINGGUAN & ANALISA PENYEBAB */}
       {evalMode === 'analisa' && (
         <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Panel Evaluasi Penjualan Komprehensif (Capaian Target, Laju Minggu Ini vs Lalu, Rincian Harian, Status & Penyebab, Tren M1-M5, Ekspor PDF/Gambar/Salin) */}
+          <EvaluasiPanel
+            state={state}
+            weeks={weeks}
+            mode="admin"
+            rayon={selectedRayon}
+            showToast={showToast}
+          />
+
           {/* Top Performer vs Bottom Performer Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Top 3 Performers */}
@@ -812,7 +862,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
 
             {/* Kanan: Mode Switcher & Tombol Keluar */}
             <div className="flex items-center gap-1 shrink-0">
-              {/* Mini vs Utuh Selector */}
+              {/* Mini vs Utuh vs Kondisi Selector */}
               <div className="inline-flex p-0.2 bg-neutral-800 rounded">
                 <button
                   onClick={() => setEvalMode('mini')}
@@ -836,6 +886,28 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
                   <TableIcon className="w-2.5 h-2.5" />
                   <span>Lengkap</span>
                 </button>
+                <button
+                  onClick={() => setEvalMode('kondisi')}
+                  className={`flex items-center gap-0.5 px-1.5 py-0 text-[9px] font-bold rounded transition-all cursor-pointer ${
+                    evalMode === 'kondisi'
+                      ? 'bg-brand-600 text-white shadow-2xs'
+                      : 'text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  <Users className="w-2.5 h-2.5" />
+                  <span>Kondisi</span>
+                </button>
+                <button
+                  onClick={() => setEvalMode('analisa')}
+                  className={`flex items-center gap-0.5 px-1.5 py-0 text-[9px] font-bold rounded transition-all cursor-pointer ${
+                    evalMode === 'analisa'
+                      ? 'bg-brand-600 text-white shadow-2xs'
+                      : 'text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  <TrendingUp className="w-2.5 h-2.5" />
+                  <span>Mingguan</span>
+                </button>
               </div>
 
               {/* Tombol Tutup Layar Penuh */}
@@ -851,9 +923,9 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
 
           {/* Konten 1 Frame Murni: Landscape (Samping), Portrait/Tab Mode (Atas-Bawah) */}
           <div className="flex-1 min-h-0 overflow-hidden">
-            {/* 1. LAYOUT MODE LANDSCAPE: Tabel Kiri (Mini atau Lengkap Geser) + 9 Card Kanan (2-Kolom Pas Sejajar) */}
+            {/* 1. LAYOUT MODE LANDSCAPE: Tabel Kiri (Mini atau Lengkap Geser atau Kondisi atau Mingguan) + 9 Card Kanan (2-Kolom Pas Sejajar) */}
             <div className="hidden landscape:grid landscape:grid-cols-12 gap-2 items-stretch h-full overflow-hidden">
-              {/* Panel Kiri: Tabel Mini / Lengkap dengan scroll horizontal & vertikal */}
+              {/* Panel Kiri: Tabel Mini / Lengkap / Kondisi / Mingguan dengan scroll horizontal & vertikal */}
               <div className="col-span-8 h-full min-h-0 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 shadow-sm p-1.5 flex flex-col justify-between overflow-hidden">
                 <div className="flex-1 min-h-0 overflow-auto">
                   {evalMode === 'mini' ? (
@@ -870,6 +942,27 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
                       compact={true}
                       fitHeight={true}
                     />
+                  ) : evalMode === 'kondisi' ? (
+                    <EvalKondisiTable
+                      r1Rows={r1Rows}
+                      r2Rows={r2Rows}
+                      r1Total={r1Total}
+                      r2Total={r2Total}
+                      cabangTotal={cabangTotal}
+                      selectedRayon={selectedRayon}
+                      fullscreen={true}
+                      periodLabel={period.label}
+                    />
+                  ) : evalMode === 'analisa' ? (
+                    <div className="p-2 overflow-y-auto h-full">
+                      <EvaluasiPanel
+                        state={state}
+                        weeks={weeks}
+                        mode="admin"
+                        rayon={selectedRayon}
+                        showToast={showToast}
+                      />
+                    </div>
                   ) : (
                     <EvalFullTable
                       rows={displayedRows}
@@ -917,6 +1010,27 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
                     hideTopBar={true}
                     compact={true}
                   />
+                ) : evalMode === 'kondisi' ? (
+                  <EvalKondisiTable
+                    r1Rows={r1Rows}
+                    r2Rows={r2Rows}
+                    r1Total={r1Total}
+                    r2Total={r2Total}
+                    cabangTotal={cabangTotal}
+                    selectedRayon={selectedRayon}
+                    fullscreen={true}
+                    periodLabel={period.label}
+                  />
+                ) : evalMode === 'analisa' ? (
+                  <div className="p-2 space-y-4">
+                    <EvaluasiPanel
+                      state={state}
+                      weeks={weeks}
+                      mode="admin"
+                      rayon={selectedRayon}
+                      showToast={showToast}
+                    />
+                  </div>
                 ) : (
                   <EvalFullTable
                     rows={displayedRows}

@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Calendar, ChevronDown, Download } from 'lucide-react';
-import { EvaluasiPanel } from '../components/EvaluasiPanel';
 import { AppState, VariantCode, DailySalesRecord } from '../types';
 import {
   formatNumber,
@@ -24,6 +23,7 @@ interface BreakdownRealisasiViewProps {
   onUpdatePembagiHari?: () => void;
   onUpdateActiveDay?: (day: number) => void;
   onUpdatePembagiKhususTku?: (tkuIdx: number, val: number | null) => void;
+  onNavigateMenu?: (menu: string) => void;
 }
 
 type ViewMode = 'mingguan' | 'bulanan';
@@ -85,10 +85,12 @@ const TINT: Record<string, [string, string]> = {
 export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
   state,
   onUpdateRayon,
-  showToast
+  showToast,
+  onNavigateMenu
 }) => {
   const [tab, setTab] = useState<DataTab>('breakdown');
   const [viewMode, setViewMode] = useState<ViewMode>('bulanan');
+  const [showKondisiTku, setShowKondisiTku] = useState<boolean>(true);
   const isReal = tab === 'realisasi';
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
 
@@ -740,22 +742,44 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
           </table>
         </div>
       </div>
-      {/* Evaluasi: capaian vs target & proyeksi, minggu ini vs lalu (penjualan, BB, absen, s/YL), tren antar-minggu.
-          Tampil di tab Breakdown DAN Realisasi, mengikuti pilihan rayon. */}
-      <EvaluasiPanel state={state} weeks={weeks} mode="admin" rayon={selectedRayon} showToast={showToast} />
 
       {/* Tabel operasional akumulatif (hanya di tab Realisasi) */}
       {isReal && (
         <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 border-t-4 border-t-indigo-500 shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-neutral-200 dark:border-neutral-800">
-            <h2 className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
-              Kondisi TKU
-            </h2>
+          <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <h2 className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
+                Kondisi TKU
+              </h2>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
+                Evaluasi Operasional
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {onNavigateMenu && (
+                <button
+                  type="button"
+                  onClick={() => onNavigateMenu('Evaluasi')}
+                  className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg bg-brand-50 text-brand-700 dark:bg-brand-950/50 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900/60 transition-colors cursor-pointer border border-brand-200 dark:border-brand-800"
+                >
+                  <span>Buka di Menu Evaluasi</span>
+                  <span aria-hidden="true">&rarr;</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowKondisiTku(prev => !prev)}
+                className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors cursor-pointer"
+              >
+                {showKondisiTku ? 'Sembunyikan' : 'Tampilkan Tabel'}
+              </button>
+            </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="text-xs border-collapse w-max min-w-full">
-              <thead>
-                <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/40 text-neutral-600 dark:text-neutral-300">
+          {showKondisiTku && (
+            <div className="overflow-x-auto">
+              <table className="text-xs border-collapse w-max min-w-full">
+                <thead>
+                  <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/40 text-neutral-600 dark:text-neutral-300">
                   <th className="sticky left-0 z-20 px-3 py-2 text-left font-semibold bg-neutral-50 dark:bg-neutral-800 border-r border-neutral-200 dark:border-neutral-700 min-w-[130px]">Nama TKU</th>
                   {([
                     ['Penjualan Akm', 'text-brand-700 dark:text-brand-300'],
@@ -813,6 +837,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
               </tbody>
             </table>
           </div>
+          )}
         </div>
       )}
     </div>

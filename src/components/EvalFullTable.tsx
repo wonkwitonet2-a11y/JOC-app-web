@@ -48,7 +48,7 @@ export const EvalFullTable: React.FC<EvalFullTableProps> = ({
       : 'bg-white dark:bg-neutral-900';
 
     return (
-      <tr key={r.tku.id + (isSubtotal ? '-sub' : '') + (isTotal ? '-tot' : '')} className={`transition-colors font-mono text-xs ${rowBg}`}>
+      <tr key={`${r.tku.id}-${r.tku.nama}-${isSubtotal ? 'sub' : ''}${isTotal ? 'tot' : ''}`} className={`transition-colors font-mono text-xs ${rowBg}`}>
         {/* Sticky Unit Name: Mepet ke huruf terakhir */}
         <td className={`sticky left-0 z-10 pl-1.5 pr-0.5 py-1.25 sm:py-1.5 text-left font-sans font-semibold whitespace-nowrap border-r border-neutral-200 dark:border-neutral-700 shadow-[1px_0_3px_rgba(0,0,0,0.06)] ${stickyBg}`}>
           <div className="flex items-center gap-0.5 w-max">
@@ -98,9 +98,10 @@ export const EvalFullTable: React.FC<EvalFullTableProps> = ({
           </span>
         </td>
 
-        {/* Balik Botol */}
+        {/* Balik Botol & PDM */}
         <td className={`${tdCls} text-amber-600 dark:text-amber-400 border-l border-neutral-200 dark:border-neutral-700`}>{formatNumber(r.akmBb)}</td>
         <td className={`${tdCls} font-semibold ${getBbStatusClass(r.pctBb)}${b('pctBb')}`}>{formatPercent(r.pctBb)}</td>
+        <td className={`${tdCls} font-bold text-sky-600 dark:text-sky-400`}>{formatNumber(r.akmPdm)}</td>
 
         {/* JWP & s/YL */}
         <td className={`${tdCls} text-sky-600 dark:text-sky-400 border-l border-neutral-200 dark:border-neutral-700`}>{formatNumber(r.jwp)}</td>
@@ -159,9 +160,10 @@ export const EvalFullTable: React.FC<EvalFullTableProps> = ({
             <th className={thCls}>vs Tgt</th>
             <th className={thCls}>vs LM</th>
             <th className={thCls}>vs LY</th>
-            {/* BB */}
+            {/* BB & PDM */}
             <th className={`${thCls} border-l border-neutral-200 dark:border-neutral-700`}>Akm BB</th>
             <th className={thCls}>% BB</th>
+            <th className={`${thCls} text-sky-600 dark:text-sky-400 font-bold`}>PDM</th>
             {/* Produktivitas */}
             <th className={`${thCls} border-l border-neutral-200 dark:border-neutral-700`}>JWP</th>
             <th className={thCls}>s/YL</th>
