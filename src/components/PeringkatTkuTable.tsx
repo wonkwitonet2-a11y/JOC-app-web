@@ -21,7 +21,7 @@ const fmt2 = (n: number) => n.toFixed(2).replace('.', ',');
 const fmtPct = (n: number | null | undefined) =>
   n === null || n === undefined || !isFinite(n) ? '—' : `${n.toFixed(1).replace('.', ',')}%`;
 const fmtNilai = (k: KategoriKey, n: number | null | undefined) =>
-  k === 'syl' ? (n === null || n === undefined || !isFinite(n) ? '—' : String(Math.round(n))) : fmtPct(n);
+  k === 'syl' || k === 'yl300' ? (n === null || n === undefined || !isFinite(n) ? '—' : String(Math.round(n))) : fmtPct(n);
 
 const GREEN = 'text-emerald-600 dark:text-emerald-400';
 const AMBER = 'text-amber-600 dark:text-amber-400';
@@ -48,14 +48,18 @@ const KONDISI: { k: KategoriKey; label: string; unit: string }[] = [
   { k: 'yl250', label: '%YL<250', unit: '%' },
   { k: 'absen', label: 'Absen', unit: '%' },
   { k: 'bb', label: '% BB', unit: '%' },
+  { k: 'yl300', label: 'YL<300', unit: '' },
 ];
 
 const Cell: React.FC<{ row: PeringkatRow; k: KategoriKey; border?: boolean }> = ({ row, k, border }) => {
   const c = row.kategori[k];
   return (
     <td className={`py-3 px-2.5 text-right ${border ? 'border-l border-neutral-200 dark:border-neutral-700' : ''}`}>
-      <div className={`font-bold ${tone(k, c.poin, c.nilai)}`}>{fmt1(c.poin)}</div>
-      <div className="text-[10px] text-neutral-400 font-normal">{fmtNilai(k, c.nilai)}</div>
+      <div className={`font-bold whitespace-nowrap ${tone(k, c.poin, c.nilai)}`}>
+        {fmt1(c.poin)}
+        {c.poin !== null && <span className="ml-0.5 text-[10px] font-normal text-neutral-400">poin</span>}
+      </div>
+      <div className="text-[10px] text-neutral-400 font-normal whitespace-nowrap">{fmtNilai(k, c.nilai)}</div>
     </td>
   );
 };
@@ -77,7 +81,7 @@ export const PeringkatTkuTable: React.FC<Props> = ({ data, tanggalUpdate }) => {
           {sementara ? `Sementara (tgl ${tanggalUpdate})` : `Resmi (tgl ${tanggalUpdate})`}
         </span>
         <span className="text-neutral-500">
-          Penjualan ({TOTAL_HASIL}) = LY ({BOBOT.yoy}) + Target ({BOBOT.target}) + LM ({BOBOT.mom}). Kondisi ({TOTAL_KONDISI}) = S/YL ({BOBOT.syl}), YL/Area ({BOBOT.area}), Frekuensi ({BOBOT.ewp}), %YL&lt;250 ({BOBOT.yl250}), Absen ({BOBOT.absen}), BB ({BOBOT.bb}). Maks {TOTAL_BOBOT} + bonus.
+          Penjualan ({TOTAL_HASIL}) = LY ({BOBOT.yoy}) + Target ({BOBOT.target}) + LM ({BOBOT.mom}). Kondisi ({TOTAL_KONDISI}) = S/YL ({BOBOT.syl}), YL/Area ({BOBOT.area}), Frekuensi ({BOBOT.ewp}), %YL&lt;250 ({BOBOT.yl250}), Absen ({BOBOT.absen}), BB ({BOBOT.bb}), YL&lt;300 ({BOBOT.yl300}). Maks {TOTAL_BOBOT} + bonus.
         </span>
       </div>
 
@@ -90,8 +94,12 @@ export const PeringkatTkuTable: React.FC<Props> = ({ data, tanggalUpdate }) => {
               <th className="py-2.5 px-3 text-right font-semibold">Total</th>
               <th className="py-2.5 px-2.5 text-right font-semibold border-l border-neutral-200 dark:border-neutral-700">
                 Skor Penjualan
+                <div className="text-[10px] font-normal text-neutral-400 whitespace-nowrap">maks {TOTAL_HASIL}+ poin</div>
               </th>
-              <th className="py-2.5 px-2.5 text-right font-semibold">Skor Kondisi</th>
+              <th className="py-2.5 px-2.5 text-right font-semibold">
+                Skor Kondisi
+                <div className="text-[10px] font-normal text-neutral-400 whitespace-nowrap">maks {TOTAL_KONDISI} poin</div>
+              </th>
               {HASIL.map((h, i) => (
                 <th
                   key={h.k}
@@ -100,7 +108,7 @@ export const PeringkatTkuTable: React.FC<Props> = ({ data, tanggalUpdate }) => {
                   }`}
                 >
                   {h.label}
-                  <div className="text-[10px] font-normal text-neutral-400">maks {BOBOT[h.k]}+</div>
+                  <div className="text-[10px] font-normal text-neutral-400 whitespace-nowrap">maks {BOBOT[h.k]}+ poin</div>
                 </th>
               ))}
               {KONDISI.map((h, i) => (
@@ -111,7 +119,7 @@ export const PeringkatTkuTable: React.FC<Props> = ({ data, tanggalUpdate }) => {
                   }`}
                 >
                   {h.label}
-                  <div className="text-[10px] font-normal text-neutral-400">maks {BOBOT[h.k]}</div>
+                  <div className="text-[10px] font-normal text-neutral-400 whitespace-nowrap">maks {BOBOT[h.k]} poin</div>
                 </th>
               ))}
             </tr>
@@ -138,13 +146,15 @@ export const PeringkatTkuTable: React.FC<Props> = ({ data, tanggalUpdate }) => {
                     </span>
                   )}
                 </td>
-                <td className="py-3 px-3 text-right font-bold text-sm text-brand-600 dark:text-brand-400">
+                <td className="py-3 px-3 text-right font-bold text-sm text-brand-600 dark:text-brand-400 whitespace-nowrap">
                   {fmt2(row.total)}
                 </td>
-                <td className="py-3 px-2.5 text-right font-semibold border-l border-neutral-200 dark:border-neutral-700">
-                  {fmt1(row.skorHasil)}
+                <td className="py-3 px-2.5 text-right font-semibold whitespace-nowrap border-l border-neutral-200 dark:border-neutral-700">
+                  {fmt1(row.skorHasil)} <span className="text-[10px] font-normal text-neutral-400">poin</span>
                 </td>
-                <td className="py-3 px-2.5 text-right font-semibold">{fmt1(row.skorKondisi)}</td>
+                <td className="py-3 px-2.5 text-right font-semibold whitespace-nowrap">
+                  {fmt1(row.skorKondisi)} <span className="text-[10px] font-normal text-neutral-400">poin</span>
+                </td>
                 {HASIL.map((h, i) => (
                   <Cell key={h.k} row={row} k={h.k} border={i === 0} />
                 ))}
@@ -156,6 +166,21 @@ export const PeringkatTkuTable: React.FC<Props> = ({ data, tanggalUpdate }) => {
           </tbody>
         </table>
       </div>
+
+
+      <details className="text-[11px] text-neutral-500 rounded-lg border border-neutral-200 dark:border-neutral-800 px-3 py-2">
+        <summary className="cursor-pointer font-semibold text-neutral-600 dark:text-neutral-300">Keterangan poin per kategori</summary>
+        <ul className="mt-2 space-y-1.5 leading-relaxed">
+          <li><b>vs LY ({BOBOT.yoy} poin), Target ({BOBOT.target} poin), vs LM ({BOBOT.mom} poin):</b> 100% ke atas = poin penuh + bonus sebanding persen (berhenti di 120%); 95% = 85%; 90% = 75%; 85% = 60%; 80% = 50%; di bawah 80% = 0. Saat total sama, rata-rata persen penjualan yang lebih tinggi di atas.</li>
+          <li><b>S/YL ({BOBOT.syl} poin):</b> di bawah 250 = 0; 250 = 1/3; 280 = 1/2; 300 = 70%; 330 = 85%; 350 ke atas = penuh.</li>
+          <li><b>YL/Area ({BOBOT.area} poin):</b> 100% = penuh; 90% = 2/3; 80% = 1/3; di bawah 80% = 0.</li>
+          <li><b>Frek/EWP ({BOBOT.ewp} poin):</b> 100% = penuh; 99,75 = 13/15; 99,5 = 12/15; 99,25 = 11/15; 99 = 10/15; lalu turun 1/15 tiap 1% sampai 90 = 1/15; di bawah 90 = 0.</li>
+          <li><b>%YL&lt;250 ({BOBOT.yl250} poin):</b> 0% = penuh, turun merata sampai 30% = 0 (komisi Ceko hangus jika lebih dari 30%).</li>
+          <li><b>Absen ({BOBOT.absen} poin):</b> 0% = penuh; sampai 10% = 70%; sampai 20% = 50%; di atas 20% = 0.</li>
+          <li><b>BB ({BOBOT.bb} poin):</b> 0% = penuh; sampai 5% = 2/3; sampai 10% = 1/3; di atas 10% = 0.</li>
+          <li><b>YL&lt;300 ({BOBOT.yl300} poin):</b> tidak ada YL di bawah 300 = penuh; ada satu saja = 0.</li>
+        </ul>
+      </details>
 
       {rows.some((r) => r.dinormalisasi) && (
         <p className="text-[11px] text-neutral-500">

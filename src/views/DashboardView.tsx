@@ -344,7 +344,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const buildPeringkatInput = (r: {
     t: { id: number | string; nama: string; rayon?: number };
     avg: number; tg: number; ty: number; bl: number; pctBb: number;
-    abs: number; yl: number; frk: number; area: number; pctL250: number; s_yl: number;
+    abs: number; yl: number; frk: number; area: number; pctL250: number; s_yl: number; l300: number;
   }): PeringkatInput => ({
     id: r.t.id,
     nama: r.t.nama,
@@ -362,6 +362,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     standarArea: r.area,
     persenYl250: r.pctL250 * 100,
     sYl: r.s_yl,
+    jumlahYl300: r.l300,
   });
 
   // TKU Ranking rows with 3 targets + combined average ranking
@@ -411,7 +412,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const pctBb = (akm + tkuAkmBb) > 0 ? (tkuAkmBb / (akm + tkuAkmBb)) : 0;
 
     const pctL250 = yl > 0 ? (inp?.l250 ?? t.l250 ?? 0) / yl : 0;
-    const skor = hitungSkorTku(buildPeringkatInput({ t, avg, tg, ty, bl, pctBb, abs, yl, frk, area, pctL250, s_yl }));
+    const skor = hitungSkorTku(buildPeringkatInput({ t, avg, tg, ty, bl, pctBb, abs, yl, frk, area, pctL250, s_yl, l300: inp?.l300 ?? t.l300 ?? 0 }));
 
     return {
       t,
@@ -447,7 +448,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     if (rankingCriteria === 'target') return b.pctTg - a.pctTg;
     if (rankingCriteria === 'bulanLalu') return b.pctBl - a.pctBl;
     if (rankingCriteria === 'tahunLalu') return b.pctTy - a.pctTy;
-    // Gabungan = total poin penjualan (LY 30 + Target 25 + LM 20, termasuk bonus >100%)
+    // Gabungan = total poin penjualan (LY 28 + Target 26 + LM 11, termasuk bonus >100%)
     return b.skor.skorHasil - a.skor.skorHasil || b.skor.total - a.skor.total;
   });
 
@@ -843,7 +844,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             {/* Pilih tampilan tabel: Penjualan atau Kondisi TKU */}
             <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl shrink-0">
-              {([['penjualan', 'Penjualan'], ['kondisi', 'Kondisi TKU'], ['peringkat', 'Peringkat Total']] as const).map(([id, label]) => (
+              {([['penjualan', 'Peringkat Penjualan'], ['kondisi', 'Peringkat Kondisi TKU'], ['peringkat', 'Peringkat Total']] as const).map(([id, label]) => (
                 <button
                   key={id}
                   onClick={() => setRekapTab(id)}
@@ -919,11 +920,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   Rata2/hr
                 </th>
                 <th className="py-2.5 px-3 text-right font-semibold text-amber-600 dark:text-amber-400 border-l border-neutral-200 dark:border-neutral-700">BB</th>
-                <th className="py-2.5 px-2.5 text-right font-semibold text-amber-600 dark:text-amber-400">% BB<div className="text-[10px] font-normal text-neutral-400">poin</div></th>
+                <th className="py-2.5 px-2.5 text-right font-semibold text-amber-600 dark:text-amber-400">% BB<div className="whitespace-nowrap text-[10px] font-normal text-neutral-400">poin</div></th>
                 <th className="py-2.5 px-3 text-right font-semibold border-l border-neutral-200 dark:border-neutral-700">vs Target</th>
                 <th className="py-2.5 px-3 text-right font-semibold">vs LM</th>
                 <th className="py-2.5 px-3 text-right font-semibold">vs LY</th>
-                <th className="py-2.5 px-3 text-right font-semibold">Poin Penjualan<div className="text-[10px] font-normal text-neutral-400">maks {TOTAL_HASIL}+</div></th>
+                <th className="py-2.5 px-3 text-right font-semibold">Poin Penjualan<div className="whitespace-nowrap text-[10px] font-normal text-neutral-400">maks {TOTAL_HASIL}+ poin</div></th>
                 <th className="py-2.5 px-3 font-semibold w-28 text-left">Diagram Capaian</th>
               </tr>
             </thead>
@@ -980,7 +981,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                     <td className={`py-3 px-2.5 text-right font-semibold ${getBbStatusClass(row.pctBb)}`}>
                       {formatPercent(row.pctBb)}
-                      <div className="text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.bb.poin)} poin</div>
+                      <div className="whitespace-nowrap text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.bb.poin)} poin</div>
                     </td>
 
                     <td className={`py-3 px-3 text-right border-l border-neutral-200 dark:border-neutral-700 ${
@@ -992,7 +993,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <div className="text-[10px] text-neutral-400 font-normal">
                         {formatAkmDiffPair(row.diffTg)}
                       </div>
-                      <div className="text-[10px] text-brand-600 dark:text-brand-400 font-semibold">
+                      <div className="whitespace-nowrap text-[10px] text-brand-600 dark:text-brand-400 font-semibold">
                         {fmtPoin(row.skor.kategori.target.poin)} poin
                       </div>
                     </td>
@@ -1006,7 +1007,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <div className="text-[10px] text-neutral-400 font-normal">
                         {formatAkmDiffPair(row.diffBl)}
                       </div>
-                      <div className="text-[10px] text-brand-600 dark:text-brand-400 font-semibold">
+                      <div className="whitespace-nowrap text-[10px] text-brand-600 dark:text-brand-400 font-semibold">
                         {fmtPoin(row.skor.kategori.mom.poin)} poin
                       </div>
                     </td>
@@ -1020,7 +1021,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <div className="text-[10px] text-neutral-400 font-normal">
                         {formatAkmDiffPair(row.diffTy)}
                       </div>
-                      <div className="text-[10px] text-brand-600 dark:text-brand-400 font-semibold">
+                      <div className="whitespace-nowrap text-[10px] text-brand-600 dark:text-brand-400 font-semibold">
                         {fmtPoin(row.skor.kategori.yoy.poin)} poin
                       </div>
                     </td>
@@ -1104,16 +1105,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <th className="py-2.5 px-2 font-semibold">Rayon</th>
                     <th className={`py-2.5 px-3 text-right font-semibold ${bd}`}>Area</th>
                     <th className="py-2.5 px-3 text-right font-semibold">YL</th>
-                    <th className="py-2.5 px-3 text-right font-semibold">% Cover<div className="text-[10px] font-normal text-neutral-400">poin maks {BOBOT.area}</div></th>
+                    <th className="py-2.5 px-3 text-right font-semibold">% Cover<div className="whitespace-nowrap text-[10px] font-normal text-neutral-400">poin maks {BOBOT.area}</div></th>
                     <th className={`py-2.5 px-3 text-right font-semibold text-sky-600 dark:text-sky-400 ${bd}`}>JWP</th>
-                    <th className="py-2.5 px-3 text-right font-semibold">s/YL<div className="text-[10px] font-normal text-neutral-400">poin maks {BOBOT.syl}</div></th>
-                    <th className={`py-2.5 px-3 text-right font-semibold ${bd}`}>Absen<div className="text-[10px] font-normal text-neutral-400">poin maks {BOBOT.absen}</div></th>
-                    <th className="py-2.5 px-3 text-right font-semibold">Frek (EWP)<div className="text-[10px] font-normal text-neutral-400">poin maks {BOBOT.ewp}</div></th>
+                    <th className="py-2.5 px-3 text-right font-semibold">s/YL<div className="whitespace-nowrap text-[10px] font-normal text-neutral-400">poin maks {BOBOT.syl}</div></th>
+                    <th className={`py-2.5 px-3 text-right font-semibold ${bd}`}>Absen<div className="whitespace-nowrap text-[10px] font-normal text-neutral-400">poin maks {BOBOT.absen}</div></th>
+                    <th className="py-2.5 px-3 text-right font-semibold">Frek (EWP)<div className="whitespace-nowrap text-[10px] font-normal text-neutral-400">poin maks {BOBOT.ewp}</div></th>
                     <th className={`py-2.5 px-3 text-right font-semibold text-red-600 dark:text-red-400 ${bd}`}>&lt;250</th>
-                    <th className="py-2.5 px-3 text-right font-semibold text-red-600 dark:text-red-400">%&lt;250<div className="text-[10px] font-normal text-neutral-400">poin maks {BOBOT.yl250}</div></th>
-                    <th className={`py-2.5 px-3 text-right font-semibold text-amber-600 dark:text-amber-400 ${bd}`}>&lt;300</th>
+                    <th className="py-2.5 px-3 text-right font-semibold text-red-600 dark:text-red-400">%&lt;250<div className="whitespace-nowrap text-[10px] font-normal text-neutral-400">poin maks {BOBOT.yl250}</div></th>
+                    <th className={`py-2.5 px-3 text-right font-semibold text-amber-600 dark:text-amber-400 ${bd}`}>&lt;300<div className="whitespace-nowrap text-[10px] font-normal text-neutral-400">poin maks {BOBOT.yl300}</div></th>
                     <th className="py-2.5 px-3 text-right font-semibold text-amber-600 dark:text-amber-400">%&lt;300</th>
-                    <th className={`py-2.5 px-3 text-right font-semibold text-brand-600 dark:text-brand-400 ${bd}`}>Skor Kondisi<div className="text-[10px] font-normal text-neutral-400">maks {TOTAL_KONDISI}</div></th>
+                    <th className={`py-2.5 px-3 text-right font-semibold text-brand-600 dark:text-brand-400 ${bd}`}>Skor Kondisi<div className="whitespace-nowrap text-[10px] font-normal text-neutral-400">maks {TOTAL_KONDISI} poin</div></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono text-xs">
@@ -1124,14 +1125,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <td className="py-3 px-2 font-sans text-neutral-500">R{row.t.rayon}</td>
                       <td className={`py-3 px-3 text-right ${bd}`}>{row.area}</td>
                       <td className="py-3 px-3 text-right">{row.yl}</td>
-                      <td className={`py-3 px-3 text-right font-bold ${row.cover >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>{formatPercent(row.cover)}<div className="text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.area.poin)} poin</div></td>
+                      <td className={`py-3 px-3 text-right font-bold ${row.cover >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>{formatPercent(row.cover)}<div className="whitespace-nowrap text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.area.poin)} poin</div></td>
                       <td className={`py-3 px-3 text-right text-sky-600 dark:text-sky-400 ${bd}`}>{formatNumber(row.jwp)}</td>
-                      <td className="py-3 px-3 text-right font-bold text-brand-600 dark:text-brand-400">{row.s_yl > 0 ? formatNumber(row.s_yl) : '—'}<div className="text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.syl.poin)} poin</div></td>
-                      <td className={`py-3 px-3 text-right ${bd}`}>{row.abs > 0 ? <span className="font-bold text-red-600 dark:text-red-400">{row.abs}</span> : <span className="text-neutral-400">0</span>}<div className="text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.absen.poin)} poin</div></td>
-                      <td className="py-3 px-3 text-right">{row.frk > 0 ? <span className="font-bold text-red-600 dark:text-red-400">{row.frk}</span> : <span className="text-neutral-400">0</span>}<div className="text-[10px] text-neutral-400 font-normal">{row.skor.kategori.ewp.nilai !== null ? `${row.skor.kategori.ewp.nilai.toFixed(2).replace('.', ',')}% · ` : ''}{fmtPoin(row.skor.kategori.ewp.poin)} poin</div></td>
+                      <td className="py-3 px-3 text-right font-bold text-brand-600 dark:text-brand-400">{row.s_yl > 0 ? formatNumber(row.s_yl) : '—'}<div className="whitespace-nowrap text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.syl.poin)} poin</div></td>
+                      <td className={`py-3 px-3 text-right ${bd}`}>{row.abs > 0 ? <span className="font-bold text-red-600 dark:text-red-400">{row.abs}</span> : <span className="text-neutral-400">0</span>}<div className="whitespace-nowrap text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.absen.poin)} poin</div></td>
+                      <td className="py-3 px-3 text-right">{row.frk > 0 ? <span className="font-bold text-red-600 dark:text-red-400">{row.frk}</span> : <span className="text-neutral-400">0</span>}<div className="whitespace-nowrap text-[10px] text-neutral-400 font-normal">{row.skor.kategori.ewp.nilai !== null ? `${row.skor.kategori.ewp.nilai.toFixed(2).replace('.', ',')}% · ` : ''}{fmtPoin(row.skor.kategori.ewp.poin)} poin</div></td>
                       <td className={`py-3 px-3 text-right text-red-600 dark:text-red-400 ${bd}`}>{row.l250}</td>
-                      <td className="py-3 px-3 text-right font-semibold text-red-600 dark:text-red-400">{formatPercent(row.pctL250)}<div className="text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.yl250.poin)} poin</div></td>
-                      <td className={`py-3 px-3 text-right text-amber-600 dark:text-amber-400 ${bd}`}>{row.l300}</td>
+                      <td className="py-3 px-3 text-right font-semibold text-red-600 dark:text-red-400">{formatPercent(row.pctL250)}<div className="whitespace-nowrap text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.yl250.poin)} poin</div></td>
+                      <td className={`py-3 px-3 text-right text-amber-600 dark:text-amber-400 ${bd}`}>{row.l300}<div className="whitespace-nowrap text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.yl300.poin)} poin</div></td>
                       <td className="py-3 px-3 text-right font-semibold text-amber-600 dark:text-amber-400">{formatPercent(row.pctL300)}</td>
                       <td className={`py-3 px-3 text-right font-bold text-brand-600 dark:text-brand-400 ${bd}`}>{fmtPoin(row.skor.skorKondisi)}</td>
                     </tr>
