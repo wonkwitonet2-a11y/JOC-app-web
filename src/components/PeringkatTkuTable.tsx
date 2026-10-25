@@ -2,6 +2,9 @@ import React from 'react';
 import { Award } from 'lucide-react';
 import {
   BOBOT,
+  TOTAL_BOBOT,
+  TOTAL_HASIL,
+  TOTAL_KONDISI,
   KategoriKey,
   PeringkatHasil,
   PeringkatRow,
@@ -17,6 +20,8 @@ const fmt1 = (n: number | null | undefined) =>
 const fmt2 = (n: number) => n.toFixed(2).replace('.', ',');
 const fmtPct = (n: number | null | undefined) =>
   n === null || n === undefined || !isFinite(n) ? '—' : `${n.toFixed(1).replace('.', ',')}%`;
+const fmtNilai = (k: KategoriKey, n: number | null | undefined) =>
+  k === 'syl' ? (n === null || n === undefined || !isFinite(n) ? '—' : String(Math.round(n))) : fmtPct(n);
 
 const GREEN = 'text-emerald-600 dark:text-emerald-400';
 const AMBER = 'text-amber-600 dark:text-amber-400';
@@ -37,10 +42,12 @@ const HASIL: { k: KategoriKey; label: string; unit: string }[] = [
   { k: 'mom', label: 'vs LM', unit: '%' },
 ];
 const KONDISI: { k: KategoriKey; label: string; unit: string }[] = [
+  { k: 'syl', label: 'S/YL', unit: '' },
   { k: 'area', label: 'YL/Area', unit: '%' },
   { k: 'ewp', label: 'Frek (EWP)', unit: '%' },
-  { k: 'bb', label: '% BB', unit: '%' },
+  { k: 'yl250', label: '%YL<250', unit: '%' },
   { k: 'absen', label: 'Absen', unit: '%' },
+  { k: 'bb', label: '% BB', unit: '%' },
 ];
 
 const Cell: React.FC<{ row: PeringkatRow; k: KategoriKey; border?: boolean }> = ({ row, k, border }) => {
@@ -48,7 +55,7 @@ const Cell: React.FC<{ row: PeringkatRow; k: KategoriKey; border?: boolean }> = 
   return (
     <td className={`py-3 px-2.5 text-right ${border ? 'border-l border-neutral-200 dark:border-neutral-700' : ''}`}>
       <div className={`font-bold ${tone(k, c.poin, c.nilai)}`}>{fmt1(c.poin)}</div>
-      <div className="text-[10px] text-neutral-400 font-normal">{fmtPct(c.nilai)}</div>
+      <div className="text-[10px] text-neutral-400 font-normal">{fmtNilai(k, c.nilai)}</div>
     </td>
   );
 };
@@ -70,12 +77,12 @@ export const PeringkatTkuTable: React.FC<Props> = ({ data, tanggalUpdate }) => {
           {sementara ? `Sementara (tgl ${tanggalUpdate})` : `Resmi (tgl ${tanggalUpdate})`}
         </span>
         <span className="text-neutral-500">
-          Penjualan = LY (30) + Target (25) + LM (20). Kondisi = YL/Area (15), Frekuensi (15), BB (15), Absen (10). Maks 130 + bonus.
+          Penjualan ({TOTAL_HASIL}) = LY ({BOBOT.yoy}) + Target ({BOBOT.target}) + LM ({BOBOT.mom}). Kondisi ({TOTAL_KONDISI}) = S/YL ({BOBOT.syl}), YL/Area ({BOBOT.area}), Frekuensi ({BOBOT.ewp}), %YL&lt;250 ({BOBOT.yl250}), Absen ({BOBOT.absen}), BB ({BOBOT.bb}). Maks {TOTAL_BOBOT} + bonus.
         </span>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm border-collapse min-w-[900px]">
+        <table className="w-full text-left text-sm border-collapse min-w-[1050px]">
           <thead>
             <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 text-xs bg-neutral-50 dark:bg-neutral-800/40">
               <th className="py-2.5 px-3 font-semibold w-10 text-center">#</th>
@@ -125,7 +132,7 @@ export const PeringkatTkuTable: React.FC<Props> = ({ data, tanggalUpdate }) => {
                   {row.dinormalisasi && (
                     <span
                       className="ml-1 text-amber-600 dark:text-amber-400"
-                      title="Ada indikator tanpa data pembanding, skor dinormalisasi ke skala 130"
+                      title="Ada indikator tanpa data pembanding, skor dinormalisasi ke skala 100"
                     >
                       *
                     </span>

@@ -1,37 +1,47 @@
 /**
- * Peringkat TKU — 7 indikator, total poin penuh 130.
+ * Peringkat TKU — total poin penuh 100 (belum termasuk bonus di atas 100%).
  *
- * Poin penuh:
- *   Penjualan : vs Tahun Lalu 30, vs Target 25, vs Bulan Lalu 20
- *   Kondisi   : YL vs Area 15, Frekuensi (EWP) 15, BB 15, Absen 10
+ * Penjualan = 65 poin:  vs Tahun Lalu 28 (utama), vs Target 24, vs Bulan Lalu 13 (terendah).
+ * Kondisi   = 35 poin (urut dari pengaruh ke penjualan): S/YL 8, Jumlah YL vs Area 7, Frekuensi (EWP) 7,
+ *                      %YL<250 5 (syarat YL mandiri 250), Absen 4, BB 4.
  *
- * Aturan:
+ * Tangga nilai (persentase dari poin penuh indikator) mengikuti aturan perusahaan:
  * - Penjualan: >=100% = poin penuh + bonus proporsional (persen/100 x bobot, tidak dibatasi),
- *   95% = 85%, 90% = 75%, 85% = 60%, 80% = 50%, <80% = 0. Nilai di antara dibulatkan ke anak tangga bawah.
- * - Absen, Frekuensi, BB: nilai 0 = poin penuh (lihat tabel di fungsi skor masing-masing).
- * - Absen & Frekuensi di aplikasi = angka update terbaru (bukan dijumlah harian).
+ *   95% = 85%, 90% = 75%, 85% = 60%, 80% = 50%, <80% = 0. Di antara anak tangga dibulatkan ke bawah.
+ * - YL vs Area: 100% = 100%, 90% = 2/3, 80% = 1/3, <80% = 0.
+ * - BB: 0% = 100%, s/d 5% = 2/3, s/d 10% = 1/3, >10% = 0.
+ * - Absen: 0% = 100%, s/d 10% = 70%, s/d 20% = 50%, >20% = 0.
+ * - EWP: 100% = 100%, 99,75 = 13/15 dst (lihat tabel di skorEwp), <90 = 0.
+ * - %YL<250: (100 - persen)% dari poin penuh.
+ * - S/YL: <250 = 0, 250 = 1/3, naik linear sampai 350 = 100%.
+ * Absen & Frekuensi di aplikasi = angka update terbaru (bukan dijumlah harian).
  *
  * Basis kosong/nol (mis. data tahun lalu belum ada): indikator itu dikeluarkan,
- * lalu semua poin dinormalisasi ke skala 130 supaya TKU tidak dirugikan.
+ * lalu poin sisanya dinormalisasi di dalam kelompoknya (Penjualan tetap 65, Kondisi tetap 35) supaya TKU tidak dirugikan.
  */
 
 export const BOBOT = {
-  yoy: 30,
-  target: 25,
-  mom: 20,
-  area: 15,
-  ewp: 15,
-  bb: 15,
-  absen: 10,
+  yoy: 28,
+  target: 24,
+  mom: 13,
+  syl: 8,
+  area: 7,
+  ewp: 7,
+  yl250: 5,
+  absen: 4,
+  bb: 4,
 } as const;
 
 export type KategoriKey = keyof typeof BOBOT;
 
-export const TOTAL_BOBOT = (Object.values(BOBOT) as number[]).reduce((a, b) => a + b, 0); // 130
-
 /** Kelompok untuk tampilan: hasil penjualan vs kondisi TKU */
 export const KELOMPOK_HASIL: KategoriKey[] = ['yoy', 'target', 'mom'];
-export const KELOMPOK_KONDISI: KategoriKey[] = ['area', 'ewp', 'bb', 'absen'];
+export const KELOMPOK_KONDISI: KategoriKey[] = ['syl', 'area', 'ewp', 'yl250', 'absen', 'bb'];
+
+const sumBobot = (g: KategoriKey[]) => g.reduce((t, k) => t + BOBOT[k], 0);
+export const TOTAL_HASIL = sumBobot(KELOMPOK_HASIL); // 65
+export const TOTAL_KONDISI = sumBobot(KELOMPOK_KONDISI); // 35
+export const TOTAL_BOBOT = TOTAL_HASIL + TOTAL_KONDISI; // 100
 
 /** Ranking dianggap sementara bila tanggal update <= nilai ini */
 export const TANGGAL_SEMENTARA = 5;
@@ -50,8 +60,10 @@ export interface PeringkatInput {
   bulanLalu: number;
   /** % BB dalam skala 0-100 */
   persenBb: number;
-  /** (tidak dipakai lagi, dipertahankan agar kompatibel) */
+  /** % YL dengan rata-rata < 250, skala 0-100 */
   persenYl250?: number;
+  /** S/YL = rata-rata penjualan per YL (botol) */
+  sYl?: number;
   /** Jumlah YL absen (angka update terbaru) */
   absen: number;
   totalYl: number;
@@ -123,48 +135,64 @@ function skorPenjualan(aktual: number, basis: number, bobot: number): Skor {
   return { poin: rasio * bobot, nilai: persen };
 }
 
-/** YL vs Area: 100% = 15, 90% = 10, 80% = 5, <80% = 0 */
+/** YL vs Area: 100% = penuh, 90% = 2/3, 80% = 1/3, <80% = 0 */
 function skorArea(ylAktual: number, standarArea: number): Skor {
   if (!fin(ylAktual) || !fin(standarArea) || standarArea <= 0) return { poin: null, nilai: null };
   const persen = (ylAktual / standarArea) * 100;
-  const poin = tangga(trunc2(persen), [
-    [100, BOBOT.area],
-    [90, 10],
-    [80, 5],
+  const rasio = tangga(trunc2(persen), [
+    [100, 1],
+    [90, 10 / 15],
+    [80, 5 / 15],
   ]);
-  return { poin, nilai: persen };
+  return { poin: rasio * BOBOT.area, nilai: persen };
 }
 
-/** BB: 0 = 15, s/d 5% = 10, >5 s/d 10% = 5, >10% = 0 */
+/** BB: 0 = penuh, s/d 5% = 2/3, >5 s/d 10% = 1/3, >10% = 0 */
 function skorBb(persenBb: number): Skor {
   if (!fin(persenBb)) return { poin: null, nilai: null };
   const v = trunc1(Math.max(0, persenBb));
-  let poin = 0;
-  if (v <= 0) poin = 15;
-  else if (v <= 5) poin = 10;
-  else if (v <= 10) poin = 5;
-  return { poin, nilai: v };
+  let rasio = 0;
+  if (v <= 0) rasio = 1;
+  else if (v <= 5) rasio = 10 / 15;
+  else if (v <= 10) rasio = 5 / 15;
+  return { poin: rasio * BOBOT.bb, nilai: v };
 }
 
-/** Absen (% dari jumlah YL): 0 = 10, s/d 10% = 7, s/d 20% = 5, >20% = 0 */
+/** %YL<250: 0% = penuh, makin besar persen makin kecil poin: (100 - persen)% x bobot */
+function skorYl250(persen: number | undefined): Skor {
+  if (!fin(persen)) return { poin: null, nilai: null };
+  const v = Math.min(100, Math.max(0, persen));
+  return { poin: ((100 - v) / 100) * BOBOT.yl250, nilai: v };
+}
+
+/** S/YL: <250 = 0, 250 = 1/3 bobot, naik linear sampai 350 = penuh. Tanpa data = dikeluarkan. */
+function skorSyl(syl: number | undefined): Skor {
+  if (!fin(syl) || syl <= 0) return { poin: null, nilai: null };
+  let rasio = 0;
+  if (syl >= 350) rasio = 1;
+  else if (syl >= 250) rasio = (5 + (syl - 250) / 10) / 15;
+  return { poin: rasio * BOBOT.syl, nilai: syl };
+}
+
+/** Absen (% dari jumlah YL): 0 = penuh, s/d 10% = 70%, s/d 20% = 50%, >20% = 0 */
 function skorAbsen(absen: number, totalYl: number): Skor {
   if (!fin(absen) || !fin(totalYl) || totalYl <= 0) return { poin: null, nilai: null };
   const persen = round2((Math.max(0, absen) / totalYl) * 100);
-  let poin = 0;
-  if (persen <= 0) poin = 10;
-  else if (persen <= 10) poin = 7;
-  else if (persen <= 20) poin = 5;
-  return { poin, nilai: persen };
+  let rasio = 0;
+  if (persen <= 0) rasio = 1;
+  else if (persen <= 10) rasio = 0.7;
+  else if (persen <= 20) rasio = 0.5;
+  return { poin: rasio * BOBOT.absen, nilai: persen };
 }
 
-/** Frekuensi (EWP %): 100 = 15, 99,75 = 13, 99,5 = 12, 99,25 = 11, 99 = 10, lalu turun 1 per 1% sampai 90 = 1, <90 = 0 */
+/** Frekuensi (EWP %): 100 = penuh, 99,75 = 13/15, 99,5 = 12/15, 99,25 = 11/15, 99 = 10/15, lalu turun 1/15 per 1% sampai 90 = 1/15, <90 = 0 */
 function skorEwp(totalYl: number, tanggal: number, frek: number): Skor {
   if (!fin(totalYl) || !fin(tanggal) || !fin(frek) || totalYl <= 0 || tanggal <= 0) {
     return { poin: null, nilai: null };
   }
   const hariEfektif = totalYl * tanggal;
   const persen = round2(((hariEfektif - Math.max(0, frek)) / hariEfektif) * 100);
-  const poin = tangga(persen, [
+  const poin15 = tangga(persen, [
     [100, 15],
     [99.75, 13],
     [99.5, 12],
@@ -180,7 +208,7 @@ function skorEwp(totalYl: number, tanggal: number, frek: number): Skor {
     [91, 2],
     [90, 1],
   ]);
-  return { poin, nilai: persen };
+  return { poin: (poin15 / 15) * BOBOT.ewp, nilai: persen };
 }
 
 export function hitungSkorTku(d: PeringkatInput): Omit<PeringkatRow, 'rank'> {
@@ -192,19 +220,26 @@ export function hitungSkorTku(d: PeringkatInput): Omit<PeringkatRow, 'rank'> {
     ewp: skorEwp(d.totalYl, d.tanggal, d.frekHariKosong),
     bb: skorBb(d.persenBb),
     absen: skorAbsen(d.absen, d.totalYl),
+    yl250: skorYl250(d.persenYl250),
+    syl: skorSyl(d.sYl),
   };
 
   const keys = Object.keys(BOBOT) as KategoriKey[];
   const dikeluarkan = keys.filter((k) => mentah[k].poin === null);
-  const bobotBerlaku = keys.reduce((s, k) => (mentah[k].poin === null ? s : s + BOBOT[k]), 0);
-  // Faktor normalisasi ke skala 130 (=1 bila semua indikator berlaku)
-  const faktor = bobotBerlaku > 0 ? TOTAL_BOBOT / bobotBerlaku : 0;
+  // Normalisasi per kelompok: porsi Penjualan (65) dan Kondisi (35) tetap, walau ada indikator dikeluarkan
+  const faktorGrup = (grup: KategoriKey[]) => {
+    const berlaku = grup.reduce((t, k) => (mentah[k].poin === null ? t : t + BOBOT[k]), 0);
+    return berlaku > 0 ? sumBobot(grup) / berlaku : 0;
+  };
+  const faktorHasil = faktorGrup(KELOMPOK_HASIL);
+  const faktorKondisi = faktorGrup(KELOMPOK_KONDISI);
+  const faktorDari = (k: KategoriKey) => (KELOMPOK_HASIL.includes(k) ? faktorHasil : faktorKondisi);
 
   const kategori = {} as Record<KategoriKey, SkorKategori>;
   for (const k of keys) {
     const m = mentah[k];
     kategori[k] = {
-      poin: m.poin === null ? null : m.poin * faktor,
+      poin: m.poin === null ? null : m.poin * faktorDari(k),
       nilai: m.nilai,
       bobot: BOBOT[k],
     };
