@@ -10,6 +10,7 @@ import {
   hasUnsyncedChanges,
   hasSyncMeta,
   setMergedStateHandler,
+  subscribeSyncPing,
   reapplyMergedState,
   getTanggalUpdate,
   getPembagiHari,
@@ -153,12 +154,18 @@ export default function App() {
   // Poin 3 & 4: Callback stabil tanpa dependensi volatile (menu/role/theme),
   // tidak menimpa perubahan lokal yang belum terkirim.
   const refreshFromCloud = useCallback(async (isManual = false) => {
-    const currentState = stateRef.current;
-    // Jangan tarik otomatis kalau ada input lokal yang belum terkirim (kirim dulu).
+    let currentState = stateRef.current;
+    // Ada input lokal yang belum terkirim? JANGAN diam-diam melewati penarikan (itu yang bikin data
+    // perangkat lain telat tampil). Kirim dulu: proses kirim sudah otomatis menarik + menggabung
+    // 3 arah kalau cloud berubah, lalu lanjut cek cloud seperti biasa.
     // Perangkat yang belum pernah sinkron (HP baru) justru HARUS menarik dulu; gabungannya aman.
     const belumPernahSinkron = !hasSyncMeta(currentState.supabaseConfig);
-    if (!isManual && !belumPernahSinkron && (hasPendingPushRef.current || hasUnsyncedChanges(currentState))) {
-      return;
+    if (!belumPernahSinkron && currentState.supabaseConfig.u && currentState.supabaseConfig.k &&
+        (hasPendingPushRef.current || hasUnsyncedChanges(currentState))) {
+      await pushNow();
+      currentState = stateRef.current;
+      // Kirim gagal (offline dll.)? Tetap lindungi ketikan lokal: jangan tarik, nanti diulang otomatis.
+      if (hasUnsyncedChanges(currentState)) return;
     }
 
     setIsSyncing(true);
@@ -222,12 +229,31 @@ export default function App() {
       if (document.visibilityState === 'visible') {
         refreshFromCloud(false);
       }
-    }, 150000); // 2.5 menit
+    }, 60000); // jaring pengaman tiap 60 detik (sinyal real-time yang utama): hanya cek token versi, ringan
 
     document.addEventListener('visibilitychange', handleForeground);
     window.addEventListener('focus', handleForeground);
 
+    // Real-time: sinyal kecil dari HP lain yang baru menyimpan -> tarik sebentar lagi.
+    // Dibatasi maksimal sekali per 5 detik (banyak ketikan beruntun digabung jadi satu tarikan)
+    // dan hanya saat aplikasi terlihat (kalau tersembunyi, otomatis menarik saat dibuka lagi).
+    let lastPingPull = 0;
+    let pingTimer: ReturnType<typeof setTimeout> | null = null;
+    const onPing = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (pingTimer) return;
+      const wait = Math.max(500, 5000 - (Date.now() - lastPingPull));
+      pingTimer = setTimeout(() => {
+        pingTimer = null;
+        lastPingPull = Date.now();
+        refreshFromCloud(false);
+      }, wait);
+    };
+    const unsubscribePing = subscribeSyncPing(state.supabaseConfig, onPing);
+
     return () => {
+      unsubscribePing();
+      if (pingTimer) clearTimeout(pingTimer);
       clearInterval(periodicTimer);
       document.removeEventListener('visibilitychange', handleForeground);
       window.removeEventListener('focus', handleForeground);
@@ -332,7 +358,7 @@ export default function App() {
       // Ada ketikan baru selama proses simpan? Kirim lagi sebentar lagi.
       if (hasUnsyncedChanges(stateRef.current)) {
         if (supabasePushTimer.current) clearTimeout(supabasePushTimer.current);
-        supabasePushTimer.current = setTimeout(() => { pushNow(); }, 2500);
+        supabasePushTimer.current = setTimeout(() => { pushNow(); }, 600);
       }
     } else {
       hasPendingPushRef.current = true;
@@ -348,22 +374,25 @@ export default function App() {
     if (!hasUnsyncedChanges(state)) return; // Lewati jika tidak ada perubahan data riil
     hasPendingPushRef.current = true;
     if (supabasePushTimer.current) clearTimeout(supabasePushTimer.current);
-    supabasePushTimer.current = setTimeout(() => { pushNow(); }, 2500);
+    supabasePushTimer.current = setTimeout(() => { pushNow(); }, 600);
     return () => {
       if (supabasePushTimer.current) clearTimeout(supabasePushTimer.current);
     };
   }, [state, pushNow]);
 
   useEffect(() => {
+    // Kirim segera saat HP kembali online, aplikasi dibuka, DAN saat aplikasi diminimalkan/ditutup
+    // (supaya ketikan terakhir tidak tertinggal di HP).
     const kick = () => {
-      if (document.visibilityState === 'hidden') return;
       pushRetryCountRef.current = 0;
       pushNow();
     };
     window.addEventListener('online', kick);
+    window.addEventListener('pagehide', kick);
     document.addEventListener('visibilitychange', kick);
     return () => {
       window.removeEventListener('online', kick);
+      window.removeEventListener('pagehide', kick);
       document.removeEventListener('visibilitychange', kick);
       if (supabaseRetryTimer.current) clearTimeout(supabaseRetryTimer.current);
     };
@@ -1122,6 +1151,34 @@ export default function App() {
     return false;
   };
 
+  const handleUpdateArchiveAbsen = async (
+    archiveKey: string,
+    patch: Record<number, { absenYl: number; frekuensiAbsen: number; tahunLalu: number }>
+  ) => {
+    const arc = state.archives[archiveKey];
+    if (!arc) return;
+    const nextState: AppState = {
+      ...state,
+      archives: {
+        ...state.archives,
+        [archiveKey]: {
+          ...arc,
+          rows: arc.rows.map((r, i) => {
+            const pt = patch[i];
+            if (!pt) return r;
+            // % vs tahun lalu = rata harian ÷ rata harian tahun lalu (rumus sama dengan saat arsip dibuat; tanpa tahun lalu = 1)
+            const vsLyPct = pt.tahunLalu > 0 ? Math.floor(((r.rataHarian || 0) / pt.tahunLalu) * 1000 * 100 + 1e-9) / 100 / 1000 : 1;
+            return { ...r, absenYl: pt.absenYl, frekuensiAbsen: pt.frekuensiAbsen, tahunLalu: pt.tahunLalu, vsLyPct };
+          })
+        }
+      }
+    };
+    setState(nextState);
+    if (state.supabaseConfig.u && state.supabaseConfig.k) {
+      saveStateToSupabase(nextState, true);
+    }
+  };
+
   const handleUnlockArchive = async (archiveKey: string) => {
     const arc = state.archives[archiveKey];
     if (!arc) return;
@@ -1587,6 +1644,7 @@ export default function App() {
                   state={state}
                   onSaveCurrentMonthArchive={handleSaveCurrentMonthArchive}
                   onUnlockArchive={handleUnlockArchive}
+                  onUpdateArchiveAbsen={handleUpdateArchiveAbsen}
                   onImportCsvArchive={handleImportCsvArchive}
                   onSelectArchive={handleSelectArchive}
                   onDeleteArchive={handleDeleteArchive}

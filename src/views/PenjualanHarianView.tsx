@@ -12,6 +12,7 @@ import {
   getSeedDailyBranchTotal,
   getBbStatusClass,
   truncFixed
+  , getJwpAsOf
 } from '../services/storage';
 
 interface PenjualanHarianViewProps {
@@ -99,9 +100,13 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
     return Math.round(tkuTotal * ratios[variant]);
   };
 
+  // JWP per TKU = nilai kumulatif terbaru sampai tanggal terpilih (null bila belum pernah diisi)
+  const jwpOf = (idx: number): number | null => getJwpAsOf(state, idx, selectedDay);
+
   // Compute daily sums for Rayon 1, Rayon 2, and Cabang for selected date
   const computeDailySums = (rayonFilter: number | null) => {
     let sold = 0;
+    let jwp = 0;
     let bb = 0;
     let pdm = 0;
     let absen = 0;
@@ -117,6 +122,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
       const rec = getRecordFor(currentDateIso, idx);
       const daySold = rec?.sold ?? getTkuDailySales(idx, selectedDay, 'ALL');
       const dayBb = rec?.bb ?? 0;
+      jwp += jwpOf(idx) ?? 0;
       const dayPdm = rec ? ((rec.pdm ?? 0) || (rec.pdmV ? rec.pdmV.reduce((a, b) => a + b, 0) : 0)) : 0;
       const dayAbsen = rec?.absen ?? 0;
       const dayFrek = rec?.frek ?? 0;
@@ -143,7 +149,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
       });
     });
 
-    return { sold, bb, pdm, absen, frek, l250, l300, vTotal };
+    return { sold, bb, pdm, jwp, absen, frek, l250, l300, vTotal };
   };
 
   const r1Sum = computeDailySums(1);
@@ -184,7 +190,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
       'No', 'Nama TKU', 'Rayon',
       'YO', 'OM', 'OS', 'YT', 'Total Terjual',
       'Target Harian', '% Capaian',
-      'BB', '% BB', 'PDM',
+      'BB', '% BB', 'PDM', 'JWP',
       'Absen', 'Frek', 'YL < 250', 'YL < 300'
     ];
 
@@ -220,6 +226,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
         bb,
         pctBb,
         pdm,
+        jwpOf(idx) ?? 0,
         absen,
         frek,
         l250,
@@ -237,6 +244,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
       r1Sum.bb,
       (r1Sum.bb + r1Sum.sold) > 0 ? truncFixed(((r1Sum.bb / (r1Sum.bb + r1Sum.sold)) * 100), 2) + '%' : '0%',
       r1Sum.pdm,
+      r1Sum.jwp,
       r1Sum.absen,
       r1Sum.frek,
       r1Sum.l250,
@@ -253,6 +261,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
       r2Sum.bb,
       (r2Sum.bb + r2Sum.sold) > 0 ? truncFixed(((r2Sum.bb / (r2Sum.bb + r2Sum.sold)) * 100), 2) + '%' : '0%',
       r2Sum.pdm,
+      r2Sum.jwp,
       r2Sum.absen,
       r2Sum.frek,
       r2Sum.l250,
@@ -269,6 +278,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
       cabangSum.bb,
       (cabangSum.bb + cabangSum.sold) > 0 ? truncFixed(((cabangSum.bb / (cabangSum.bb + cabangSum.sold)) * 100), 2) + '%' : '0%',
       cabangSum.pdm,
+      cabangSum.jwp,
       cabangSum.absen,
       cabangSum.frek,
       cabangSum.l250,
@@ -425,11 +435,11 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
         </div>
       </div>
 
-      {/* 3. Tabel Rekap Penjualan */}
+      {/* 3. Tabel Penjualan per TKU (tanggal terpilih) */}
       <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs overflow-hidden">
         <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
           <h2 className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
-            Rekap Penjualan
+            Penjualan per TKU
           </h2>
           <span className="text-xs font-mono font-bold text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/40 px-2.5 py-1 rounded-lg border border-brand-200/60 dark:border-brand-900/40">
             Total: {formatNumber(cabangSum.sold)} btl
@@ -451,6 +461,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
                 <th className="py-2.5 px-2.5 text-right font-semibold text-amber-600 dark:text-amber-400">BB</th>
                 <th className="py-2.5 px-2.5 text-right font-semibold text-amber-600 dark:text-amber-400">% BB</th>
                 <th className="py-2.5 px-2.5 text-right font-semibold text-sky-600 dark:text-sky-400">PDM</th>
+                <th className="py-2.5 px-2.5 text-right font-semibold text-sky-600 dark:text-sky-400">JWP</th>
                 <th className="py-2.5 px-2 text-right font-semibold text-neutral-500">Abs</th>
                 <th className="py-2.5 px-2 text-right font-semibold text-neutral-500">Frk</th>
                 <th className="py-2.5 px-2.5 text-right font-semibold text-red-600 dark:text-red-400 border-l border-neutral-200 dark:border-neutral-700">&lt;250</th>
@@ -460,7 +471,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono text-xs">
               {/* RAYON 1 SECTION */}
               <tr className="bg-neutral-100/60 dark:bg-neutral-800/60 font-bold text-neutral-700 dark:text-neutral-300">
-                <td colSpan={15} className="py-2 px-3 font-sans text-[11px] uppercase tracking-wider text-brand-700 dark:text-brand-400">
+                <td colSpan={16} className="py-2 px-3 font-sans text-[11px] uppercase tracking-wider text-brand-700 dark:text-brand-400">
                   RAYON 1 JEMBER
                 </td>
               </tr>
@@ -524,6 +535,9 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
                     <td className="py-2.5 px-2.5 text-right text-sky-600 dark:text-sky-400">
                       {pdm !== undefined ? formatNumber(pdm) : '—'}
                     </td>
+                    <td className="py-2.5 px-2.5 text-right text-sky-600 dark:text-sky-400">
+                      {jwpOf(idx) !== null ? formatNumber(jwpOf(idx) as number) : '—'}
+                    </td>
                     <td className="py-2.5 px-2 text-right text-neutral-600 dark:text-neutral-400">
                       {absen !== undefined ? absen : '—'}
                     </td>
@@ -563,6 +577,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
                   {formatPercent(r1Sum.bb / ((r1Sum.bb + r1Sum.sold) || 1))}
                 </td>
                 <td className="py-2.5 px-2.5 text-right text-sky-600">{formatNumber(r1Sum.pdm)}</td>
+                <td className="py-2.5 px-2.5 text-right text-sky-600">{formatNumber(r1Sum.jwp)}</td>
                 <td className="py-2.5 px-2 text-right">{formatNumber(r1Sum.absen)}</td>
                 <td className="py-2.5 px-2 text-right">{formatNumber(r1Sum.frek)}</td>
                 <td className="py-2.5 px-2.5 text-right font-bold text-red-600 border-l border-neutral-200 dark:border-neutral-700">{formatNumber(r1Sum.l250)}</td>
@@ -571,7 +586,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
 
               {/* RAYON 2 SECTION */}
               <tr className="bg-neutral-100/60 dark:bg-neutral-800/60 font-bold text-neutral-700 dark:text-neutral-300">
-                <td colSpan={15} className="py-2 px-3 font-sans text-[11px] uppercase tracking-wider text-brand-700 dark:text-brand-400">
+                <td colSpan={16} className="py-2 px-3 font-sans text-[11px] uppercase tracking-wider text-brand-700 dark:text-brand-400">
                   RAYON 2 JEMBER
                 </td>
               </tr>
@@ -635,6 +650,9 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
                     <td className="py-2.5 px-2.5 text-right text-sky-600 dark:text-sky-400">
                       {pdm !== undefined ? formatNumber(pdm) : '—'}
                     </td>
+                    <td className="py-2.5 px-2.5 text-right text-sky-600 dark:text-sky-400">
+                      {jwpOf(idx) !== null ? formatNumber(jwpOf(idx) as number) : '—'}
+                    </td>
                     <td className="py-2.5 px-2 text-right text-neutral-600 dark:text-neutral-400">
                       {absen !== undefined ? absen : '—'}
                     </td>
@@ -674,6 +692,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
                   {formatPercent(r2Sum.bb / ((r2Sum.bb + r2Sum.sold) || 1))}
                 </td>
                 <td className="py-2.5 px-2.5 text-right text-sky-600">{formatNumber(r2Sum.pdm)}</td>
+                <td className="py-2.5 px-2.5 text-right text-sky-600">{formatNumber(r2Sum.jwp)}</td>
                 <td className="py-2.5 px-2 text-right">{formatNumber(r2Sum.absen)}</td>
                 <td className="py-2.5 px-2 text-right">{formatNumber(r2Sum.frek)}</td>
                 <td className="py-2.5 px-2.5 text-right font-bold text-red-600 border-l border-neutral-200 dark:border-neutral-700">{formatNumber(r2Sum.l250)}</td>
@@ -703,6 +722,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
                   {formatPercent(cabangSum.bb / ((cabangSum.bb + cabangSum.sold) || 1))}
                 </td>
                 <td className="py-3 px-2.5 text-right text-sky-600 dark:text-sky-400">{formatNumber(cabangSum.pdm)}</td>
+                <td className="py-3 px-2.5 text-right text-sky-600 dark:text-sky-400">{formatNumber(cabangSum.jwp)}</td>
                 <td className="py-3 px-2 text-right text-brand-700 dark:text-brand-300">{formatNumber(cabangSum.absen)}</td>
                 <td className="py-3 px-2 text-right text-brand-700 dark:text-brand-300">{formatNumber(cabangSum.frek)}</td>
                 <td className="py-3 px-2.5 text-right font-bold text-red-600 border-l border-neutral-200 dark:border-neutral-700">{formatNumber(cabangSum.l250)}</td>

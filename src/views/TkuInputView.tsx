@@ -188,7 +188,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   const [selectedBreakdownPeriod, setSelectedBreakdownPeriod] = useState<'M1' | 'M2' | 'M3' | 'M4' | 'M5' | 'ALL'>('M1');
 
   // Realisasi Sub-Menu States (M1 s/d M5 & Satu Bulan)
-  const [selectedRealisasiPeriod, setSelectedRealisasiPeriod] = useState<'M1' | 'M2' | 'M3' | 'M4' | 'M5' | 'ALL'>('M1');
+  const [selectedRealisasiPeriod, setSelectedRealisasiPeriod] = useState<'M1' | 'M2' | 'M3' | 'M4' | 'M5' | 'ALL'>('ALL');
   const [inlineEditDay, setInlineEditDay] = useState<number | null>(null);
   const [inlineEditV, setInlineEditV] = useState<[number, number, number, number]>([0, 0, 0, 0]);
   const [inlineEditBbV, setInlineEditBbV] = useState<[number, number, number, number]>([0, 0, 0, 0]);
@@ -1230,70 +1230,164 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       }
     });
 
+    // ---- Pembagi realisasi = tanggal update (sama dengan menu admin) ----
+    const upd = Math.max(1, Math.min(divider, DIM));
+    const akmReal = getCumActualUpToDay(upd).cumTotal;
+    const avgReal = Math.floor(akmReal / upd);
+    const realCards = [
+      { label: 'VS TARGET', short: 'Tgt', base: targetHarian, accent: '#6366f1' },
+      { label: 'VS BLN LALU', short: 'BL', base: blHarian, accent: '#06b6d4' },
+      { label: 'VS THN LALU', short: 'TL', base: tyHarian, accent: '#f59e0b' }
+    ].map(c => {
+      const pct = c.base > 0 ? avgReal / c.base : 0;
+      const diffTotal = akmReal - c.base * upd;
+      const diffPerDay = Math.trunc(diffTotal / Math.max(1, upd));
+      return { ...c, pct, diffTotal, diffPerDay };
+    });
+
+    const BAND_GREEN = 'bg-emerald-200 dark:bg-emerald-500/30';
+    const BAND_RED = 'bg-red-200 dark:bg-red-500/30';
+    const BAND_NEUTRAL = 'bg-neutral-300 dark:bg-neutral-500/35';
+    const TOTAL_FRAME = 'border-x-[3px] border-neutral-700 dark:border-neutral-200';
+    const OPS_COLS = 18; // BB(6) + PDM(5) + Abs/Frk(2) + JWP/s/YL(2) + YL<250/<300(2) + Aksi(1)
+
+    // Baris ringkasan mingguan realisasi: rata-rata = akumulasi tgl 1 s/d (Sabtu, maks. tanggal update) ÷ tanggal itu.
+    const weekRowsFor = (wk: { id: number; start: number; end: number }): React.ReactNode[] => {
+      const wIdx = WEEKS.findIndex(w => w.id === wk.id);
+      const started = wk.start <= upd;
+      const cut = Math.min(wk.end, upd);
+      let avgV: number[] = [0, 0, 0, 0];
+      let avgT = 0;
+      let akmT = 0;
+      let wkInfo: React.ReactNode = <span className="text-neutral-400">vs mgg lalu: —</span>;
+      if (started) {
+        const cw = getCumActualUpToDay(cut);
+        avgV = [cw.cumYo, cw.cumOm, cw.cumOs, cw.cumYt].map(x => Math.floor(x / cut));
+        avgT = Math.floor(cw.cumTotal / cut);
+        akmT = cw.cumTotal;
+        const prevWk = wIdx > 0 ? WEEKS[wIdx - 1] : null;
+        if (prevWk) {
+          const pc = Math.min(prevWk.end, upd);
+          const cp = getCumActualUpToDay(pc);
+          const avgPrev = Math.floor(cp.cumTotal / Math.max(1, pc));
+          if (avgPrev > 0) {
+            const pct = avgT / avgPrev;
+            const akmDiff = cw.cumTotal - avgPrev * cut;
+            wkInfo = (
+              <span className={akmDiff >= 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-red-600 dark:text-red-400 font-bold'}>
+                vs mgg lalu: {formatPercent(pct)} ({formatDiff(akmDiff)})
+              </span>
+            );
+          }
+        }
+      }
+      const dash = <span className="text-neutral-300 dark:text-neutral-600 font-normal">—</span>;
+      return [
+        <tr key={`wh${wk.id}`} className="bg-neutral-100 dark:bg-neutral-800 font-sans">
+          <td colSpan={5} className="pt-2 pb-1 px-2.5 text-[11px] text-neutral-700 dark:text-neutral-200">
+            <div className="flex flex-wrap items-center justify-between gap-x-3">
+              <span><span className="font-bold">Minggu {wk.id}</span><span className="text-neutral-500 dark:text-neutral-400"> · Tgl {wk.start}–{wk.end}</span></span>
+              <span className="text-[10px]">{wkInfo}</span>
+            </div>
+          </td>
+          <td className={TOTAL_FRAME} />
+          <td colSpan={OPS_COLS} />
+        </tr>,
+        <tr key={`wa${wk.id}`} className="bg-neutral-100 dark:bg-neutral-800 font-mono">
+          <td className="pb-2 pt-0 px-2.5 text-[10px] leading-tight text-neutral-500 dark:text-neutral-400 font-sans whitespace-nowrap">
+            Rata2<span className="block">÷ {started ? cut : '—'}</span>
+          </td>
+          {avgV.map((x, k) => (
+            <td key={k} className="pb-2 pt-0 px-1 text-center font-bold" style={{ color: VARIANTS[k].color }}>{started ? formatNumber(x) : dash}</td>
+          ))}
+          <td className={`pb-2 pt-0 px-2.5 text-right font-bold text-neutral-900 dark:text-white ${TOTAL_FRAME}`}>
+            {started ? formatNumber(avgT) : dash}
+            {started && <span className="block text-[9px] font-normal font-sans text-neutral-500 dark:text-neutral-400">Akm {formatNumber(akmT)}</span>}
+          </td>
+          <td colSpan={OPS_COLS} />
+        </tr>
+      ];
+    };
+
     return (
-      <div className="space-y-6 animate-in fade-in duration-200">
-        {/* Tabel Detail Realisasi Harian & Operasional */}
-        <div className="p-6 bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-sm space-y-4">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-neutral-100 dark:border-neutral-800">
-            <div>
-              <h3 className="text-base font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
-                <CalendarRange className="w-5 h-5 text-emerald-600" />
-                Realisasi Harian
-              </h3>
-            </div>
+      <div className="space-y-3 animate-in fade-in duration-200">
+        {/* Akumulasi & rata-rata realisasi (pembagi = tanggal update) */}
+        <div className="p-3 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-xs flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <span className="text-[10px] font-bold tracking-wide text-neutral-500 dark:text-neutral-400 block">AKM REALISASI {period.label.toUpperCase()}</span>
+            <span className="text-xl font-mono font-extrabold text-neutral-900 dark:text-white">{formatNumber(akmReal)}</span>
+            <span className="text-xs text-neutral-400 font-sans"> btl</span>
+          </div>
+          <div className="text-right min-w-0">
+            <span className="text-[10px] font-bold tracking-wide text-neutral-500 dark:text-neutral-400 block">RATA2/HR (÷ {upd})</span>
+            <span className="text-xl font-mono font-extrabold text-emerald-600 dark:text-emerald-400">{formatNumber(avgReal)}</span>
+            <span className="text-xs text-neutral-400 font-sans"> btl</span>
+          </div>
+        </div>
 
-            {/* Switcher Minggu & Salin Button */}
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex rounded-xl bg-neutral-100 dark:bg-neutral-800 p-1 border border-neutral-200 dark:border-neutral-700 shrink-0">
-                {[
-                  { id: 'M1', label: 'M1' },
-                  { id: 'M2', label: 'M2' },
-                  { id: 'M3', label: 'M3' },
-                  { id: 'M4', label: 'M4' },
-                  { id: 'M5', label: 'M5' },
-                  { id: 'ALL', label: 'Satu Bulan' }
-                ].map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => {
-                      setSelectedRealisasiPeriod(p.id as any);
-                      setInlineEditDay(null);
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedRealisasiPeriod === p.id ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-2xs' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'}`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
+        <div className="grid grid-cols-3 gap-2">
+          {realCards.map(c => (
+            <div
+              key={c.label}
+              className="p-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-xs min-w-0"
+              style={{ borderLeft: `4px solid ${c.accent}` }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                <span className="text-[10px] font-bold tracking-wide text-neutral-500 break-words">{c.label}</span>
+                <span className={`text-[10px] font-mono font-bold px-1.5 py-px rounded ${c.diffPerDay >= 0 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400'}`}>
+                  {formatDiff(c.diffPerDay)}
+                </span>
               </div>
-
-              <button
-                type="button"
-                onClick={handleCopyAllRealisasi}
-                className="px-3 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-xs font-semibold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5 transition-colors cursor-pointer"
-                title="Salin seluruh tabel realisasi ke format Excel/Spreadsheet"
-              >
-                <Copy className="w-3.5 h-3.5 text-neutral-500" />
-                <span>Salin Data</span>
-              </button>
+              <div className={`text-lg font-mono font-extrabold leading-tight ${c.pct >= 1 ? 'text-emerald-600' : 'text-red-600'}`}>
+                {c.base > 0 ? formatPercent(c.pct) : '—'}
+              </div>
+              <div className="text-[10px] text-neutral-500 font-mono break-words">
+                {c.short}: {formatNumber(c.base)}/hr
+              </div>
+              <div className={`text-[10px] font-mono break-words ${c.diffTotal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                Selisih: {formatDiff(c.diffTotal)}
+              </div>
             </div>
+          ))}
+        </div>
+
+        {/* Tabel Realisasi Harian & Operasional */}
+        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs overflow-hidden">
+          <div className="px-3 py-2.5 border-b border-neutral-100 dark:border-neutral-800 flex flex-wrap items-start justify-between gap-2">
+            <div className="space-y-1 min-w-0">
+              <h3 className="text-sm font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+                <CalendarRange className="w-4 h-4 text-emerald-600" />
+                Realisasi {period.label}
+              </h3>
+              <p className="text-[10px] text-neutral-500 dark:text-neutral-400 leading-snug">
+                Kolom Total vs pencapaian minggu lalu (hari sama):{' '}
+                <span className="inline-block w-3 h-3 rounded-sm align-[-2px] mx-0.5 bg-red-300 dark:bg-red-500/50" />kurang,{' '}
+                <span className="inline-block w-3 h-3 rounded-sm align-[-2px] mx-0.5 bg-emerald-300 dark:bg-emerald-500/50" />lebih,{' '}
+                <span className="inline-block w-3 h-3 rounded-sm align-[-2px] mx-0.5 bg-neutral-400 dark:bg-neutral-500/60" />sama.
+                {' '}Geser ke samping untuk BB, PDM, absen, dan lainnya.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleCopyAllRealisasi}
+              className="px-3 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-xs font-semibold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Salin seluruh tabel realisasi ke format Excel/Spreadsheet"
+            >
+              <Copy className="w-3.5 h-3.5 text-neutral-500" />
+              <span>Salin Data</span>
+            </button>
           </div>
 
-          <div className="overflow-x-auto max-h-[650px] border border-neutral-200 dark:border-neutral-800 rounded-2xl">
-            <table className="w-full text-xs text-left border-collapse min-w-[1780px]">
-              <thead className="sticky top-0 z-10 bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 font-semibold shadow-2xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left border-collapse min-w-[1500px]">
+              <thead className="bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 font-semibold">
                 <tr className="border-b border-neutral-200 dark:border-neutral-700">
-                  <th className="py-2.5 px-3">Tanggal</th>
-                  <th className="py-2.5 px-2">Hari</th>
-                  <th className="py-2.5 px-2 text-right" style={{ color: VARIANTS[0].color }}>YO</th>
-                  <th className="py-2.5 px-2 text-right" style={{ color: VARIANTS[1].color }}>OM</th>
-                  <th className="py-2.5 px-2 text-right" style={{ color: VARIANTS[2].color }}>OS</th>
-                  <th className="py-2.5 px-2 text-right" style={{ color: VARIANTS[3].color }}>YT</th>
-                  <th className="py-2.5 px-2.5 text-right font-bold text-neutral-900 dark:text-white">Realisasi Harian</th>
-                  <th className="py-2.5 px-2.5 text-right text-emerald-600 dark:text-emerald-400 font-bold">Akumulasi</th>
-                  <th className="py-2.5 px-2.5 text-right font-bold">Rata-rata/hr</th>
-                  <th className="py-2.5 px-2.5 text-right">vs Tgt</th>
-                  <th className="py-2.5 px-2.5 text-right">vs LM</th>
-                  <th className="py-2.5 px-2.5 text-right">vs LY</th>
+                  <th className="py-2 px-2.5 sticky left-0 z-10 bg-neutral-100 dark:bg-neutral-800">Tgl</th>
+                  <th className="py-2 px-1 text-center" style={{ color: VARIANTS[0].color }}>YO</th>
+                  <th className="py-2 px-1 text-center" style={{ color: VARIANTS[1].color }}>OM</th>
+                  <th className="py-2 px-1 text-center" style={{ color: VARIANTS[2].color }}>OS</th>
+                  <th className="py-2 px-1 text-center" style={{ color: VARIANTS[3].color }}>YT</th>
+                  <th className={`py-2 px-2.5 text-right font-bold text-neutral-900 dark:text-white border-t-[3px] ${TOTAL_FRAME}`}>Total</th>
                   
                   {/* BB per Varian & Total */}
                   <th className="py-2.5 px-1.5 text-right border-l border-neutral-200 dark:border-neutral-700 text-amber-600 font-bold" title="BB Yakult Original">BB YO</th>
@@ -1320,58 +1414,44 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800 font-mono">
-                {realisasiDaysToShow.map(d => {
+                {realisasiDaysToShow.flatMap(d => {
                   const dateObj = new Date(PY, PM0, d);
-                  const dayName = dateObj.toLocaleDateString('id-ID', { weekday: 'long' });
                   const isSun = dateObj.getDay() === 0;
                   const isToday = d === day;
                   const isPast = d <= day;
                   const isEditing = inlineEditDay === d;
 
                   const r = isPast ? getDayActualAllVariants(d) : { yo: 0, om: 0, os: 0, yt: 0, total: 0 };
-                  const cum = isPast ? getCumActualUpToDay(d) : { cumYo: 0, cumOm: 0, cumOs: 0, cumYt: 0, cumTotal: 0 };
                   const opsD = getDailyOpsDetail(d);
-
-                  const dayDivider = d;
-                  const avgDaily = (isPast && dayDivider > 0) ? Math.floor(cum.cumTotal / dayDivider) : 0;
-
-                  const vsTgPct = (isPast && targetHarian > 0) ? (avgDaily / targetHarian) : 0;
-                   const vsTgAkmDiff = cum.cumTotal - targetHarian * dayDivider;
-
-                  const vsBlPct = (isPast && blHarian > 0) ? (avgDaily / blHarian) : 0;
-                   const vsBlAkmDiff = cum.cumTotal - blHarian * dayDivider;
-
-                  const vsTyPct = (isPast && tyHarian > 0) ? (avgDaily / tyHarian) : 0;
-                   const vsTyAkmDiff = cum.cumTotal - tyHarian * dayDivider;
 
                   const editTotalSold = inlineEditV[0] + inlineEditV[1] + inlineEditV[2] + inlineEditV[3];
                   const editTotalBb = inlineEditBbV[0] + inlineEditBbV[1] + inlineEditBbV[2] + inlineEditBbV[3];
                   const editTotalPdm = inlineEditPdmV[0] + inlineEditPdmV[1] + inlineEditPdmV[2] + inlineEditPdmV[3];
                   const editPctBb = (editTotalSold + editTotalBb) > 0 ? editTotalBb / (editTotalSold + editTotalBb) : 0;
 
-                  return (
+                  // Bandingkan dengan pencapaian (realisasi) minggu lalu di hari yang sama (tanggal d-7)
+                  const prevD = d - 7;
+                  const prevTotal = prevD >= 1 && hasActualSavedSalesForDay(prevD) ? getDayActualAllVariants(prevD).total : null;
+                  let totalBand = '';
+                  let totalTip = 'Belum ada pembanding minggu lalu';
+                  if (isPast && prevTotal !== null) {
+                    if (r.total > prevTotal) { totalBand = BAND_GREEN; totalTip = `Lebih dari pencapaian minggu lalu (${formatNumber(prevTotal)})`; }
+                    else if (r.total < prevTotal) { totalBand = BAND_RED; totalTip = `Kurang dari pencapaian minggu lalu (${formatNumber(prevTotal)})`; }
+                    else { totalBand = BAND_NEUTRAL; totalTip = `Sama dengan pencapaian minggu lalu (${formatNumber(prevTotal)})`; }
+                  }
+
+                  const rowEl = (
                     <tr
                       key={d}
                       className={`hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors ${isToday ? 'bg-emerald-50/30 dark:bg-emerald-950/20 font-medium' : isSun ? 'bg-amber-50/20 dark:bg-amber-950/10' : ''}`}
                     >
-                      <td className="py-2 px-3">
-                        <div className="flex items-center gap-1.5 font-bold font-sans">
-                          <span>Tgl {d}</span>
-                          {isToday && (
-                            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-600 text-white font-semibold">
-                              Hari Ini
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-2 px-2 font-sans">
-                        <span className={isSun ? 'text-amber-600 font-medium' : 'text-neutral-600 dark:text-neutral-400'}>
-                          {dayName} {isSun ? '(Libur)' : ''}
-                        </span>
+                      <td className={`py-1.5 px-2.5 font-sans whitespace-nowrap sticky left-0 z-[5] ${isToday ? 'bg-emerald-50 dark:bg-emerald-950' : isSun ? 'bg-amber-50 dark:bg-amber-950' : 'bg-white dark:bg-neutral-900'}`}>
+                        <span className={`font-bold ${isToday ? 'text-emerald-600 dark:text-emerald-400' : 'text-neutral-900 dark:text-neutral-100'}`}>Tgl {d}</span>
+                        <span className={`block text-[10px] leading-none ${isSun ? 'text-amber-600 font-medium' : 'text-neutral-400'}`}>{dateObj.toLocaleDateString('id-ID', { weekday: 'short' })}{isSun ? ' · libur' : ''}</span>
                       </td>
 
                       {/* YO */}
-                      <td className="py-1.5 px-1.5 text-right font-bold" style={{ color: VARIANTS[0].color }}>
+                      <td className="py-1.5 px-0.5 text-center font-bold" style={{ color: VARIANTS[0].color }}>
                         {isEditing ? (
                           <input
                             type="number"
@@ -1389,7 +1469,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                       </td>
 
                       {/* OM */}
-                      <td className="py-1.5 px-1.5 text-right font-bold" style={{ color: VARIANTS[1].color }}>
+                      <td className="py-1.5 px-0.5 text-center font-bold" style={{ color: VARIANTS[1].color }}>
                         {isEditing ? (
                           <input
                             type="number"
@@ -1407,7 +1487,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                       </td>
 
                       {/* OS */}
-                      <td className="py-1.5 px-1.5 text-right font-bold" style={{ color: VARIANTS[2].color }}>
+                      <td className="py-1.5 px-0.5 text-center font-bold" style={{ color: VARIANTS[2].color }}>
                         {isEditing ? (
                           <input
                             type="number"
@@ -1425,7 +1505,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                       </td>
 
                       {/* YT */}
-                      <td className="py-1.5 px-1.5 text-right font-bold" style={{ color: VARIANTS[3].color }}>
+                      <td className="py-1.5 px-0.5 text-center font-bold" style={{ color: VARIANTS[3].color }}>
                         {isEditing ? (
                           <input
                             type="number"
@@ -1443,69 +1523,11 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                       </td>
 
                       {/* Realisasi Harian Total */}
-                      <td className="py-2 px-2.5 text-right font-bold text-neutral-900 dark:text-neutral-100">
+                      <td className={`py-2 px-2.5 text-right font-bold text-neutral-900 dark:text-neutral-50 ${(isPast && !isEditing) ? totalBand : ''} ${TOTAL_FRAME}`} title={totalTip}>
                         {isEditing ? (
                           <span className="text-emerald-600">{formatNumber(editTotalSold)}</span>
                         ) : isPast ? (
                           formatNumber(r.total)
-                        ) : (
-                          <span className="text-neutral-300 dark:text-neutral-700 font-normal">—</span>
-                        )}
-                      </td>
-
-                      {/* Akumulasi */}
-                      <td className="py-2 px-2.5 text-right font-bold text-emerald-600 dark:text-emerald-400">
-                        {isPast ? formatNumber(cum.cumTotal) : <span className="text-neutral-300 dark:text-neutral-700 font-normal">—</span>}
-                      </td>
-
-                      {/* Rata-rata / Hari */}
-                      <td className="py-2 px-2.5 text-right font-bold text-neutral-900 dark:text-neutral-100">
-                        {isPast ? formatNumber(avgDaily) : <span className="text-neutral-300 dark:text-neutral-700 font-normal">—</span>}
-                      </td>
-
-                      {/* vs Target */}
-                      <td className="py-2 px-2.5 text-right font-bold">
-                        {isPast ? (
-                          <>
-                            <span className={vsTgPct >= 1 ? 'text-emerald-600' : 'text-red-600'}>
-                              {formatPercent(vsTgPct)}
-                            </span>
-                            <div className="text-[10px] text-neutral-400 font-normal">
-                              {formatAkmDiffPair(vsTgAkmDiff, dayDivider)}
-                            </div>
-                          </>
-                        ) : (
-                          <span className="text-neutral-300 dark:text-neutral-700 font-normal">—</span>
-                        )}
-                      </td>
-
-                      {/* vs LM */}
-                      <td className="py-2 px-2.5 text-right font-semibold">
-                        {isPast ? (
-                          <>
-                            <span className={vsBlPct >= 1 ? 'text-emerald-600' : 'text-neutral-600 dark:text-neutral-400'}>
-                              {formatPercent(vsBlPct)}
-                            </span>
-                            <div className="text-[10px] text-neutral-400 font-normal">
-                              {formatAkmDiffPair(vsBlAkmDiff, dayDivider)}
-                            </div>
-                          </>
-                        ) : (
-                          <span className="text-neutral-300 dark:text-neutral-700 font-normal">—</span>
-                        )}
-                      </td>
-
-                      {/* vs LY */}
-                      <td className="py-2 px-2.5 text-right font-semibold">
-                        {isPast ? (
-                          <>
-                            <span className={vsTyPct >= 1 ? 'text-emerald-600' : 'text-neutral-600 dark:text-neutral-400'}>
-                              {formatPercent(vsTyPct)}
-                            </span>
-                            <div className="text-[10px] text-neutral-400 font-normal">
-                              {formatAkmDiffPair(vsTyAkmDiff, dayDivider)}
-                            </div>
-                          </>
                         ) : (
                           <span className="text-neutral-300 dark:text-neutral-700 font-normal">—</span>
                         )}
@@ -1808,24 +1830,22 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                       </td>
                     </tr>
                   );
+                  const wkEnd = WEEKS.find(w => w.end === d);
+                  return wkEnd ? [rowEl, ...weekRowsFor(wkEnd)] : [rowEl];
                 })}
               </tbody>
-              <tfoot className="sticky bottom-0 bg-neutral-100 dark:bg-neutral-800 font-mono font-bold border-t-2 border-neutral-300 dark:border-neutral-700 shadow-xs">
+              <tfoot className="bg-neutral-100 dark:bg-neutral-800 font-mono font-bold border-t-2 border-neutral-300 dark:border-neutral-700">
                 <tr>
-                  <td colSpan={2} className="py-3 px-3 font-sans text-neutral-800 dark:text-neutral-200">
-                    Total {selectedRealisasiPeriod === 'ALL' ? 'Satu Bulan Penuh' : realisasiPeriodTitle}
+                  <td className="py-2.5 px-2.5 font-sans text-neutral-800 dark:text-neutral-200 sticky left-0 z-[5] bg-neutral-100 dark:bg-neutral-800">
+                    Total
                   </td>
-                  <td className="py-3 px-1.5 text-right" style={{ color: VARIANTS[0].color }}>{formatNumber(periodTotalYo)}</td>
-                  <td className="py-3 px-1.5 text-right" style={{ color: VARIANTS[1].color }}>{formatNumber(periodTotalOm)}</td>
-                  <td className="py-3 px-1.5 text-right" style={{ color: VARIANTS[2].color }}>{formatNumber(periodTotalOs)}</td>
-                  <td className="py-3 px-1.5 text-right" style={{ color: VARIANTS[3].color }}>{formatNumber(periodTotalYt)}</td>
-                  <td className="py-3 px-2.5 text-right text-emerald-600 text-sm">
-                    {formatNumber(periodTotalSold)} btl
+                  <td className="py-2.5 px-1 text-center" style={{ color: VARIANTS[0].color }}>{formatNumber(periodTotalYo)}</td>
+                  <td className="py-2.5 px-1 text-center" style={{ color: VARIANTS[1].color }}>{formatNumber(periodTotalOm)}</td>
+                  <td className="py-2.5 px-1 text-center" style={{ color: VARIANTS[2].color }}>{formatNumber(periodTotalOs)}</td>
+                  <td className="py-2.5 px-1 text-center" style={{ color: VARIANTS[3].color }}>{formatNumber(periodTotalYt)}</td>
+                  <td className={`py-2.5 px-2.5 text-right text-emerald-600 dark:text-emerald-400 text-sm border-b-[3px] ${TOTAL_FRAME}`}>
+                    {formatNumber(periodTotalSold)}
                   </td>
-                  <td colSpan={5} className="py-3 px-2.5 text-right text-neutral-500 font-normal font-sans text-xs">
-                    Rata: <strong className="text-neutral-900 dark:text-white font-mono">{formatNumber(breakdownDaysToShow.length > 0 ? Math.floor(periodTotalSold / breakdownDaysToShow.length) : 0)} btl/hr</strong>
-                  </td>
-
                   {/* Total BB per varian & total */}
                   <td className="py-3 px-1.5 text-right text-amber-600 border-l border-neutral-200 dark:border-neutral-700">{formatNumber(periodTotalBbV[0])}</td>
                   <td className="py-3 px-1.5 text-right text-amber-600">{formatNumber(periodTotalBbV[1])}</td>
@@ -1862,6 +1882,8 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
       {confirmDialog}
+      {activeSubMenu === 'ringkasan' && (
+      <>
       {/* 1. Card Profil Informasi Unit TKU (Ringkas & Sub-card Kanan Kiri Atas Bawah 2x2) */}
       <div className="p-3.5 md:p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs space-y-2.5">
         <div className="flex items-center justify-between gap-2 pb-2 border-b border-neutral-100 dark:border-neutral-800">
@@ -1922,6 +1944,8 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
           </div>
         </div>
       </div>
+      </>
+      )}
 
       {/* ========================================================================= */}
       {/* SUB-MENU 1: INPUT PENJUALAN HARI INI                                     */}
@@ -2216,254 +2240,254 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       {/* ========================================================================= */}
       {activeSubMenu === 'breakdown' && (
         <div className="space-y-6 animate-in fade-in duration-200">
-          {/* Controls Bar for Breakdown */}
-          <div className="p-4 md:p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="space-y-0.5">
-              <h2 className="text-base font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
-                <Target className="w-5 h-5 text-brand-600" />
-                Breakdown
-              </h2>
-            </div>
-          </div>
-
-          {/* Card: Detail Rencana Harian per Varian (Selector M1, M2, M3, M4, M5, Satu Bulan) */}
           {(() => {
-            let curTotalPlan = 0;
-            const curVPlan = [0, 0, 0, 0];
+            // ---- Ringkasan di atas: vs Target / vs Bln Lalu / vs Thn Lalu (rencana sebulan penuh) ----
+            const cumAll = getCumPlanUpToDay(DIM).cumTotal;
+            const avgAll = DIM > 0 ? Math.floor(cumAll / DIM) : 0;
+            const summaryCards = [
+              { label: 'VS TARGET', short: 'Tgt', base: targetHarian, accent: '#6366f1' },
+              { label: 'VS BLN LALU', short: 'BL', base: blHarian, accent: '#06b6d4' },
+              { label: 'VS THN LALU', short: 'TL', base: tyHarian, accent: '#f59e0b' }
+            ].map(c => {
+              const pct = c.base > 0 ? avgAll / c.base : 0;
+              const diffTotal = cumAll - c.base * DIM;
+              const diffPerDay = Math.trunc(diffTotal / Math.max(1, DIM));
+              return { ...c, pct, diffTotal, diffPerDay };
+            });
+
+            // ---- Tanda warna ----
+            // Latar kolom: terlihat jelas di mode terang maupun gelap
+            const BAND_GREEN = 'bg-emerald-200 dark:bg-emerald-500/30';
+            const BAND_RED = 'bg-red-200 dark:bg-red-500/30';
+            const BAND_NEUTRAL = 'bg-neutral-300 dark:bg-neutral-500/35';
+            // Bingkai tebal kolom Total (supaya jelas itu kolom total), terang & gelap
+            const TOTAL_FRAME = 'border-x-[3px] border-neutral-700 dark:border-neutral-200';
+
+            const sumV = [0, 0, 0, 0];
+            let sumTotal = 0;
+            const rows: React.ReactNode[] = [];
+
+            for (let d = 1; d <= DIM; d++) {
+              const dateObj = new Date(PY, PM0, d);
+              const dayShort = dateObj.toLocaleDateString('id-ID', { weekday: 'short' });
+              const isSun = dateObj.getDay() === 0;
+              const isToday = d === day;
+              const p = getDayPlanAllVariants(d);
+              sumV[0] += p.yo; sumV[1] += p.om; sumV[2] += p.os; sumV[3] += p.yt;
+              sumTotal += p.total;
+
+              const isReal = hasActualSavedSalesForDay(d);
+              const isDaySaved = isReal || isPastDayLocked(d);
+
+              // Bandingkan dengan PENCAPAIAN (realisasi) minggu lalu di hari yang sama (tanggal d-7).
+              // Bila tanggal d-7 belum punya realisasi, pembandingnya RENCANA BREAKDOWN tanggal d-7 itu sendiri,
+              // sehingga perbandingan terus berjalan sampai tanggal terakhir bulan.
+              const prevD = d - 7;
+              const prevReal = prevD >= 1 && hasActualSavedSalesForDay(prevD) ? getDayActualAllVariants(prevD).total : null;
+              const prevPlan = prevD >= 1 ? getDayPlanAllVariants(prevD).total : null;
+              const prevIsPlan = prevReal === null && prevPlan !== null && (p.total > 0 || prevPlan > 0);
+              const prevTotal = prevReal !== null ? prevReal : prevIsPlan ? prevPlan : null;
+              const prevWhat = prevIsPlan ? 'rencana breakdown minggu lalu' : 'pencapaian minggu lalu';
+              let totalBand = '';
+              let totalTip = 'Belum ada pembanding minggu lalu';
+              if (prevTotal !== null) {
+                if (p.total > prevTotal) { totalBand = BAND_GREEN; totalTip = `Lebih dari ${prevWhat} (${formatNumber(prevTotal)})`; }
+                else if (p.total < prevTotal) { totalBand = BAND_RED; totalTip = `Kurang dari ${prevWhat} (${formatNumber(prevTotal)})`; }
+                else { totalBand = BAND_NEUTRAL; totalTip = `Sama dengan ${prevWhat} (${formatNumber(prevTotal)})`; }
+              }
+
+              rows.push(
+                <tr
+                  key={`d${d}`}
+                  className={`${
+                    isToday
+                      ? 'bg-brand-50/60 dark:bg-brand-950/20'
+                      : isSun
+                      ? 'bg-amber-50/40 dark:bg-amber-950/10'
+                      : ''
+                  }`}
+                >
+                  <td className="py-1.5 px-2.5 font-sans whitespace-nowrap">
+                    <span className={`font-bold ${isToday ? 'text-brand-600 dark:text-brand-400' : 'text-neutral-900 dark:text-neutral-100'}`}>Tgl {d}</span>
+                    <span className={`block text-[10px] leading-none ${isSun ? 'text-amber-600 font-medium' : 'text-neutral-400'}`}>{dayShort}{isSun ? ' · libur' : ''}</span>
+                  </td>
+                  {VARIANTS.map(v => (
+                    <td
+                      key={v.code}
+                      className={`py-1 px-0.5 text-center ${isReal ? BAND_GREEN : ''}`}
+                      title={isReal ? `Realisasi tersimpan • Tgl ${d}` : undefined}
+                    >
+                      <input
+                        id={`bd-input-${d}-${v.code}`}
+                        type="text"
+                        inputMode="numeric"
+                        value={p[v.code.toLowerCase() as 'yo' | 'om' | 'os' | 'yt'] || ''}
+                        placeholder="0"
+                        disabled={isDaySaved}
+                        readOnly={isDaySaved}
+                        onChange={(e) => {
+                          if (isDaySaved) return;
+                          const raw = e.target.value.replace(/[^\d]/g, '');
+                          const num = raw === '' ? 0 : parseInt(raw, 10);
+                          handleCellChange(d, v.code, isNaN(num) ? 0 : num);
+                        }}
+                        onFocus={(e) => !isDaySaved && e.target.select()}
+                        onPaste={(e) => !isDaySaved && handleCellPaste(e, d, v.code)}
+                        onKeyDown={(e) => !isDaySaved && handleCellKeyDown(e, d, v.code)}
+                        className={`w-full max-w-[4.5rem] px-1 py-1 text-center font-mono font-bold text-xs rounded-md border ${isReal ? 'bg-transparent border-transparent text-neutral-900 dark:text-neutral-50' : 'bg-white dark:bg-neutral-800/80 border-neutral-200 dark:border-neutral-700'} ${
+                          isDaySaved
+                            ? 'cursor-default'
+                            : 'hover:border-brand-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none'
+                        }`}
+                        style={isReal ? undefined : { color: v.color }}
+                        title={isDaySaved ? `Tgl ${d} • Realisasi ${v.code}` : `Tgl ${d} • Rencana ${v.code} (${v.name})`}
+                      />
+                    </td>
+                  ))}
+                  <td
+                    className={`py-1.5 px-2.5 text-right font-mono font-bold text-neutral-900 dark:text-neutral-50 ${totalBand} ${TOTAL_FRAME}`}
+                    title={totalTip}
+                  >
+                    {formatNumber(p.total)}
+                  </td>
+                </tr>
+              );
+
+              // Baris ringkasan mingguan: rata-rata = akumulasi tgl 1 s/d Sabtu minggu itu ÷ tanggal Sabtu itu
+              // (minggu terakhir = tanggal terakhir bulan). vs minggu lalu HANYA di sini.
+              const wk = WEEKS.find(w => w.end === d);
+              if (wk) {
+                const wIdx = WEEKS.indexOf(wk);
+                const cw = getCumPlanUpToDay(wk.end);
+                const wDiv = Math.max(1, wk.end);
+                const avgV = [cw.cumYo, cw.cumOm, cw.cumOs, cw.cumYt].map(x => Math.floor(x / wDiv));
+                const avgT = Math.floor(cw.cumTotal / wDiv);
+                const prevWk = wIdx > 0 ? WEEKS[wIdx - 1] : null;
+                let wkInfo: React.ReactNode = <span className="text-neutral-400">vs mgg lalu: —</span>;
+                if (prevWk) {
+                  const cp = getCumPlanUpToDay(prevWk.end);
+                  const avgPrev = Math.floor(cp.cumTotal / Math.max(1, prevWk.end));
+                  if (avgPrev > 0) {
+                    const pct = avgT / avgPrev;
+                    // Selisih AKUMULASI: akm minggu ini (tgl 1 s/d Sabtu) dikurangi akm bila memakai rata-rata minggu lalu
+                    // pada jumlah hari yang sama (cara yang sama dengan selisih vs Target di tabel lain).
+                    const akmDiff = cw.cumTotal - avgPrev * wDiv;
+                    wkInfo = (
+                      <span className={akmDiff >= 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-red-600 dark:text-red-400 font-bold'}>
+                        vs mgg lalu: {formatPercent(pct)} ({formatDiff(akmDiff)})
+                      </span>
+                    );
+                  }
+                }
+                rows.push(
+                  <tr key={`wh${wk.id}`} className="bg-neutral-100 dark:bg-neutral-800 font-sans">
+                    <td colSpan={5} className="pt-2 pb-1 px-2.5 text-[11px] text-neutral-700 dark:text-neutral-200">
+                      <div className="flex flex-wrap items-center justify-between gap-x-3">
+                        <span><span className="font-bold">Minggu {wk.id}</span><span className="text-neutral-500 dark:text-neutral-400"> · Tgl {wk.start}–{wk.end}</span></span>
+                        <span className="text-[10px]">{wkInfo}</span>
+                      </div>
+                    </td>
+                    <td className={`${TOTAL_FRAME}`} />
+                  </tr>,
+                  <tr key={`wa${wk.id}`} className="bg-neutral-100 dark:bg-neutral-800 font-mono">
+                    <td className="pb-2 pt-0 px-2.5 text-[10px] leading-tight text-neutral-500 dark:text-neutral-400 font-sans whitespace-nowrap">
+                      Rata2<span className="block">÷ {wDiv}</span>
+                    </td>
+                    {avgV.map((x, k) => (
+                      <td key={k} className="pb-2 pt-0 px-1 text-center font-bold" style={{ color: VARIANTS[k].color }}>{formatNumber(x)}</td>
+                    ))}
+                    <td className={`pb-2 pt-0 px-2.5 text-right font-bold text-neutral-900 dark:text-white ${TOTAL_FRAME}`}>
+                      {formatNumber(avgT)}
+                      <span className="block text-[9px] font-normal font-sans text-neutral-500 dark:text-neutral-400">Akm {formatNumber(cw.cumTotal)}</span>
+                    </td>
+                  </tr>
+                );
+              }
+            }
 
             return (
-              <div className="p-6 bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-sm space-y-4">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-2 border-b border-neutral-100 dark:border-neutral-800">
-                  <div>
-                    <h3 className="text-base font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
-                      <Target className="w-5 h-5 text-brand-600" />
-                      Rencana Harian
-                    </h3>
+              <div className="space-y-3">
+                {/* Akumulasi & rata-rata breakdown sebulan (pembagi = tanggal terakhir bulan) */}
+                <div className="p-3 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-xs flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-bold tracking-wide text-neutral-500 dark:text-neutral-400 block">AKM BREAKDOWN {period.label.toUpperCase()}</span>
+                    <span className="text-xl font-mono font-extrabold text-neutral-900 dark:text-white">{formatNumber(cumAll)}</span>
+                    <span className="text-xs text-neutral-400 font-sans"> btl</span>
                   </div>
-
-                  {/* Switcher M1, M2, M3, M4, M5, Satu Bulan */}
-                  <div className="inline-flex rounded-xl bg-neutral-100 dark:bg-neutral-800 p-1 border border-neutral-200 dark:border-neutral-700 shrink-0">
-                    {[
-                      { id: 'M1', label: 'M1' },
-                      { id: 'M2', label: 'M2' },
-                      { id: 'M3', label: 'M3' },
-                      { id: 'M4', label: 'M4' },
-                      { id: 'M5', label: 'M5' },
-                      { id: 'ALL', label: 'Satu Bulan' }
-                    ].map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => setSelectedBreakdownPeriod(p.id as any)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                          selectedBreakdownPeriod === p.id
-                            ? 'bg-brand-600 text-white shadow-xs'
-                            : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-                        }`}
-                      >
-                        {p.label}
-                      </button>
-                    ))}
+                  <div className="text-right min-w-0">
+                    <span className="text-[10px] font-bold tracking-wide text-neutral-500 dark:text-neutral-400 block">RATA2/HR (÷ {DIM})</span>
+                    <span className="text-xl font-mono font-extrabold text-brand-600 dark:text-brand-400">{formatNumber(avgAll)}</span>
+                    <span className="text-xs text-neutral-400 font-sans"> btl</span>
                   </div>
                 </div>
 
-                <div className="overflow-x-auto max-h-[650px] border border-neutral-200 dark:border-neutral-800 rounded-2xl">
-                  <table className="w-full text-xs text-left border-collapse min-w-[1250px]">
-                    <thead className="sticky top-0 z-10 bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 font-semibold shadow-2xs">
-                      <tr className="border-b border-neutral-200 dark:border-neutral-700">
-                        <th className="py-2.5 px-3">Tanggal</th>
-                        <th className="py-2.5 px-2">Hari</th>
-                        <th className="py-2.5 px-2 text-right" style={{ color: VARIANTS[0].color }}>YO (Edit)</th>
-                        <th className="py-2.5 px-2 text-right" style={{ color: VARIANTS[1].color }}>OM (Edit)</th>
-                        <th className="py-2.5 px-2 text-right" style={{ color: VARIANTS[2].color }}>OS (Edit)</th>
-                        <th className="py-2.5 px-2 text-right" style={{ color: VARIANTS[3].color }}>YT (Edit)</th>
-                        <th className="py-2.5 px-2.5 text-right font-bold text-neutral-900 dark:text-white">Rencana Harian</th>
-                        <th className="py-2.5 px-2.5 text-right text-brand-600 dark:text-brand-400 font-bold">Akumulasi</th>
-                        <th className="py-2.5 px-2.5 text-right font-bold">Rata-rata/hr (Per Varian & Total)</th>
-                        <th className="py-2.5 px-2.5 text-right font-bold">vs Minggu Lalu (%)</th>
-                        <th className="py-2.5 px-2.5 text-right font-bold">Pertumbuhan / Selisih (btl)</th>
-                        <th className="py-2.5 px-2.5 text-right">vs Tgt ({formatNumber(targetHarian)})</th>
-                        <th className="py-2.5 px-2.5 text-right">vs LM ({formatNumber(blHarian)})</th>
-                        <th className="py-2.5 px-2.5 text-right">vs LY ({formatNumber(tyHarian)})</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800 font-mono">
-                      {breakdownDaysToShow.map(d => {
-                        const dateObj = new Date(PY, PM0, d);
-                        const dayName = dateObj.toLocaleDateString('id-ID', { weekday: 'long' });
-                        const isSun = dateObj.getDay() === 0;
-                        const isToday = d === day;
+                {/* Ringkasan di atas */}
+                <div className="grid grid-cols-3 gap-2">
+                  {summaryCards.map(c => (
+                    <div
+                      key={c.label}
+                      className="p-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-xs min-w-0"
+                      style={{ borderLeft: `4px solid ${c.accent}` }}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-1">
+                        <span className="text-[10px] font-bold tracking-wide text-neutral-500 break-words">{c.label}</span>
+                        <span className={`text-[10px] font-mono font-bold px-1.5 py-px rounded ${c.diffPerDay >= 0 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400'}`}>
+                          {formatDiff(c.diffPerDay)}
+                        </span>
+                      </div>
+                      <div className={`text-lg font-mono font-extrabold leading-tight ${c.pct >= 1 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {c.base > 0 ? formatPercent(c.pct) : '—'}
+                      </div>
+                      <div className="text-[10px] text-neutral-500 font-mono break-words">
+                        {c.short}: {formatNumber(c.base)}/hr
+                      </div>
+                      <div className={`text-[10px] font-mono break-words ${c.diffTotal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        Selisih: {formatDiff(c.diffTotal)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-                        const p = getDayPlanAllVariants(d);
-                        const cum = getCumPlanUpToDay(d);
-                        curTotalPlan += p.total;
-                        curVPlan[0] += p.yo;
-                        curVPlan[1] += p.om;
-                        curVPlan[2] += p.os;
-                        curVPlan[3] += p.yt;
-
-                        const dayDivider = d;
-                        const avgYo = dayDivider > 0 ? Math.floor(cum.cumYo / dayDivider) : 0;
-                        const avgOm = dayDivider > 0 ? Math.floor(cum.cumOm / dayDivider) : 0;
-                        const avgOs = dayDivider > 0 ? Math.floor(cum.cumOs / dayDivider) : 0;
-                        const avgYt = dayDivider > 0 ? Math.floor(cum.cumYt / dayDivider) : 0;
-                        const avgDaily = dayDivider > 0 ? Math.floor(cum.cumTotal / dayDivider) : 0;
-
-                        // Perbandingan dengan Minggu lalu di hari yang sama (tanggal d-7)
-                        const hasPrevWeek = d > 7;
-                        const prevWeekPlan = hasPrevWeek ? getDayPlanAllVariants(d - 7).total : null;
-                        const wkDiff = prevWeekPlan !== null ? p.total - prevWeekPlan : null;
-                        const wkPct = prevWeekPlan !== null && prevWeekPlan > 0 ? p.total / prevWeekPlan : null;
-                        const wkTone = wkDiff === null
-                          ? 'text-neutral-400'
-                          : wkDiff > 0
-                            ? 'text-emerald-600'
-                            : wkDiff < 0
-                              ? 'text-red-600'
-                              : 'text-neutral-900 dark:text-white';
-
-                        const vsTgPct = targetHarian > 0 ? (avgDaily / targetHarian) : 0;
-                        const vsTgDiff = cum.cumTotal - targetHarian * dayDivider; // selisih akumulasi (tanpa dibagi tanggal)
-
-                        const vsBlPct = blHarian > 0 ? (avgDaily / blHarian) : 0;
-                        const vsBlDiff = cum.cumTotal - blHarian * dayDivider;
-
-                        const vsTyPct = tyHarian > 0 ? (avgDaily / tyHarian) : 0;
-                        const vsTyDiff = cum.cumTotal - tyHarian * dayDivider;
-
-                        return (
-                          <tr 
-                            key={d}
-                            className={`transition-colors ${
-                              isToday
-                                ? 'bg-brand-50/50 dark:bg-brand-950/20 font-semibold'
-                                : isSun
-                                ? 'bg-amber-50/30 dark:bg-amber-950/10 text-neutral-400'
-                                : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/40'
-                            }`}
-                          >
-                            <td className="py-2 px-3">
-                              <div className="flex items-center gap-1.5 font-bold font-sans">
-                                <span>Tgl {d}</span>
-                                {isToday && (
-                                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-brand-600 text-white font-semibold">
-                                    Hari Ini
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="py-2 px-2 font-sans">
-                              <span className={isSun ? 'text-amber-600 font-medium' : 'text-neutral-600 dark:text-neutral-400'}>
-                                {dayName} {isSun ? '(Libur)' : ''}
-                              </span>
-                            </td>
-                            {(() => {
-                              const isDaySaved = hasActualSavedSalesForDay(d) || isPastDayLocked(d);
-                              return VARIANTS.map(v => (
-                                <td key={v.code} className="py-1 px-1 text-right">
-                                  <input
-                                    id={`bd-input-${d}-${v.code}`}
-                                    type="text"
-                                    inputMode="numeric"
-                                    value={p[v.code.toLowerCase() as 'yo' | 'om' | 'os' | 'yt'] || ''}
-                                    placeholder="0"
-                                    disabled={isDaySaved}
-                                    readOnly={isDaySaved}
-                                    onChange={(e) => {
-                                      if (isDaySaved) return;
-                                      const raw = e.target.value.replace(/[^\d]/g, '');
-                                      const num = raw === '' ? 0 : parseInt(raw, 10);
-                                      handleCellChange(d, v.code, isNaN(num) ? 0 : num);
-                                    }}
-                                    onFocus={(e) => !isDaySaved && e.target.select()}
-                                    onPaste={(e) => !isDaySaved && handleCellPaste(e, d, v.code)}
-                                    onKeyDown={(e) => !isDaySaved && handleCellKeyDown(e, d, v.code)}
-                                    className={`w-16 px-1.5 py-1 text-right font-mono font-bold text-xs rounded-lg border transition-all shadow-2xs bg-white dark:bg-neutral-800/80 border-neutral-200 dark:border-neutral-700 ${
-                                      isDaySaved
-                                        ? 'cursor-default'
-                                        : 'hover:border-brand-400 focus:border-brand-500 focus:bg-white dark:focus:bg-neutral-900 focus:ring-2 focus:ring-brand-500/20 focus:outline-none'
-                                    }`}
-                                    style={{ color: v.color }}
-                                    title={isDaySaved ? `Tgl ${d} • Realisasi Riil ${v.code}` : `Tgl ${d} • Target ${v.code} (${v.name})`}
-                                  />
-                                </td>
-                              ));
-                            })()}
-                            <td className={`py-2 px-2.5 text-right font-bold ${wkDiff === null ? 'text-neutral-900 dark:text-neutral-100' : wkTone}`}>
-                              {formatNumber(p.total)} btl
-                              {(hasActualSavedSalesForDay(d) || isPastDayLocked(d)) && (
-                                <span className="ml-1.5 align-middle text-[9px] px-1 py-px rounded bg-emerald-600 text-white font-sans font-semibold leading-none">Real</span>
-                              )}
-                            </td>
-                            <td className="py-2 px-2.5 text-right font-bold text-brand-600 dark:text-brand-400">
-                              {formatNumber(cum.cumTotal)} btl
-                              <div className="text-[10px] text-neutral-400 font-normal">
-                                {formatNumber(cum.cumYo)} / {formatNumber(cum.cumOm)} / {formatNumber(cum.cumOs)} / {formatNumber(cum.cumYt)}
-                              </div>
-                            </td>
-                            <td className={`py-2 px-2.5 text-right font-bold ${wkDiff === null ? 'text-neutral-900 dark:text-neutral-100' : wkTone}`}>
-                              {formatNumber(avgDaily)} btl
-                              <div className="text-[10px] text-neutral-400 font-normal">
-                                Rata V: {formatNumber(avgYo)} / {formatNumber(avgOm)} / {formatNumber(avgOs)} / {formatNumber(avgYt)}
-                              </div>
-                            </td>
-                            <td className={`py-2 px-2.5 text-right font-bold ${wkTone}`}>
-                              {wkDiff === null
-                                ? <span className="font-normal font-sans text-xs">—</span>
-                                : wkPct !== null
-                                  ? formatPercent(wkPct)
-                                  : <span className="font-normal font-sans text-xs">—</span>}
-                            </td>
-                            <td className={`py-2 px-2.5 text-right font-bold ${wkTone}`}>
-                              {wkDiff === null
-                                ? <span className="font-normal font-sans text-xs">—</span>
-                                : `${wkDiff > 0 ? '+' : ''}${formatNumber(wkDiff)} btl`}
-                            </td>
-                            <td className="py-2 px-2.5 text-right font-bold">
-                              <span className={vsTgPct >= 1 ? 'text-emerald-600' : 'text-red-600'}>
-                                {formatPercent(vsTgPct)}
-                              </span>
-                              <div className={`text-[10px] ${vsTgDiff >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                {formatAkmDiffPair(vsTgDiff, dayDivider)}
-                              </div>
-                            </td>
-                            <td className="py-2 px-2.5 text-right font-bold">
-                              <span className={vsBlPct >= 1 ? 'text-emerald-600' : 'text-red-600'}>
-                                {formatPercent(vsBlPct)}
-                              </span>
-                              <div className={`text-[10px] ${vsBlDiff >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                {formatAkmDiffPair(vsBlDiff, dayDivider)}
-                              </div>
-                            </td>
-                            <td className="py-2 px-2.5 text-right font-bold">
-                              <span className={vsTyPct >= 1 ? 'text-emerald-600' : 'text-red-600'}>
-                                {formatPercent(vsTyPct)}
-                              </span>
-                              <div className={`text-[10px] ${vsTyDiff >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                {formatAkmDiffPair(vsTyDiff, dayDivider)}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                    <tfoot className="sticky bottom-0 bg-neutral-100 dark:bg-neutral-800 font-mono font-bold border-t-2 border-neutral-300 dark:border-neutral-700 shadow-xs">
-                      <tr>
-                        <td colSpan={2} className="py-3 px-3 text-neutral-800 dark:text-neutral-200 font-sans">
-                          Total Rencana {breakdownPeriodTitle}
-                        </td>
-                        <td className="py-3 px-1.5 text-right" style={{ color: VARIANTS[0].color }}>{formatNumber(curVPlan[0])}</td>
-                        <td className="py-3 px-1.5 text-right" style={{ color: VARIANTS[1].color }}>{formatNumber(curVPlan[1])}</td>
-                        <td className="py-3 px-1.5 text-right" style={{ color: VARIANTS[2].color }}>{formatNumber(curVPlan[2])}</td>
-                        <td className="py-3 px-1.5 text-right" style={{ color: VARIANTS[3].color }}>{formatNumber(curVPlan[3])}</td>
-                        <td className="py-3 px-2.5 text-right text-brand-600 dark:text-brand-400 text-sm">
-                          {formatNumber(curTotalPlan)} btl
-                        </td>
-                        <td colSpan={7} className="py-3 px-3 text-right text-neutral-500 font-normal font-sans text-xs">
-                          {breakdownDaysToShow.length} Hari Kerja Terjadwal
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
+                {/* Tabel breakdown: Tgl, varian, total (tgl 1 s/d akhir bulan) */}
+                <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs overflow-hidden">
+                  <div className="px-3 py-2.5 border-b border-neutral-100 dark:border-neutral-800 space-y-1">
+                    <h3 className="text-sm font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+                      <Target className="w-4 h-4 text-brand-600" />
+                      Breakdown {period.label}
+                    </h3>
+                    <p className="text-[10px] text-neutral-500 dark:text-neutral-400 leading-snug">
+                      <span className="inline-block w-3 h-3 rounded-sm align-[-2px] mr-1 bg-emerald-300 dark:bg-emerald-500/50" />kolom varian hijau = realisasi tersimpan.
+                      {' '}Kolom Total vs pencapaian minggu lalu (hari sama):{' '}
+                      <span className="inline-block w-3 h-3 rounded-sm align-[-2px] mx-0.5 bg-red-300 dark:bg-red-500/50" />kurang,{' '}
+                      <span className="inline-block w-3 h-3 rounded-sm align-[-2px] mx-0.5 bg-emerald-300 dark:bg-emerald-500/50" />lebih,{' '}
+                      <span className="inline-block w-3 h-3 rounded-sm align-[-2px] mx-0.5 bg-neutral-400 dark:bg-neutral-500/60" />sama.
+                    </p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs text-left border-collapse">
+                      <thead className="bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 font-semibold">
+                        <tr className="border-b border-neutral-200 dark:border-neutral-700">
+                          <th className="py-2 px-2.5">Tgl</th>
+                          {VARIANTS.map(v => (
+                            <th key={v.code} className="py-2 px-1 text-center" style={{ color: v.color }}>{v.code}</th>
+                          ))}
+                          <th className={`py-2 px-2.5 text-right font-bold text-neutral-900 dark:text-white border-t-[3px] ${TOTAL_FRAME}`}>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800 font-mono">
+                        {rows}
+                      </tbody>
+                      <tfoot className="bg-neutral-100 dark:bg-neutral-800 font-mono font-bold border-t-2 border-neutral-300 dark:border-neutral-700">
+                        <tr>
+                          <td className="py-2.5 px-2.5 text-neutral-800 dark:text-neutral-200 font-sans">Total</td>
+                          {sumV.map((x, k) => (
+                            <td key={k} className="py-2.5 px-1 text-center" style={{ color: VARIANTS[k].color }}>{formatNumber(x)}</td>
+                          ))}
+                          <td className={`py-2.5 px-2.5 text-right text-brand-600 dark:text-brand-400 border-b-[3px] ${TOTAL_FRAME}`}>{formatNumber(sumTotal)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
                 </div>
               </div>
             );

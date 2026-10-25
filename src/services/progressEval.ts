@@ -70,6 +70,9 @@ export interface EvalUnit {
   idx: number; // -1 untuk baris gabungan (rayon / cabang)
   acc: number;
   tgHarian: number;
+  /** rata-rata penjualan per hari bulan lalu & bulan yang sama tahun lalu (sama dengan yang dipakai menu Target) */
+  blHarian: number;
+  tyHarian: number;
   progress: ProgressSummary;
   week: WeekCompare;
   /** rata-rata penjualan per hari kalender (pembagi 7 untuk minggu Min–Sab penuh) untuk tiap minggu (null = belum ada data minggu itu) */
@@ -307,6 +310,8 @@ export function buildProgressEval(state: AppState, weeks: WeekDef[]): ProgressEv
       idx: i,
       acc: accNow,
       tgHarian: tg,
+      blHarian: state.targetBulanLalu[i] || 0,
+      tyHarian: state.targetTahunLalu[i] || 0,
       progress: makeProgress(accNow, tg),
       week,
       trend,
@@ -340,6 +345,8 @@ export function buildProgressEval(state: AppState, weeks: WeekDef[]): ProgressEv
       idx: -1,
       acc,
       tgHarian: tg,
+      blHarian: list.reduce((x, u) => x + u.blHarian, 0),
+      tyHarian: list.reduce((x, u) => x + u.tyHarian, 0),
       progress: makeProgress(acc, tg),
       week: {
         days: cmpDays,

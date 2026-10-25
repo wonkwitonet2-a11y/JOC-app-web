@@ -3,7 +3,6 @@ import {
   TrendingUp, 
   Award, 
   Calendar, 
-  Users, 
   Target
 } from 'lucide-react';
 import { AppState, VARIANTS, DailySalesRecord } from '../types';
@@ -22,6 +21,11 @@ import {
   SEED_PERIOD
 } from '../services/storage';
 import { TrendChart } from '../components/TrendChart';
+import { PeringkatTkuTable } from '../components/PeringkatTkuTable';
+import { hitungPeringkat, hitungSkorTku, PeringkatInput } from '../services/peringkat';
+
+const fmtPoin = (n: number | null | undefined) =>
+  n === null || n === undefined || !isFinite(n) ? '—' : n.toFixed(1).replace('.', ',');
 
 interface DashboardViewProps {
   state: AppState;
@@ -39,8 +43,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onUpdateActiveDay,
   onSetPembagiManual
 }) => {
-  const [tableTab, setTableTab] = useState<'penjualan' | 'operasional'>('penjualan');
   const [rankingCriteria, setRankingCriteria] = useState<'gabungan' | 'target' | 'bulanLalu' | 'tahunLalu'>('gabungan');
+  const [rekapTab, setRekapTab] = useState<'penjualan' | 'kondisi' | 'peringkat'>('penjualan');
 
   const selectedRayon = state.selectedRayon; // 0: Cabang, 1: Rayon 1, 2: Rayon 2
   const day = state.currentDayNum;
@@ -336,6 +340,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     segments.push(currentSegment);
   }
 
+  // Input skor peringkat per TKU (dipakai tab Penjualan, Kondisi TKU, dan Peringkat)
+  const buildPeringkatInput = (r: {
+    t: { id: number | string; nama: string; rayon?: number };
+    avg: number; tg: number; ty: number; bl: number; pctBb: number;
+    abs: number; yl: number; frk: number; area: number;
+  }): PeringkatInput => ({
+    id: r.t.id,
+    nama: r.t.nama,
+    rayon: r.t.rayon,
+    aktual: r.avg,
+    target: r.tg,
+    tahunLalu: r.ty,
+    bulanLalu: r.bl,
+    persenBb: r.pctBb * 100,
+    absen: r.abs,
+    totalYl: r.yl,
+    frekHariKosong: r.frk,
+    tanggal: divider,
+    ylAktual: r.yl,
+    standarArea: r.area,
+  });
+
   // TKU Ranking rows with 3 targets + combined average ranking
   const rankedTkus = [...filteredTkus].map(t => {
     const rawIdx = state.tkus.indexOf(t);
@@ -382,9 +408,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
     const pctBb = (akm + tkuAkmBb) > 0 ? (tkuAkmBb / (akm + tkuAkmBb)) : 0;
 
+    const skor = hitungSkorTku(buildPeringkatInput({ t, avg, tg, ty, bl, pctBb, abs, yl, frk, area }));
+
     return {
       t,
       rawIdx,
+      skor,
       akm,
       avg,
       akmBb: tkuAkmBb,
@@ -415,17 +444,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     if (rankingCriteria === 'target') return b.pctTg - a.pctTg;
     if (rankingCriteria === 'bulanLalu') return b.pctBl - a.pctBl;
     if (rankingCriteria === 'tahunLalu') return b.pctTy - a.pctTy;
-    return b.pctGabungan - a.pctGabungan;
+    // Gabungan = total poin penjualan (LY 30 + Target 25 + LM 20, termasuk bonus >100%)
+    return b.skor.skorHasil - a.skor.skorHasil || b.skor.total - a.skor.total;
   });
 
   const getActivePct = (row: typeof rankedTkus[0]) => {
     if (rankingCriteria === 'target') return row.pctTg;
     if (rankingCriteria === 'bulanLalu') return row.pctBl;
     if (rankingCriteria === 'tahunLalu') return row.pctTy;
-    return row.pctGabungan;
+    return row.skor.skorHasil;
   };
 
-  const maxRankPct = Math.max(1, ...rankedTkus.map(r => getActivePct(r)));
+  const maxRankPct = Math.max(0.0001, ...rankedTkus.map(r => getActivePct(r)));
+
+  // Peringkat TKU 130 poin (tab "Peringkat"): gabungan hasil penjualan + kondisi TKU
+  const peringkatData = hitungPeringkat(rankedTkus.map(buildPeringkatInput), divider);
 
   return (
     <div className="space-y-6">
@@ -602,89 +635,89 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 block mb-3">
             2. Kondisi TKU
           </span>
-          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3 font-mono items-stretch">
+          <div className="grid gap-3 font-mono items-stretch" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(9.5rem, 1fr))' }}>
             {/* 2.1 Jumlah YL */}
             <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-              <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">Jumlah YL</span>
-              <span className="text-base md:text-lg leading-tight truncate font-bold text-neutral-900 dark:text-neutral-100">
+              <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 break-words">Jumlah YL</span>
+              <span className="text-base md:text-lg leading-tight break-words font-bold text-neutral-900 dark:text-neutral-100">
                 {totalYl} <span className="text-xs font-normal text-neutral-400 font-sans">/ {totalArea} area</span>
               </span>
-              <span className="text-[10px] text-neutral-400 block mt-auto pt-1 leading-snug font-sans truncate" title={`Cover: ${formatPercent(coverageAreaPct)} ${vacantArea > 0 ? `(${vacantArea} kosong)` : ''}`}>
+              <span className="text-[10px] text-neutral-400 block mt-auto pt-1 leading-snug font-sans break-words" title={`Cover: ${formatPercent(coverageAreaPct)} ${vacantArea > 0 ? `(${vacantArea} kosong)` : ''}`}>
                 Cover: {formatPercent(coverageAreaPct)} {vacantArea > 0 ? `(${vacantArea} ksg)` : ''}
               </span>
             </div>
 
             {/* 2.2 Absen */}
             <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-              <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">Absen</span>
-              <span className="text-base md:text-lg leading-tight truncate font-bold text-neutral-900 dark:text-neutral-100">
+              <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 break-words">Absen</span>
+              <span className="text-base md:text-lg leading-tight break-words font-bold text-neutral-900 dark:text-neutral-100">
                 {totalAbsenSpreadsheet} <span className="text-xs font-normal text-neutral-400 font-sans">YL</span>
               </span>
-              <span className="text-[10px] text-neutral-600 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans truncate">
+              <span className="text-[10px] text-neutral-600 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans break-words">
                 Freq: <strong className="text-neutral-900 dark:text-neutral-100 font-mono font-bold">{totalFrekSpreadsheet}</strong>
               </span>
             </div>
 
             {/* 2.3 JWP */}
             <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-              <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">JWP</span>
-              <span className="text-base md:text-lg leading-tight truncate font-bold text-sky-600 dark:text-sky-400">
+              <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 break-words">JWP</span>
+              <span className="text-base md:text-lg leading-tight break-words font-bold text-sky-600 dark:text-sky-400">
                 {formatNumber(totalJwpSpreadsheet)}
               </span>
-              <span className="text-[10px] text-neutral-600 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans truncate" title={`EWP: ${truncFixed(ewpPct, 1)}% ((${formatNumber(totalJwpSpreadsheet)} - ${totalFrekSpreadsheet}) ÷ ${formatNumber(totalJwpSpreadsheet)})`}>
+              <span className="text-[10px] text-neutral-600 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans break-words" title={`EWP: ${truncFixed(ewpPct, 1)}% ((${formatNumber(totalJwpSpreadsheet)} - ${totalFrekSpreadsheet}) ÷ ${formatNumber(totalJwpSpreadsheet)})`}>
                 EWP: <strong className="text-neutral-900 dark:text-neutral-100 font-mono font-bold">{truncFixed(ewpPct, 1)}%</strong>
               </span>
             </div>
 
             {/* 2.4 s/YL (340: Akm Pjl / Akm JWP, 299 dihapus) */}
             <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-              <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">s/YL</span>
-              <span className="text-base md:text-lg leading-tight truncate font-bold text-brand-600 dark:text-brand-400">
+              <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 break-words">s/YL</span>
+              <span className="text-base md:text-lg leading-tight break-words font-bold text-brand-600 dark:text-brand-400">
                 {sylVal > 0 ? formatNumber(sylVal) : '—'} <span className="text-xs font-normal text-neutral-400 font-sans">btl</span>
               </span>
-              <span className="text-[10px] text-neutral-500 dark:text-neutral-400 block mt-auto pt-1 leading-snug font-sans truncate">
+              <span className="text-[10px] text-neutral-500 dark:text-neutral-400 block mt-auto pt-1 leading-snug font-sans break-words">
                 Akm Pjl &divide; Akm JWP
               </span>
             </div>
 
             {/* 2.5 PDM */}
             <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-              <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">PDM</span>
-              <span className="text-base md:text-lg leading-tight truncate font-bold text-indigo-600 dark:text-indigo-400">
+              <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 break-words">PDM</span>
+              <span className="text-base md:text-lg leading-tight break-words font-bold text-indigo-600 dark:text-indigo-400">
                 {formatNumber(totalAkmPdm)} <span className="text-xs font-normal text-neutral-400 font-sans">btl</span>
               </span>
-              <span className="text-[10px] text-neutral-400 block mt-auto pt-1 leading-snug font-sans truncate">
+              <span className="text-[10px] text-neutral-400 block mt-auto pt-1 leading-snug font-sans break-words">
                 Rata2: {formatDecimal(avgPdmPerDay)}/hr
               </span>
             </div>
 
             {/* 2.6 BB */}
             <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-              <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">BB</span>
-              <span className="text-base md:text-lg leading-tight truncate font-bold text-neutral-900 dark:text-neutral-100">
+              <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 break-words">BB</span>
+              <span className="text-base md:text-lg leading-tight break-words font-bold text-neutral-900 dark:text-neutral-100">
                 {formatNumber(totalAkmBb)} <span className="text-xs font-normal text-neutral-400 font-sans">btl</span>
               </span>
-              <span className="text-[10px] text-neutral-400 block mt-auto pt-1 leading-snug font-sans truncate">
+              <span className="text-[10px] text-neutral-400 block mt-auto pt-1 leading-snug font-sans break-words">
                 Rasio: <strong className={getBbStatusClass(bbPercent)}>{formatPercent(bbPercent)}</strong>
               </span>
             </div>
             {/* 2.7 YL < 250 */}
             <div className="p-3.5 rounded-2xl bg-red-50/60 dark:bg-red-950/30 border border-red-200/60 dark:border-red-900/40 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-              <span className="text-[11px] leading-tight font-sans text-red-700 dark:text-red-400 font-medium block mb-1 truncate">YL &lt; 250</span>
-              <span className="text-base md:text-lg leading-tight truncate font-bold text-red-700 dark:text-red-400">
+              <span className="text-[11px] leading-tight font-sans text-red-700 dark:text-red-400 font-medium block mb-1 break-words">YL &lt; 250</span>
+              <span className="text-base md:text-lg leading-tight break-words font-bold text-red-700 dark:text-red-400">
                 {totalL250} <span className="text-xs font-normal text-red-500 font-sans">YL</span>
               </span>
-              <span className="text-[10px] text-red-600 dark:text-red-400 block mt-auto pt-1 leading-snug font-sans truncate">
+              <span className="text-[10px] text-red-600 dark:text-red-400 block mt-auto pt-1 leading-snug font-sans break-words">
                 Rasio: {formatPercent(pctTotalL250)}
               </span>
             </div>
             {/* 2.8 YL < 300 */}
             <div className="p-3.5 rounded-2xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-              <span className="text-[11px] leading-tight font-sans text-amber-700 dark:text-amber-400 font-medium block mb-1 truncate">YL &lt; 300</span>
-              <span className="text-base md:text-lg leading-tight truncate font-bold text-amber-700 dark:text-amber-400">
+              <span className="text-[11px] leading-tight font-sans text-amber-700 dark:text-amber-400 font-medium block mb-1 break-words">YL &lt; 300</span>
+              <span className="text-base md:text-lg leading-tight break-words font-bold text-amber-700 dark:text-amber-400">
                 {totalL300} <span className="text-xs font-normal text-amber-500 font-sans">YL</span>
               </span>
-              <span className="text-[10px] text-amber-600 dark:text-amber-400 block mt-auto pt-1 leading-snug font-sans truncate">
+              <span className="text-[10px] text-amber-600 dark:text-amber-400 block mt-auto pt-1 leading-snug font-sans break-words">
                 Rasio: {formatPercent(pctTotalL300)}
               </span>
             </div>
@@ -790,13 +823,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         />
       </div>
 
-      {/* Master TKU Table: Switcher between Penjualan vs Kondisi Operasional (Spreadsheet FR/FS, Area, YL, Coverage) */}
+      {/* Master TKU Table: Rekap Penjualan (kondisi operasional lengkap ada di Evaluasi > Tabel Utuh) */}
       <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm p-5 space-y-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <h2 className="text-base font-bold text-neutral-900 dark:text-neutral-100">
-                {tableTab === 'penjualan' ? 'Rekap Penjualan' : 'Kondisi TKU'}
+                Peringkat TKU
               </h2>
               <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 font-semibold">
                 {rankedTkus.length} Unit
@@ -805,399 +838,325 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* View Tab Switcher: Penjualan vs Operasional */}
-            <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl">
+            {/* Pilih tampilan tabel: Penjualan atau Kondisi TKU */}
+            <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl shrink-0">
+              {([['penjualan', 'Penjualan'], ['kondisi', 'Kondisi TKU'], ['peringkat', 'Peringkat Total']] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  onClick={() => setRekapTab(id)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                    rekapTab === id
+                      ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-sm'
+                      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {/* Ranking Selector (hanya untuk tabel penjualan) */}
+            {rekapTab === 'penjualan' && (
+            <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl overflow-x-auto shrink-0 max-w-full">
               <button
-                onClick={() => setTableTab('penjualan')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  tableTab === 'penjualan'
+                onClick={() => setRankingCriteria('gabungan')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                  rankingCriteria === 'gabungan'
                     ? 'bg-brand-600 text-white shadow-sm'
                     : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
                 }`}
               >
-                <TrendingUp className="w-3.5 h-3.5" />
-                <span>Rekap Penjualan</span>
+                Gabungan
               </button>
               <button
-                onClick={() => setTableTab('operasional')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  tableTab === 'operasional'
-                    ? 'bg-indigo-600 text-white shadow-sm'
+                onClick={() => setRankingCriteria('target')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                  rankingCriteria === 'target'
+                    ? 'bg-brand-600 text-white shadow-sm'
                     : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
                 }`}
               >
-                <Users className="w-3.5 h-3.5" />
-                <span>Kondisi TKU</span>
+                vs Target
+              </button>
+              <button
+                onClick={() => setRankingCriteria('bulanLalu')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                  rankingCriteria === 'bulanLalu'
+                    ? 'bg-amber-600 text-white shadow-sm'
+                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                }`}
+              >
+                vs Bln Lalu
+              </button>
+              <button
+                onClick={() => setRankingCriteria('tahunLalu')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                  rankingCriteria === 'tahunLalu'
+                    ? 'bg-sky-600 text-white shadow-sm'
+                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                }`}
+              >
+                vs Th Lalu
               </button>
             </div>
-
-            {/* Ranking Selector (Only in Penjualan Mode) */}
-            {tableTab === 'penjualan' && (
-              <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl overflow-x-auto shrink-0 max-w-full">
-                <button
-                  onClick={() => setRankingCriteria('gabungan')}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                    rankingCriteria === 'gabungan'
-                      ? 'bg-brand-600 text-white shadow-sm'
-                      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-                  }`}
-                >
-                  Gabungan
-                </button>
-                <button
-                  onClick={() => setRankingCriteria('target')}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                    rankingCriteria === 'target'
-                      ? 'bg-brand-600 text-white shadow-sm'
-                      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-                  }`}
-                >
-                  vs Target
-                </button>
-                <button
-                  onClick={() => setRankingCriteria('bulanLalu')}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                    rankingCriteria === 'bulanLalu'
-                      ? 'bg-amber-600 text-white shadow-sm'
-                      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-                  }`}
-                >
-                  vs Bln Lalu
-                </button>
-                <button
-                  onClick={() => setRankingCriteria('tahunLalu')}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                    rankingCriteria === 'tahunLalu'
-                      ? 'bg-sky-600 text-white shadow-sm'
-                      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-                  }`}
-                >
-                  vs Th Lalu
-                </button>
-              </div>
             )}
           </div>
         </div>
 
         {/* TAB 1: PENJUALAN & TARGET */}
-        {tableTab === 'penjualan' && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm border-collapse min-w-[950px]">
-              <thead>
-                <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 text-xs bg-neutral-50 dark:bg-neutral-800/40">
-                  <th className="py-2.5 px-3 font-semibold w-10 text-center">#</th>
-                  <th className="py-2.5 px-3 font-semibold">Nama TKU</th>
-                  <th className="py-2.5 px-2 font-semibold">Rayon</th>
-                  <th className="py-2.5 px-3 text-right font-semibold">Akumulasi</th>
-                  <th className="py-2.5 px-3 text-right font-semibold" title={`Rata2 dihitung dengan pembagi ${divider} hari (${dividerLabel})`}>
-                    Rata2/hr
-                  </th>
-                  <th className="py-2.5 px-3 text-right font-semibold text-amber-600 dark:text-amber-400 border-l border-neutral-200 dark:border-neutral-700">BB</th>
-                  <th className="py-2.5 px-2.5 text-right font-semibold text-amber-600 dark:text-amber-400">% BB</th>
-                  <th className="py-2.5 px-3 text-right font-semibold border-l border-neutral-200 dark:border-neutral-700">vs Target</th>
-                  <th className="py-2.5 px-3 text-right font-semibold">vs LM</th>
-                  <th className="py-2.5 px-3 text-right font-semibold">vs LY</th>
-                  <th className="py-2.5 px-3 text-right font-semibold">Rata2 Gabungan</th>
-                  <th className="py-2.5 px-3 font-semibold w-28 text-left">Diagram Capaian</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono text-xs">
-                {rankedTkus.map((row, idx) => {
-                  const isTop1 = idx === 0;
-                  const isTop2 = idx === 1;
-                  const isTop3 = idx === 2;
+        {rekapTab === 'penjualan' ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm border-collapse min-w-[950px]">
+            <thead>
+              <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 text-xs bg-neutral-50 dark:bg-neutral-800/40">
+                <th className="py-2.5 px-3 font-semibold w-10 text-center">#</th>
+                <th className="py-2.5 px-3 font-semibold">Nama TKU</th>
+                <th className="py-2.5 px-2 font-semibold">Rayon</th>
+                <th className="py-2.5 px-3 text-right font-semibold">Akumulasi</th>
+                <th className="py-2.5 px-3 text-right font-semibold" title={`Rata2 dihitung dengan pembagi ${divider} hari (${dividerLabel})`}>
+                  Rata2/hr
+                </th>
+                <th className="py-2.5 px-3 text-right font-semibold text-amber-600 dark:text-amber-400 border-l border-neutral-200 dark:border-neutral-700">BB</th>
+                <th className="py-2.5 px-2.5 text-right font-semibold text-amber-600 dark:text-amber-400">% BB<div className="text-[10px] font-normal text-neutral-400">poin</div></th>
+                <th className="py-2.5 px-3 text-right font-semibold border-l border-neutral-200 dark:border-neutral-700">vs Target</th>
+                <th className="py-2.5 px-3 text-right font-semibold">vs LM</th>
+                <th className="py-2.5 px-3 text-right font-semibold">vs LY</th>
+                <th className="py-2.5 px-3 text-right font-semibold">Poin Penjualan<div className="text-[10px] font-normal text-neutral-400">maks 75+</div></th>
+                <th className="py-2.5 px-3 font-semibold w-28 text-left">Diagram Capaian</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono text-xs">
+              {rankedTkus.map((row, idx) => {
+                const isTop1 = idx === 0;
+                const isTop2 = idx === 1;
+                const isTop3 = idx === 2;
 
-                  const activeBarPct = getActivePct(row);
-                  const barWidth = Math.min(100, Math.max(10, (activeBarPct / maxRankPct) * 100));
+                const activeBarPct = getActivePct(row);
+                const barWidth = Math.min(100, Math.max(10, (activeBarPct / maxRankPct) * 100));
 
-                  const barColor = rankingCriteria === 'bulanLalu'
-                    ? 'bg-amber-500'
-                    : rankingCriteria === 'tahunLalu'
-                    ? 'bg-sky-500'
-                    : 'bg-brand-600';
+                const barColor = rankingCriteria === 'bulanLalu'
+                  ? 'bg-amber-500'
+                  : rankingCriteria === 'tahunLalu'
+                  ? 'bg-sky-500'
+                  : 'bg-brand-600';
 
-                  return (
-                    <tr key={row.t.id} className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors">
-                      <td className="py-3 px-3 text-center">
-                        <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold ${
-                          isTop1 
-                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' 
-                            : isTop2
-                            ? 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
-                            : isTop3
-                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
-                            : 'text-neutral-500'
-                        }`}>
-                          {idx + 1}
-                        </span>
-                      </td>
-
-                      <td className="py-3 px-3 font-sans font-semibold text-neutral-900 dark:text-neutral-100">
-                        {row.t.nama}
-                      </td>
-
-                      <td className="py-3 px-2 font-sans text-neutral-500">
-                        R{row.t.rayon}
-                      </td>
-
-                      <td className="py-3 px-3 text-right font-bold text-neutral-900 dark:text-neutral-100">
-                        {formatNumber(row.akm)}
-                      </td>
-
-                      <td className="py-3 px-3 text-right text-neutral-600 dark:text-neutral-300">
-                        {formatDecimal(row.avg)}
-                      </td>
-
-                      <td className="py-3 px-3 text-right font-bold text-amber-600 dark:text-amber-400 border-l border-neutral-200 dark:border-neutral-700">
-                        {formatNumber(row.akmBb)}
-                      </td>
-
-                      <td className={`py-3 px-2.5 text-right font-semibold ${getBbStatusClass(row.pctBb)}`}>
-                        {formatPercent(row.pctBb)}
-                      </td>
-
-                      <td className={`py-3 px-3 text-right border-l border-neutral-200 dark:border-neutral-700 ${
-                        rankingCriteria === 'target' ? 'bg-brand-50/40 dark:bg-brand-950/20 font-bold' : ''
+                return (
+                  <tr key={row.t.id} className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors">
+                    <td className="py-3 px-3 text-center">
+                      <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold ${
+                        isTop1 
+                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' 
+                          : isTop2
+                          ? 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
+                          : isTop3
+                          ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
+                          : 'text-neutral-500'
                       }`}>
-                        <div className={getStatusClass(row.diffTg)}>
-                          {formatPercent(row.pctTg)}
-                        </div>
-                        <div className="text-[10px] text-neutral-400 font-normal">
-                          {formatAkmDiffPair(row.diffTg)}
-                        </div>
-                      </td>
-
-                      <td className={`py-3 px-3 text-right ${
-                        rankingCriteria === 'bulanLalu' ? 'bg-amber-50/40 dark:bg-amber-950/20 font-bold' : ''
-                      }`}>
-                        <div className={getStatusClass(row.diffBl)}>
-                          {formatPercent(row.pctBl)}
-                        </div>
-                        <div className="text-[10px] text-neutral-400 font-normal">
-                          {formatAkmDiffPair(row.diffBl)}
-                        </div>
-                      </td>
-
-                      <td className={`py-3 px-3 text-right ${
-                        rankingCriteria === 'tahunLalu' ? 'bg-sky-50/40 dark:bg-sky-950/20 font-bold' : ''
-                      }`}>
-                        <div className={getStatusClass(row.diffTy)}>
-                          {formatPercent(row.pctTy)}
-                        </div>
-                        <div className="text-[10px] text-neutral-400 font-normal">
-                          {formatAkmDiffPair(row.diffTy)}
-                        </div>
-                      </td>
-
-                      <td className={`py-3 px-3 text-right ${
-                        rankingCriteria === 'gabungan' ? 'bg-brand-50/40 dark:bg-brand-950/20 font-bold' : ''
-                      }`}>
-                        <div className={`font-bold ${getStatusClass(row.pctGabungan - 1)}`}>
-                          {formatPercent(row.pctGabungan)}
-                        </div>
-                        <div className="text-[10px] text-neutral-400 font-normal font-sans">
-                          skor rata-rata
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-3">
-                        <div className="w-full h-2 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
-                          <div
-                            className={`h-full ${barColor} rounded-full transition-all duration-500`}
-                            style={{ width: `${barWidth}%` }}
-                          />
-                        </div>
-                        <div className="text-[10px] text-neutral-400 text-right mt-0.5">
-                          {formatPercent(activeBarPct)}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot className="border-t-2 border-neutral-300 dark:border-neutral-700 bg-neutral-100/70 dark:bg-neutral-800/70 font-mono text-xs font-bold text-neutral-900 dark:text-white">
-                <tr>
-                  <td colSpan={3} className="py-3 px-3 font-sans text-center">
-                    TOTAL {selectedRayon === 0 ? 'CABANG' : `RAYON ${selectedRayon}`}
-                  </td>
-                  <td className="py-3 px-3 text-right text-brand-600 dark:text-brand-400">
-                    {formatNumber(rankedTkus.reduce((s, r) => s + r.akm, 0))}
-                  </td>
-                  <td className="py-3 px-3 text-right">
-                    {formatDecimal(rankedTkus.reduce((s, r) => s + r.avg, 0))}
-                  </td>
-                  <td className="py-3 px-3 text-right text-amber-600 dark:text-amber-400 border-l border-neutral-200 dark:border-neutral-700">
-                    {formatNumber(rankedTkus.reduce((s, r) => s + r.akmBb, 0))}
-                  </td>
-                  <td className="py-3 px-2.5 text-right text-amber-600 dark:text-amber-400">
-                    {formatPercent((() => {
-                      const a = rankedTkus.reduce((s, r) => s + r.akm, 0);
-                      const b = rankedTkus.reduce((s, r) => s + r.akmBb, 0);
-                      return (a + b) > 0 ? b / (a + b) : 0;
-                    })())}
-                  </td>
-                  <td colSpan={5} className="py-3 px-3 text-neutral-400 font-sans font-normal text-[11px] text-right">
-                    {rankedTkus.length} Unit TKU
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
-
-        {/* TAB 2: KONDISI OPERASIONAL & ABSENSI (KOLOM FR/FS SPREADSHEET, AREA, YL, COVERAGE) */}
-        {tableTab === 'operasional' && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm border-collapse min-w-[1050px]">
-              <thead>
-                <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 text-xs bg-neutral-50 dark:bg-neutral-800/40">
-                  <th className="py-2.5 px-3 font-semibold w-10 text-center">No</th>
-                  <th className="py-2.5 px-3 font-semibold">Nama TKU</th>
-                  <th className="py-2.5 px-2 font-semibold">Rayon</th>
-                  <th className="py-2.5 px-3 text-center font-semibold bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300">
-                    Area
-                  </th>
-                  <th className="py-2.5 px-3 text-center font-semibold bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300">
-                    YL
-                  </th>
-                  <th className="py-2.5 px-3 text-right font-semibold bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300">
-                    Coverage Area
-                  </th>
-                  <th className="py-2.5 px-3 text-center font-semibold bg-red-50/50 dark:bg-red-950/20 text-red-800 dark:text-red-300">
-                    Absen
-                  </th>
-                  <th className="py-2.5 px-3 text-center font-semibold bg-red-50/50 dark:bg-red-950/20 text-red-800 dark:text-red-300">
-                    Freq
-                  </th>
-                  <th className="py-2.5 px-3 text-right font-semibold bg-sky-50/50 dark:bg-sky-950/20 text-sky-800 dark:text-sky-300">
-                    JWP
-                  </th>
-                  <th className="py-2.5 px-3 text-right font-semibold bg-sky-50/50 dark:bg-sky-950/20 text-sky-800 dark:text-sky-300">
-                    s/YL
-                  </th>
-                  <th className="py-2.5 px-3 text-center font-semibold bg-red-50/50 dark:bg-red-950/20 text-red-800 dark:text-red-300 border-l border-neutral-200 dark:border-neutral-700 w-24">
-                    YL &lt; 250
-                  </th>
-                  <th className="py-2.5 px-3 text-center font-semibold bg-amber-50/50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 w-24">
-                    YL &lt; 300
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono text-xs">
-                {rankedTkus.map((row, idx) => {
-                  return (
-                    <tr key={row.t.id} className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors">
-                      <td className="py-3 px-3 text-center text-neutral-400 font-sans">
                         {idx + 1}
-                      </td>
+                      </span>
+                    </td>
 
-                      <td className="py-3 px-3 font-sans font-semibold text-neutral-900 dark:text-neutral-100">
-                        {row.t.nama}
-                      </td>
+                    <td className="py-3 px-3 font-sans font-semibold text-neutral-900 dark:text-neutral-100">
+                      {row.t.nama}
+                    </td>
 
-                      <td className="py-3 px-2 font-sans text-neutral-500">
-                        R{row.t.rayon}
-                      </td>
+                    <td className="py-3 px-2 font-sans text-neutral-500">
+                      R{row.t.rayon}
+                    </td>
 
-                      <td className="py-3 px-3 text-center font-bold text-neutral-800 dark:text-neutral-200 bg-emerald-50/20 dark:bg-emerald-950/10">
-                        {row.area}
-                      </td>
+                    <td className="py-3 px-3 text-right font-bold text-neutral-900 dark:text-neutral-100">
+                      {formatNumber(row.akm)}
+                    </td>
 
-                      <td className="py-3 px-3 text-center font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50/20 dark:bg-emerald-950/10">
-                        {row.yl}
-                      </td>
+                    <td className="py-3 px-3 text-right text-neutral-600 dark:text-neutral-300">
+                      {formatDecimal(row.avg)}
+                    </td>
 
-                      <td className="py-3 px-3 text-right font-bold bg-emerald-50/20 dark:bg-emerald-950/10">
-                        <span className={`px-2 py-0.5 rounded-md ${row.cover >= 1.0 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300'}`}>
-                          {formatPercent(row.cover)}
-                        </span>
-                      </td>
+                    <td className="py-3 px-3 text-right font-bold text-amber-600 dark:text-amber-400 border-l border-neutral-200 dark:border-neutral-700">
+                      {formatNumber(row.akmBb)}
+                    </td>
 
-                      <td className="py-3 px-3 text-center font-bold bg-red-50/20 dark:bg-red-950/10">
-                        <span className={row.abs > 0 ? 'text-red-600 font-extrabold' : 'text-neutral-400 font-normal'}>
-                          {row.abs} YL
-                        </span>
-                      </td>
+                    <td className={`py-3 px-2.5 text-right font-semibold ${getBbStatusClass(row.pctBb)}`}>
+                      {formatPercent(row.pctBb)}
+                      <div className="text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.bb.poin)} poin</div>
+                    </td>
 
-                      <td className="py-3 px-3 text-center font-bold bg-red-50/20 dark:bg-red-950/10">
-                        <span className={row.frk > 0 ? 'text-red-600 font-extrabold' : 'text-neutral-400 font-normal'}>
-                          {row.frk} kali
-                        </span>
-                      </td>
+                    <td className={`py-3 px-3 text-right border-l border-neutral-200 dark:border-neutral-700 ${
+                      rankingCriteria === 'target' ? 'bg-brand-50/40 dark:bg-brand-950/20 font-bold' : ''
+                    }`}>
+                      <div className={getStatusClass(row.diffTg)}>
+                        {formatPercent(row.pctTg)}
+                      </div>
+                      <div className="text-[10px] text-neutral-400 font-normal">
+                        {formatAkmDiffPair(row.diffTg)}
+                      </div>
+                      <div className="text-[10px] text-brand-600 dark:text-brand-400 font-semibold">
+                        {fmtPoin(row.skor.kategori.target.poin)} poin
+                      </div>
+                    </td>
 
-                      <td className="py-3 px-3 text-right font-semibold text-neutral-800 dark:text-neutral-200 bg-sky-50/20 dark:bg-sky-950/10">
-                        {formatNumber(row.jwp)}
-                      </td>
+                    <td className={`py-3 px-3 text-right ${
+                      rankingCriteria === 'bulanLalu' ? 'bg-amber-50/40 dark:bg-amber-950/20 font-bold' : ''
+                    }`}>
+                      <div className={getStatusClass(row.diffBl)}>
+                        {formatPercent(row.pctBl)}
+                      </div>
+                      <div className="text-[10px] text-neutral-400 font-normal">
+                        {formatAkmDiffPair(row.diffBl)}
+                      </div>
+                      <div className="text-[10px] text-brand-600 dark:text-brand-400 font-semibold">
+                        {fmtPoin(row.skor.kategori.mom.poin)} poin
+                      </div>
+                    </td>
 
-                      <td className="py-3 px-3 text-right font-bold text-sky-700 dark:text-sky-300 bg-sky-50/20 dark:bg-sky-950/10">
-                        {row.s_yl}
-                      </td>
-                      <td className="py-2.5 px-3 text-center bg-red-50/20 dark:bg-red-950/10 border-l border-neutral-200 dark:border-neutral-700">
-                        <div className="font-bold text-red-600 dark:text-red-400 font-mono text-xs leading-tight">
-                          {row.l250}
-                        </div>
-                        <div className="text-[10px] text-neutral-400 font-normal font-mono leading-tight mt-0.5">
-                          ({formatPercent(row.pctL250)})
-                        </div>
-                      </td>
-                      <td className="py-2.5 px-3 text-center bg-amber-50/20 dark:bg-amber-950/10">
-                        <div className="font-bold text-amber-600 dark:text-amber-400 font-mono text-xs leading-tight">
-                          {row.l300}
-                        </div>
-                        <div className="text-[10px] text-neutral-400 font-normal font-mono leading-tight mt-0.5">
-                          ({formatPercent(row.pctL300)})
-                        </div>
-                      </td>
+                    <td className={`py-3 px-3 text-right ${
+                      rankingCriteria === 'tahunLalu' ? 'bg-sky-50/40 dark:bg-sky-950/20 font-bold' : ''
+                    }`}>
+                      <div className={getStatusClass(row.diffTy)}>
+                        {formatPercent(row.pctTy)}
+                      </div>
+                      <div className="text-[10px] text-neutral-400 font-normal">
+                        {formatAkmDiffPair(row.diffTy)}
+                      </div>
+                      <div className="text-[10px] text-brand-600 dark:text-brand-400 font-semibold">
+                        {fmtPoin(row.skor.kategori.yoy.poin)} poin
+                      </div>
+                    </td>
+
+                    <td className={`py-3 px-3 text-right ${
+                      rankingCriteria === 'gabungan' ? 'bg-brand-50/40 dark:bg-brand-950/20 font-bold' : ''
+                    }`}>
+                      <div className={`font-bold ${getStatusClass(row.skor.skorHasil - 75)}`}>
+                        {fmtPoin(row.skor.skorHasil)}
+                      </div>
+                      <div className="text-[10px] text-neutral-400 font-normal font-sans">
+                        LY + Target + LM
+                      </div>
+                    </td>
+
+                    <td className="py-3 px-3">
+                      <div className="w-full h-2 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
+                        <div
+                          className={`h-full ${barColor} rounded-full transition-all duration-500`}
+                          style={{ width: `${barWidth}%` }}
+                        />
+                      </div>
+                      <div className="text-[10px] text-neutral-400 text-right mt-0.5">
+                        {rankingCriteria === 'gabungan' ? `${fmtPoin(activeBarPct)} poin` : formatPercent(activeBarPct)}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot className="border-t-2 border-neutral-300 dark:border-neutral-700 bg-neutral-100/70 dark:bg-neutral-800/70 font-mono text-xs font-bold text-neutral-900 dark:text-white">
+              <tr>
+                <td colSpan={3} className="py-3 px-3 font-sans text-center">
+                  TOTAL {selectedRayon === 0 ? 'CABANG' : `RAYON ${selectedRayon}`}
+                </td>
+                <td className="py-3 px-3 text-right text-brand-600 dark:text-brand-400">
+                  {formatNumber(rankedTkus.reduce((s, r) => s + r.akm, 0))}
+                </td>
+                <td className="py-3 px-3 text-right">
+                  {formatDecimal(rankedTkus.reduce((s, r) => s + r.avg, 0))}
+                </td>
+                <td className="py-3 px-3 text-right text-amber-600 dark:text-amber-400 border-l border-neutral-200 dark:border-neutral-700">
+                  {formatNumber(rankedTkus.reduce((s, r) => s + r.akmBb, 0))}
+                </td>
+                <td className="py-3 px-2.5 text-right text-amber-600 dark:text-amber-400">
+                  {formatPercent((() => {
+                    const a = rankedTkus.reduce((s, r) => s + r.akm, 0);
+                    const b = rankedTkus.reduce((s, r) => s + r.akmBb, 0);
+                    return (a + b) > 0 ? b / (a + b) : 0;
+                  })())}
+                </td>
+                <td colSpan={5} className="py-3 px-3 text-neutral-400 font-sans font-normal text-[11px] text-right">
+                  {rankedTkus.length} Unit TKU
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        ) : rekapTab === 'peringkat' ? (
+        /* TAB 3: PERINGKAT TKU (130 poin) */
+        <PeringkatTkuTable data={peringkatData} tanggalUpdate={divider} />
+        ) : (
+        /* TAB 2: KONDISI TKU */
+        <div className="overflow-x-auto">
+          {(() => {
+            const sum = (f: (r: typeof rankedTkus[0]) => number) => rankedTkus.reduce((a, r) => a + f(r), 0);
+            const tArea = sum(r => r.area);
+            const tYl = sum(r => r.yl);
+            const tJwp = sum(r => r.jwp);
+            const tAkm = sum(r => r.akm);
+            const tL250 = sum(r => r.l250);
+            const tL300 = sum(r => r.l300);
+            const bd = 'border-l border-neutral-200 dark:border-neutral-700';
+            const kondisiRows = [...rankedTkus].sort((a, b) => b.skor.skorKondisi - a.skor.skorKondisi);
+            return (
+              <table className="w-full text-left text-sm border-collapse min-w-[960px]">
+                <thead>
+                  <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 text-xs bg-neutral-50 dark:bg-neutral-800/40">
+                    <th className="py-2.5 px-3 font-semibold w-10 text-center">#</th>
+                    <th className="py-2.5 px-3 font-semibold">Nama TKU</th>
+                    <th className="py-2.5 px-2 font-semibold">Rayon</th>
+                    <th className={`py-2.5 px-3 text-right font-semibold ${bd}`}>Area</th>
+                    <th className="py-2.5 px-3 text-right font-semibold">YL</th>
+                    <th className="py-2.5 px-3 text-right font-semibold">% Cover<div className="text-[10px] font-normal text-neutral-400">poin maks 15</div></th>
+                    <th className={`py-2.5 px-3 text-right font-semibold text-sky-600 dark:text-sky-400 ${bd}`}>JWP</th>
+                    <th className="py-2.5 px-3 text-right font-semibold">s/YL</th>
+                    <th className={`py-2.5 px-3 text-right font-semibold ${bd}`}>Absen<div className="text-[10px] font-normal text-neutral-400">poin maks 10</div></th>
+                    <th className="py-2.5 px-3 text-right font-semibold">Frek (EWP)<div className="text-[10px] font-normal text-neutral-400">poin maks 15</div></th>
+                    <th className={`py-2.5 px-3 text-right font-semibold text-red-600 dark:text-red-400 ${bd}`}>&lt;250</th>
+                    <th className="py-2.5 px-3 text-right font-semibold text-red-600 dark:text-red-400">%&lt;250</th>
+                    <th className={`py-2.5 px-3 text-right font-semibold text-amber-600 dark:text-amber-400 ${bd}`}>&lt;300</th>
+                    <th className="py-2.5 px-3 text-right font-semibold text-amber-600 dark:text-amber-400">%&lt;300</th>
+                    <th className={`py-2.5 px-3 text-right font-semibold text-brand-600 dark:text-brand-400 ${bd}`}>Skor Kondisi<div className="text-[10px] font-normal text-neutral-400">maks 55</div></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono text-xs">
+                  {kondisiRows.map((row, idx) => (
+                    <tr key={row.t.id} className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors">
+                      <td className="py-3 px-3 text-center text-neutral-500">{idx + 1}</td>
+                      <td className="py-3 px-3 font-sans font-semibold text-neutral-900 dark:text-neutral-100">{row.t.nama}</td>
+                      <td className="py-3 px-2 font-sans text-neutral-500">R{row.t.rayon}</td>
+                      <td className={`py-3 px-3 text-right ${bd}`}>{row.area}</td>
+                      <td className="py-3 px-3 text-right">{row.yl}</td>
+                      <td className={`py-3 px-3 text-right font-bold ${row.cover >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>{formatPercent(row.cover)}<div className="text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.area.poin)} poin</div></td>
+                      <td className={`py-3 px-3 text-right text-sky-600 dark:text-sky-400 ${bd}`}>{formatNumber(row.jwp)}</td>
+                      <td className="py-3 px-3 text-right font-bold text-brand-600 dark:text-brand-400">{row.s_yl > 0 ? formatNumber(row.s_yl) : '—'}</td>
+                      <td className={`py-3 px-3 text-right ${bd}`}>{row.abs > 0 ? <span className="font-bold text-red-600 dark:text-red-400">{row.abs}</span> : <span className="text-neutral-400">0</span>}<div className="text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.absen.poin)} poin</div></td>
+                      <td className="py-3 px-3 text-right">{row.frk > 0 ? <span className="font-bold text-red-600 dark:text-red-400">{row.frk}</span> : <span className="text-neutral-400">0</span>}<div className="text-[10px] text-neutral-400 font-normal">{row.skor.kategori.ewp.nilai !== null ? `${row.skor.kategori.ewp.nilai.toFixed(2).replace('.', ',')}% · ` : ''}{fmtPoin(row.skor.kategori.ewp.poin)} poin</div></td>
+                      <td className={`py-3 px-3 text-right text-red-600 dark:text-red-400 ${bd}`}>{row.l250}</td>
+                      <td className="py-3 px-3 text-right font-semibold text-red-600 dark:text-red-400">{formatPercent(row.pctL250)}</td>
+                      <td className={`py-3 px-3 text-right text-amber-600 dark:text-amber-400 ${bd}`}>{row.l300}</td>
+                      <td className="py-3 px-3 text-right font-semibold text-amber-600 dark:text-amber-400">{formatPercent(row.pctL300)}</td>
+                      <td className={`py-3 px-3 text-right font-bold text-brand-600 dark:text-brand-400 ${bd}`}>{fmtPoin(row.skor.skorKondisi)}</td>
                     </tr>
-                  );
-                })}
-
-                {/* Subtotal Row */}
-                <tr className="bg-neutral-100/70 dark:bg-neutral-800/70 font-bold text-neutral-900 dark:text-white border-t-2 border-neutral-300 dark:border-neutral-700">
-                  <td colSpan={3} className="py-3 px-3 font-sans text-center">
-                    TOTAL {selectedRayon === 0 ? 'CABANG' : `RAYON ${selectedRayon}`}
-                  </td>
-                  <td className="py-3 px-3 text-center font-mono text-emerald-800 dark:text-emerald-300">
-                    {totalArea}
-                  </td>
-                  <td className="py-3 px-3 text-center font-mono text-emerald-800 dark:text-emerald-300">
-                    {totalYl}
-                  </td>
-                  <td className="py-3 px-3 text-right font-mono text-emerald-700 dark:text-emerald-300">
-                    {formatPercent(coverageAreaPct)}
-                  </td>
-                  <td className="py-3 px-3 text-center font-mono text-red-700 dark:text-red-300">
-                    {totalAbsenSpreadsheet} YL
-                  </td>
-                  <td className="py-3 px-3 text-center font-mono text-red-700 dark:text-red-300">
-                    {totalFrekSpreadsheet} kali
-                  </td>
-                  <td className="py-3 px-3 text-right font-mono text-sky-700 dark:text-sky-300">
-                    {formatNumber(totalJwpSpreadsheet)}
-                  </td>
-                  <td className="py-3 px-3 text-right font-mono text-sky-700 dark:text-sky-300">
-                    {totalJwpSpreadsheet > 0 ? Math.floor(totalSold / totalJwpSpreadsheet) : 0}
-                  </td>
-                  <td className="py-2.5 px-3 text-center font-mono border-l border-neutral-200 dark:border-neutral-700 bg-red-50/40 dark:bg-red-950/20">
-                    <div className="font-bold text-red-600 dark:text-red-400 text-xs leading-tight">
-                      {rankedTkus.reduce((s, r) => s + r.l250, 0)}
-                    </div>
-                    <div className="text-[10px] text-neutral-400 font-normal leading-tight mt-0.5">
-                      ({formatPercent(totalYl > 0 ? rankedTkus.reduce((s, r) => s + r.l250, 0) / totalYl : 0)})
-                    </div>
-                  </td>
-                  <td className="py-2.5 px-3 text-center font-mono bg-amber-50/40 dark:bg-amber-950/20">
-                    <div className="font-bold text-amber-600 dark:text-amber-400 text-xs leading-tight">
-                      {rankedTkus.reduce((s, r) => s + r.l300, 0)}
-                    </div>
-                    <div className="text-[10px] text-neutral-400 font-normal leading-tight mt-0.5">
-                      ({formatPercent(totalYl > 0 ? rankedTkus.reduce((s, r) => s + r.l300, 0) / totalYl : 0)})
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+                <tfoot className="border-t-2 border-neutral-300 dark:border-neutral-700 bg-neutral-100/70 dark:bg-neutral-800/70 font-mono text-xs font-bold text-neutral-900 dark:text-white">
+                  <tr>
+                    <td colSpan={3} className="py-3 px-3 font-sans text-center">
+                      TOTAL {selectedRayon === 0 ? 'CABANG' : `RAYON ${selectedRayon}`}
+                    </td>
+                    <td className={`py-3 px-3 text-right ${bd}`}>{tArea}</td>
+                    <td className="py-3 px-3 text-right">{tYl}</td>
+                    <td className="py-3 px-3 text-right">{formatPercent(tArea > 0 ? tYl / tArea : 0)}</td>
+                    <td className={`py-3 px-3 text-right text-sky-600 dark:text-sky-400 ${bd}`}>{formatNumber(tJwp)}</td>
+                    <td className="py-3 px-3 text-right text-brand-600 dark:text-brand-400">{tJwp > 0 ? formatNumber(Math.floor(tAkm / tJwp)) : '—'}</td>
+                    <td className={`py-3 px-3 text-right ${bd}`}>{sum(r => r.abs)}</td>
+                    <td className="py-3 px-3 text-right">{sum(r => r.frk)}</td>
+                    <td className={`py-3 px-3 text-right text-red-600 dark:text-red-400 ${bd}`}>{tL250}</td>
+                    <td className="py-3 px-3 text-right text-red-600 dark:text-red-400">{formatPercent(tYl > 0 ? tL250 / tYl : 0)}</td>
+                    <td className={`py-3 px-3 text-right text-amber-600 dark:text-amber-400 ${bd}`}>{tL300}</td>
+                    <td className="py-3 px-3 text-right text-amber-600 dark:text-amber-400">{formatPercent(tYl > 0 ? tL300 / tYl : 0)}</td>
+                    <td className={`py-3 px-3 ${bd}`}></td>
+                  </tr>
+                </tfoot>
+              </table>
+            );
+          })()}
+        </div>
         )}
       </div>
     </div>

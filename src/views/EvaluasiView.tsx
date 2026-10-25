@@ -18,15 +18,14 @@ import {
   UserCheck,
   MapPin,
   CheckCircle2,
-  Bookmark,
-  Users
+  Bookmark
 } from 'lucide-react';
 import { AppState } from '../types';
 import { buildEvaluasiData, EvaluasiHighlights } from '../services/evaluasi';
 import { EvalFullTable } from '../components/EvalFullTable';
 import { EvalMiniTable } from '../components/EvalMiniTable';
-import { EvalKondisiTable } from '../components/EvalKondisiTable';
 import { EvaluasiPanel } from '../components/EvaluasiPanel';
+import { RekapMingguanChart } from '../components/RekapMingguanChart';
 import { formatNumber, formatPercent, getPeriodInfo, getPembagiHari, getBbStatusClass, getWeeksOfMonth } from '../services/storage';
 
 interface EvaluasiViewProps {
@@ -310,7 +309,7 @@ const RingkasanPrestasiPanel: React.FC<RingkasanPrestasiPanelProps> = ({
 };
 
 export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon, showToast }) => {
-  const [evalMode, setEvalMode] = useState<'mini' | 'full' | 'kondisi' | 'analisa'>('mini');
+  const [evalMode, setEvalMode] = useState<'mini' | 'full' | 'analisa'>('mini');
   const [mobileMiniMode, setMobileMiniMode] = useState<'table' | 'matrix'>('table');
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
@@ -378,7 +377,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
             ))}
           </div>
 
-          {/* View Mode Switcher: Mini Table (HP) vs Full Table vs Kondisi TKU vs Analisa */}
+          {/* View Mode Switcher: Mini Table (HP) vs Full Table vs Analisa */}
           <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl shrink-0 overflow-x-auto max-w-full">
             <button
               onClick={() => setEvalMode('mini')}
@@ -401,17 +400,6 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
             >
               <TableIcon className="w-3.5 h-3.5" />
               <span>Tabel Utuh</span>
-            </button>
-            <button
-              onClick={() => setEvalMode('kondisi')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                evalMode === 'kondisi'
-                  ? 'bg-brand-600 text-white shadow-xs'
-                  : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>Kondisi TKU</span>
             </button>
             <button
               onClick={() => setEvalMode('analisa')}
@@ -552,121 +540,6 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
             />
           </div>
 
-          {/* Rekapitulasi Penjualan & Tren Pertumbuhan Mingguan */}
-          <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm p-5 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-emerald-600" />
-                  <span>Rekap Mingguan</span>
-                </h3>
-              </div>
-              <span className="text-[11px] font-mono font-semibold px-2.5 py-1 rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
-                Target Harian: {formatNumber(selectedRayon === 0 ? state.tkus.reduce((a,b)=>a+b.targetHarian, 0) : state.tkus.filter(t=>t.rayon === selectedRayon).reduce((a,b)=>a+b.targetHarian, 0))} btl/hr
-              </span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left border-collapse min-w-[750px]">
-                <thead>
-                  <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 font-semibold bg-neutral-50 dark:bg-neutral-800/50">
-                    <th className="py-2.5 px-3">Periode</th>
-                    <th className="py-2.5 px-3">Rentang Tanggal</th>
-                    <th className="py-2.5 px-3 text-right">Penjualan Minggu Ini</th>
-                    <th className="py-2.5 px-3 text-right text-brand-600 dark:text-brand-400 font-bold">Akumulasi s/d Minggu Ini</th>
-                    <th className="py-2.5 px-3 text-right font-bold">Rata-rata/hr</th>
-                    <th className="py-2.5 px-3 text-right font-bold text-neutral-900 dark:text-white border-l border-neutral-200 dark:border-neutral-700">vs Minggu Lalu (%)</th>
-                    <th className="py-2.5 px-3 text-right font-bold text-neutral-900 dark:text-white">Naik / Turun (btl)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800 font-mono">
-                  {(() => {
-                    const WEEKS_DEF = [
-                      { label: 'M1 (Minggu 1)', range: 'Tgl 1 – 6 Sep', start: 1, end: 6, workDays: 6, div: 6 },
-                      { label: 'M2 (Minggu 2)', range: 'Tgl 8 – 13 Sep', start: 8, end: 13, workDays: 6, div: 12 },
-                      { label: 'M3 (Minggu 3)', range: 'Tgl 15 – 20 Sep', start: 15, end: 20, workDays: 6, div: 18 },
-                      { label: 'M4 (Minggu 4)', range: 'Tgl 22 – 27 Sep', start: 22, end: 27, workDays: 6, div: 24 },
-                      { label: 'M5 (Minggu 5)', range: 'Tgl 29 – 30 Sep', start: 29, end: 30, workDays: 2, div: 26 },
-                    ];
-
-                    const relevantTkus = state.tkus.filter(t => t.aktif && (selectedRayon === 0 || t.rayon === selectedRayon));
-                    const relIdxs = relevantTkus.map(t => state.tkus.indexOf(t));
-
-                    let runningCum = 0;
-                    let prevWeekSales: number | null = null;
-                    const rows = [];
-
-                    for (let wIdx = 0; wIdx < WEEKS_DEF.length; wIdx++) {
-                      const w = WEEKS_DEF[wIdx];
-                      let weekSales = 0;
-
-                      for (let d = w.start; d <= w.end; d++) {
-                        const dStr = `${period.key}-${String(d).padStart(2, '0')}`;
-                        relIdxs.forEach(tIdx => {
-                          const rec = state.pjd[dStr]?.[tIdx];
-                          if (rec) {
-                            weekSales += rec.sold || (rec.v ? rec.v.reduce((a, b) => a + b, 0) : 0);
-                          } else if (d === state.currentDayNum && state.todayInputs[tIdx]) {
-                            weekSales += state.todayInputs[tIdx].sold || 0;
-                          } else {
-                            weekSales += state.breakdown?.[tIdx]?.[d - 1] || state.tkus[tIdx].targetHarian;
-                          }
-                        });
-                      }
-
-                      runningCum += weekSales;
-                      const avgPerDay = w.div > 0 ? runningCum / w.div : 0;
-                      const vsPrevPct = prevWeekSales !== null && prevWeekSales > 0 ? (weekSales / prevWeekSales) : null;
-                      const vsPrevDiff = prevWeekSales !== null ? (weekSales - prevWeekSales) : null;
-
-                      prevWeekSales = weekSales;
-
-                      rows.push(
-                        <tr key={w.label} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/40">
-                          <td className="py-2.5 px-3 font-sans font-bold text-neutral-900 dark:text-neutral-100">
-                            {w.label}
-                          </td>
-                          <td className="py-2.5 px-3 font-sans text-neutral-500">
-                            {w.range}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-bold text-neutral-900 dark:text-neutral-100">
-                            {formatNumber(weekSales)} <span className="text-[10px] font-sans text-neutral-400 font-normal">btl</span>
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-bold text-brand-600 dark:text-brand-400">
-                            {formatNumber(runningCum)} <span className="text-[10px] font-sans text-neutral-400 font-normal">btl</span>
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-bold text-neutral-800 dark:text-neutral-200">
-                            {formatNumber(avgPerDay)} <span className="text-[10px] font-sans text-neutral-400 font-normal">btl/hr</span>
-                          </td>
-                          <td className="py-2.5 px-3 text-right border-l border-neutral-200 dark:border-neutral-700">
-                            {vsPrevPct !== null ? (
-                              <span className={`font-bold ${vsPrevPct >= 1 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                {formatPercent(vsPrevPct)}
-                              </span>
-                            ) : (
-                              <span className="text-neutral-400">— (Awal Bulan)</span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 text-right">
-                            {vsPrevDiff !== null ? (
-                              <span className={`font-bold ${vsPrevDiff >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                {vsPrevDiff >= 0 ? `+${formatNumber(vsPrevDiff)}` : formatNumber(vsPrevDiff)} btl
-                              </span>
-                            ) : (
-                              <span className="text-neutral-400">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    }
-
-                    return rows;
-                  })()}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
           {/* 9 KARTU RINGKASAN DI BAWAH TABEL */}
           <div className="space-y-2.5">
             <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
@@ -677,32 +550,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
         </div>
       )}
 
-      {/* MODE 3: KONDISI & OPERASIONAL TKU */}
-      {evalMode === 'kondisi' && (
-        <div className="space-y-6">
-          <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 p-4 sm:p-5 shadow-sm space-y-4">
-            <EvalKondisiTable
-              r1Rows={r1Rows}
-              r2Rows={r2Rows}
-              r1Total={r1Total}
-              r2Total={r2Total}
-              cabangTotal={cabangTotal}
-              selectedRayon={selectedRayon}
-              periodLabel={period.label}
-            />
-          </div>
-
-          {/* 9 KARTU RINGKASAN DI BAWAH KONDISI TKU */}
-          <div className="space-y-2.5">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-              Ringkasan 9 Metrik Performa Kunci
-            </h3>
-            <RingkasanPrestasiPanel highlights={highlights} layout="row" />
-          </div>
-        </div>
-      )}
-
-      {/* MODE 4: EVALUASI MINGGUAN & ANALISA PENYEBAB */}
+      {/* MODE 3: EVALUASI MINGGUAN & ANALISA PENYEBAB */}
       {evalMode === 'analisa' && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Panel Evaluasi Penjualan Komprehensif (Capaian Target, Laju Minggu Ini vs Lalu, Rincian Harian, Status & Penyebab, Tren M1-M5, Ekspor PDF/Gambar/Salin) */}
@@ -712,6 +560,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
             mode="admin"
             rayon={selectedRayon}
             showToast={showToast}
+            afterCapaian={<RekapMingguanChart state={state} weeks={weeks} selectedRayon={selectedRayon} />}
           />
 
           {/* Top Performer vs Bottom Performer Cards */}
@@ -810,13 +659,6 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
             </div>
           </div>
 
-          {/* 9 KARTU RINGKASAN DI BAWAH ANALISA */}
-          <div className="space-y-2.5">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-              Ringkasan Metrik
-            </h3>
-            <RingkasanPrestasiPanel highlights={highlights} layout="row" />
-          </div>
         </div>
       )}
 
@@ -862,7 +704,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
 
             {/* Kanan: Mode Switcher & Tombol Keluar */}
             <div className="flex items-center gap-1 shrink-0">
-              {/* Mini vs Utuh vs Kondisi Selector */}
+              {/* Mini vs Utuh vs Mingguan Selector */}
               <div className="inline-flex p-0.2 bg-neutral-800 rounded">
                 <button
                   onClick={() => setEvalMode('mini')}
@@ -885,17 +727,6 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
                 >
                   <TableIcon className="w-2.5 h-2.5" />
                   <span>Lengkap</span>
-                </button>
-                <button
-                  onClick={() => setEvalMode('kondisi')}
-                  className={`flex items-center gap-0.5 px-1.5 py-0 text-[9px] font-bold rounded transition-all cursor-pointer ${
-                    evalMode === 'kondisi'
-                      ? 'bg-brand-600 text-white shadow-2xs'
-                      : 'text-neutral-400 hover:text-white'
-                  }`}
-                >
-                  <Users className="w-2.5 h-2.5" />
-                  <span>Kondisi</span>
                 </button>
                 <button
                   onClick={() => setEvalMode('analisa')}
@@ -923,9 +754,9 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
 
           {/* Konten 1 Frame Murni: Landscape (Samping), Portrait/Tab Mode (Atas-Bawah) */}
           <div className="flex-1 min-h-0 overflow-hidden">
-            {/* 1. LAYOUT MODE LANDSCAPE: Tabel Kiri (Mini atau Lengkap Geser atau Kondisi atau Mingguan) + 9 Card Kanan (2-Kolom Pas Sejajar) */}
+            {/* 1. LAYOUT MODE LANDSCAPE: Tabel Kiri (Mini atau Lengkap Geser atau Mingguan) + 9 Card Kanan (2-Kolom Pas Sejajar) */}
             <div className="hidden landscape:grid landscape:grid-cols-12 gap-2 items-stretch h-full overflow-hidden">
-              {/* Panel Kiri: Tabel Mini / Lengkap / Kondisi / Mingguan dengan scroll horizontal & vertikal */}
+              {/* Panel Kiri: Tabel Mini / Lengkap / Mingguan dengan scroll horizontal & vertikal */}
               <div className="col-span-8 h-full min-h-0 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 shadow-sm p-1.5 flex flex-col justify-between overflow-hidden">
                 <div className="flex-1 min-h-0 overflow-auto">
                   {evalMode === 'mini' ? (
@@ -942,17 +773,6 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
                       compact={true}
                       fitHeight={true}
                     />
-                  ) : evalMode === 'kondisi' ? (
-                    <EvalKondisiTable
-                      r1Rows={r1Rows}
-                      r2Rows={r2Rows}
-                      r1Total={r1Total}
-                      r2Total={r2Total}
-                      cabangTotal={cabangTotal}
-                      selectedRayon={selectedRayon}
-                      fullscreen={true}
-                      periodLabel={period.label}
-                    />
                   ) : evalMode === 'analisa' ? (
                     <div className="p-2 overflow-y-auto h-full">
                       <EvaluasiPanel
@@ -961,6 +781,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
                         mode="admin"
                         rayon={selectedRayon}
                         showToast={showToast}
+                        afterCapaian={<RekapMingguanChart state={state} weeks={weeks} selectedRayon={selectedRayon} />}
                       />
                     </div>
                   ) : (
@@ -1010,17 +831,6 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
                     hideTopBar={true}
                     compact={true}
                   />
-                ) : evalMode === 'kondisi' ? (
-                  <EvalKondisiTable
-                    r1Rows={r1Rows}
-                    r2Rows={r2Rows}
-                    r1Total={r1Total}
-                    r2Total={r2Total}
-                    cabangTotal={cabangTotal}
-                    selectedRayon={selectedRayon}
-                    fullscreen={true}
-                    periodLabel={period.label}
-                  />
                 ) : evalMode === 'analisa' ? (
                   <div className="p-2 space-y-4">
                     <EvaluasiPanel
@@ -1029,6 +839,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
                       mode="admin"
                       rayon={selectedRayon}
                       showToast={showToast}
+                      afterCapaian={<RekapMingguanChart state={state} weeks={weeks} selectedRayon={selectedRayon} />}
                     />
                   </div>
                 ) : (

@@ -253,11 +253,94 @@ function cyrb53(str: string): string {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36) + ':' + str.length;
 }
 
+// Catatan harian kosong (semua nol) yang dibuat otomatis saat ganti hari bukan data baru,
+// jadi tidak boleh membuat HP dianggap "punya perubahan belum terkirim".
+const isBlankDaily = (r: any): boolean => {
+  if (!r || typeof r !== 'object') return true;
+  const zeros = (a: any) => !Array.isArray(a) || a.every((x: any) => !Number(x));
+  return zeros(r.v) && zeros(r.b) && zeros(r.pdmV) &&
+    !Number(r.sold) && !Number(r.bb) && !Number(r.pdm) &&
+    !Number(r.absen) && !Number(r.frek) && !Number(r.l250) && !Number(r.l300) && !Number(r.jwpCustom);
+};
+
 export function computeSyncHash(state: AppState): string {
   const rest: Record<string, unknown> = { ...(state as unknown as Record<string, unknown>) };
   VOLATILE_KEYS.forEach(k => { delete rest[k]; });
   delete rest.supabaseConfig;
+  const ti = rest.todayInputs as Record<string, any> | undefined;
+  if (ti && typeof ti === 'object') {
+    const filled: Record<string, any> = {};
+    Object.keys(ti).forEach(k => { if (!isBlankDaily(ti[k])) filled[k] = ti[k]; });
+    rest.todayInputs = filled;
+  }
   return cyrb53(JSON.stringify(rest));
+}
+
+// ---- Sinyal real-time (Supabase Realtime Broadcast) ----
+// Setelah satu HP berhasil menyimpan, ia mengirim sinyal KECIL (beberapa byte, tanpa isi data) ke HP lain.
+// HP lain lalu menjalankan sinkron biasa: cek token ringan dulu, unduh data penuh hanya kalau memang berubah.
+// Jadi hemat egress: data penuh tidak pernah dikirim lewat sinyal. Kalau sinyal terlewat (offline / koneksi
+// putus), cek berkala di App tetap menjadi jaring pengaman.
+const PING_CHANNEL = 'yk-sync';
+let pingChannel: any = null;
+let pingChannelReady = false;
+let pingChannelSig = '';
+
+export function subscribeSyncPing(config: SupabaseConfig | undefined | null, onPing: () => void): () => void {
+  const client = getSupabaseClient(config);
+  if (!client || !config) return () => {};
+  try {
+    const sig = config.u.trim() + '|' + config.k.trim();
+    pingChannelReady = false;
+    pingChannelSig = sig;
+    const ch = client.channel(PING_CHANNEL, { config: { broadcast: { self: false } } });
+    ch.on('broadcast', { event: 'changed' }, () => { onPing(); });
+    ch.subscribe((status: string) => {
+      if (pingChannelSig !== sig) return;
+      pingChannelReady = status === 'SUBSCRIBED';
+      // Tersambung kembali setelah putus: kemungkinan ada perubahan yang terlewat, cek sekali.
+      if (status === 'SUBSCRIBED') onPing();
+    });
+    pingChannel = ch;
+    return () => {
+      pingChannelReady = false;
+      if (pingChannel === ch) pingChannel = null;
+      try { client.removeChannel(ch); } catch (_) { /* abaikan */ }
+    };
+  } catch (err) {
+    console.warn('Realtime sinyal gagal diaktifkan (memakai cek berkala):', err);
+    return () => {};
+  }
+}
+
+async function sendSyncPing(): Promise<void> {
+  try {
+    if (!pingChannel || !pingChannelReady) return;
+    await pingChannel.send({ type: 'broadcast', event: 'changed', payload: { t: Date.now() } });
+  } catch (_) {
+    // Sinyal hanya pemercepat: gagal tidak masalah, cek berkala tetap jalan.
+  }
+}
+
+// Cadangan bergulir di Supabase (14 slot, baris terpisah dari main_state): kalau suatu hari data utama
+// rusak / tertimpa / aplikasi diperbaiki dan datanya kacau, salinan beberapa hari terakhir masih ada.
+// Hanya upload (tidak menambah egress), maksimal sekali per 30 menit per HP.
+const SNAP_FLAG = 'yakult_sb_snapshot_at_v1';
+async function maybeSaveRollingSnapshot(client: SupabaseClient, payload: unknown): Promise<void> {
+  try {
+    const last = Number(localStorage.getItem(SNAP_FLAG) || 0);
+    if (Date.now() - last < 30 * 60 * 1000) return;
+    const now = new Date();
+    const dayOfYear = Math.floor((Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - Date.UTC(now.getFullYear(), 0, 0)) / 86400000);
+    const { error } = await client.from('app_store').upsert({
+      key: `snapshot_slot_${dayOfYear % 14}`,
+      value: { savedAt: now.toISOString(), data: payload },
+      updated_at: now.toISOString()
+    });
+    if (!error) localStorage.setItem(SNAP_FLAG, String(Date.now()));
+  } catch (_) {
+    // cadangan bersifat tambahan: gagal tidak boleh mengganggu sinkronisasi utama
+  }
 }
 
 // Buat payload bersih untuk cloud: buang kredensial supabaseConfig, preferensi UI lokal, dll.
@@ -599,6 +682,8 @@ export async function saveStateToSupabase(
 
       writeSyncBase(state.supabaseConfig, pickSyncable(cleanPayload));
       writeSyncMeta(state.supabaseConfig, Date.now(), computeSyncHash(working), res.tok);
+      void maybeSaveRollingSnapshot(client, cleanPayload);
+      void sendSyncPing();
       if (working !== state && computeSyncHash(working) !== hash) {
         // Hasil gabungan membawa data dari perangkat lain: perbarui tampilan HP ini juga.
         if (onMergedState) onMergedState(working);
@@ -1770,7 +1855,7 @@ export function loadAppState(): AppState {
         }
         const userArchives: Record<string, ArchiveRecord> = {};
         Object.keys(parsed.archives || {}).forEach(k => {
-          if (!defaultState.archives[k]) userArchives[k] = parsed.archives[k];
+          if (!INITIAL_ARCHIVES[k]) userArchives[k] = parsed.archives[k];
         });
         return {
           ...defaultState,
@@ -1857,6 +1942,12 @@ export function loadAppState(): AppState {
       const safeArchives: Record<string, ArchiveRecord> = {};
       Object.keys(defaultState.archives).forEach(key => {
         const defArc = defaultState.archives[key];
+        // Arsip buatan pengguna (mis. 2026-09, hasil arsip otomatis dari data resmi) milik pengguna:
+        // koreksi Absen/Frekuensi dan lainnya TIDAK boleh ditimpa data bawaan saat dimuat ulang.
+        if (!INITIAL_ARCHIVES[key] && parsed.archives && parsed.archives[key]) {
+          safeArchives[key] = parsed.archives[key];
+          return;
+        }
         const userArc = (parsed.archives && parsed.archives[key]) || defArc;
         safeArchives[key] = {
           ...defArc,

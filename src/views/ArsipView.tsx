@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Archive,
   Save,
@@ -21,7 +21,8 @@ import {
   ChevronDown,
   Settings2
 } from 'lucide-react';
-import { AppState } from '../types';
+import { AppState, ArchiveRecord, ArchiveRow, VARIANTS } from '../types';
+import { ArsipLineChart } from '../components/ArsipYearCharts';
 import { formatNumber, formatDecimal, round2, formatPercent, getPeriodInfo, getBbStatusClass } from '../services/storage';
 import { INITIAL_ARCHIVES } from '../data/initialData';
 
@@ -53,6 +54,91 @@ const getRowRataVarian = (row: { varian?: number[]; rataVarian?: [number, number
   return floorVal;
 };
 
+
+// ===== Agregat level cabang per bulan arsip =====
+interface BranchMonth {
+  key: string;
+  label: string; // "Agustus"
+  short: string; // "Agu"
+  rata: number; // rata penjualan/hari seluruh cabang
+  target: number; // target/hari seluruh cabang
+  ly: number; // tahun lalu/hari seluruh cabang
+  vsTgt: number | null;
+  vsLy: number | null;
+  syl: number | null;
+  absen: number;
+  jmlYl: number;
+  l250: number;
+  varRata: [number, number, number, number];
+}
+
+const aggBranchMonth = (key: string, arc: ArchiveRecord): BranchMonth => {
+  const rows = arc.rows || [];
+  const d = arc.d || 30;
+  const sold = rows.reduce((s, r) => s + (r.total || 0), 0);
+  const rata = rows.reduce((s, r) => s + getRowRataHarian(r, d), 0);
+  const target = rows.reduce((s, r) => s + (r.targetHarian || 0), 0);
+  const ly = rows.reduce((s, r) => s + (r.tahunLalu || 0), 0);
+  const jwp = rows.reduce((s, r) => s + (r.akmJwp || 0), 0);
+  const label = (arc.namaBulan || key).replace(/\s*\d{4}$/, '');
+  const varRata = [0, 1, 2, 3].map(i => rows.reduce((s, r) => s + getRowRataVarian(r, i, d), 0)) as [number, number, number, number];
+  return {
+    key,
+    label,
+    short: label.slice(0, 3),
+    rata,
+    target,
+    ly,
+    vsTgt: target > 0 ? rata / target : null,
+    vsLy: ly > 0 ? rata / ly : null,
+    syl: jwp > 0 ? Math.floor(sold / jwp) : null,
+    absen: rows.reduce((s, r) => s + (r.absenYl || 0), 0),
+    jmlYl: rows.reduce((s, r) => s + (r.jumlahYl || 0), 0),
+    l250: rows.reduce((s, r) => s + (r.l250 || 0), 0),
+    varRata,
+  };
+};
+
+const fmtChartDec = (v: number) => formatDecimal(v, Number.isInteger(v) ? 0 : 1);
+
+// ===== Riwayat Tahunan: nilai per TKU / cabang untuk tiap metrik =====
+const histRowValue = (metric: HistoricalMetric, row: ArchiveRow, d: number): number => {
+  switch (metric) {
+    case 'total': return row.total || 0;
+    case 'rata': return row.rataHarian ?? (row.total / (d || 31));
+    case 'bb': return row.akmBb || 0;
+    case 'syl': return row.sYl || 0;
+    case 'coverage': return row.coverageArea || (row.jumlahArea ? (row.jumlahYl || 0) / row.jumlahArea : 1);
+  }
+};
+
+const histBranchValue = (metric: HistoricalMetric, arc: ArchiveRecord): number | null => {
+  const rows = arc.rows || [];
+  const d = arc.d || 31;
+  const sold = rows.reduce((s, r) => s + (r.total || 0), 0);
+  switch (metric) {
+    case 'total': return sold;
+    case 'rata': return sold / d;
+    case 'bb': return rows.reduce((s, r) => s + (r.akmBb || 0), 0);
+    case 'syl': {
+      const jwp = rows.reduce((s, r) => s + (r.akmJwp || 0), 0);
+      return jwp > 0 ? Math.floor(sold / jwp) : null;
+    }
+    case 'coverage': {
+      const area = rows.reduce((s, r) => s + (r.jumlahArea || 0), 0);
+      const yl = rows.reduce((s, r) => s + (r.jumlahYl || 0), 0);
+      return area > 0 ? yl / area : 1;
+    }
+  }
+};
+
+// asAvg = true -> nilai rata-rata (boleh desimal); false -> nilai bulanan
+const fmtHist = (metric: HistoricalMetric, v: number, asAvg = false): string => {
+  if (metric === 'coverage') return formatPercent(v);
+  if (metric === 'rata' || metric === 'syl' || asAvg) return formatDecimal(v);
+  return formatNumber(v);
+};
+
 interface ArsipViewProps {
   state: AppState;
   onSaveCurrentMonthArchive: () => void;
@@ -65,6 +151,8 @@ interface ArsipViewProps {
   syncStatus?: 'idle' | 'syncing' | 'synced' | 'error';
   onManualSync?: () => void;
   onForcePushArchive?: () => void;
+  /** Simpan koreksi Absen & Frekuensi per baris arsip (index baris -> nilai baru) */
+  onUpdateArchiveAbsen?: (archiveKey: string, patch: Record<number, { absenYl: number; frekuensiAbsen: number; tahunLalu: number }>) => void;
 }
 
 type ArchiveTab = 'item_sales' | 'target_eval' | 'ops_bb' | 'all_columns';
@@ -81,7 +169,8 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
   isSyncing = false,
   syncStatus = 'idle',
   onManualSync,
-  onForcePushArchive
+  onForcePushArchive,
+  onUpdateArchiveAbsen
 }) => {
   const [csvInput, setCsvInput] = useState('');
   const [showImport, setShowImport] = useState(false);
@@ -90,6 +179,9 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
   const [histMetric, setHistMetric] = useState<HistoricalMetric>('total');
   // Konfirmasi hapus memakai kotak di dalam aplikasi: window.confirm() diblokir diam-diam di APK/iframe.
   const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
+  // Mode koreksi Absen & Frekuensi (hanya arsip buatan sendiri yang kuncinya dibuka)
+  const [editAbsen, setEditAbsen] = useState(false);
+  const [absenDraft, setAbsenDraft] = useState<Record<number, { abs: string; frk: string; ty: string }>>({});
 
   const hasSupabase = Boolean(state.supabaseConfig?.u && state.supabaseConfig?.k);
 
@@ -110,6 +202,49 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
 
   const activeKey = state.activeArchiveKey || archiveKeysDesc[0] || '2026-08';
   const activeArchive = state.archives[activeKey];
+  // Arsip bawaan (Jan–Agu 2026, dst) selalu dipulihkan dari data bawaan saat dimuat, jadi koreksi hanya untuk arsip lain (mis. September 2026)
+  const canEditAbsen = Boolean(activeArchive && !activeArchive.terkunci && !INITIAL_ARCHIVES[activeKey] && onUpdateArchiveAbsen);
+  useEffect(() => { setEditAbsen(false); }, [activeKey]);
+  const startEditAbsen = () => {
+    const d: Record<number, { abs: string; frk: string; ty: string }> = {};
+    activeArchive.rows.forEach((r, i) => { d[i] = { abs: String(r.absenYl ?? 0), frk: String(r.frekuensiAbsen ?? 0), ty: String(r.tahunLalu ?? 0) }; });
+    setAbsenDraft(d);
+    setEditAbsen(true);
+  };
+  const saveEditAbsen = () => {
+    const patch: Record<number, { absenYl: number; frekuensiAbsen: number; tahunLalu: number }> = {};
+    Object.keys(absenDraft).forEach(k => {
+      const i = Number(k);
+      const abs = Math.max(0, Math.round(Number(absenDraft[i].abs) || 0));
+      const frk = Math.max(0, Math.round(Number(absenDraft[i].frk) || 0));
+      const ty = Math.max(0, Math.round((Number(String(absenDraft[i].ty).replace(',', '.')) || 0) * 100) / 100);
+      patch[i] = { absenYl: abs, frekuensiAbsen: frk, tahunLalu: ty };
+    });
+    onUpdateArchiveAbsen?.(activeKey, patch);
+    setEditAbsen(false);
+    showToast(`Perubahan arsip ${activeKey} disimpan`, 'success');
+  };
+  const editBar = (
+    <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-neutral-100 dark:border-neutral-800">
+      {editAbsen ? (
+        <>
+          <button type="button" onClick={saveEditAbsen} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">Simpan</button>
+          <button type="button" onClick={() => setEditAbsen(false)} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200">Batal</button>
+          <span className="text-[11px] text-neutral-500">Isi Absen, Frekuensi, atau rata-rata Tahun Lalu tiap TKU</span>
+        </>
+      ) : canEditAbsen ? (
+        <button type="button" onClick={startEditAbsen} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-600 text-white hover:bg-brand-700">Edit Absen, Frekuensi &amp; Tahun Lalu</button>
+      ) : (
+        <span className="text-[11px] text-neutral-500">
+          {INITIAL_ARCHIVES[activeKey]
+            ? 'Arsip bawaan tidak bisa diedit.'
+            : activeArchive?.terkunci
+              ? 'Untuk mengoreksi data arsip, buka kunci arsip dulu lewat menu Opsi Arsip.'
+              : ''}
+        </span>
+      )}
+    </div>
+  );
 
   // Filter pilihan tahun (2026, 2025, dst)
   const [selectedYear, setSelectedYear] = useState<string>(() => {
@@ -123,13 +258,43 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
   // Urutan kronologis (Januari -> Desember) hanya untuk tahun yang dipilih
   const yearKeysAsc = useMemo(() => [...filteredArchiveKeysDesc].reverse(), [filteredArchiveKeysDesc]);
 
+
+  // Agregat cabang per bulan (Januari -> bulan terakhir) untuk tahun terpilih
+  const branchMonths = useMemo(
+    () => yearKeysAsc.filter(k => state.archives[k]?.rows).map(k => aggBranchMonth(k, state.archives[k])),
+    [yearKeysAsc, state.archives]
+  );
+  const chartMonths = useMemo(() => branchMonths.map(m => m.short), [branchMonths]);
+
+  // Ringkasan setahun = rata-rata bulanan (bukan akumulasi)
+  const yearSummary = useMemo(() => {
+    if (branchMonths.length === 0) return null;
+    const n = branchMonths.length;
+    const avg = (f: (m: BranchMonth) => number) => branchMonths.reduce((s, m) => s + f(m), 0) / n;
+    const rata = avg(m => m.rata);
+    const target = avg(m => m.target);
+    const ly = avg(m => m.ly);
+    return { rata, target, ly, vsTgt: target > 0 ? rata / target : null, vsLy: ly > 0 ? rata / ly : null };
+  }, [branchMonths]);
+
+  // Baris "Total Cabang" pada Riwayat Tahunan: rata-rata & nilai terakhir
+  const branchHistVals = yearKeysAsc
+    .map(k => state.archives[k])
+    .filter(a => a && a.rows)
+    .map(a => histBranchValue(histMetric, a))
+    .filter((v): v is number => v !== null);
+  const branchHistAvg = branchHistVals.length ? branchHistVals.reduce((s, v) => s + v, 0) / branchHistVals.length : null;
+  const branchHistLatest = branchHistVals.length ? branchHistVals[branchHistVals.length - 1] : null;
+
   // Overall Statistics across all archives
   const allArchives = filteredArchiveKeysDesc.map(k => state.archives[k]).filter(Boolean);
   const totalMonths = allArchives.length;
   const grandTotalBottles = allArchives.reduce((sum, arc) => {
     return sum + arc.rows.reduce((rSum, row) => rSum + (row.total || 0), 0);
   }, 0);
-  const avgBottlesPerMonth = totalMonths > 0 ? round2(grandTotalBottles / totalMonths) : 0;
+  // Rata-rata per hari = akumulasi botol ÷ jumlah hari dari Januari sampai bulan terakhir yang terarsip
+  const totalDaysArchived = allArchives.reduce((sum, arc) => sum + (arc.d || 0), 0);
+  const avgBottlesPerDay = totalDaysArchived > 0 ? grandTotalBottles / totalDaysArchived : 0;
 
   // Best performing month
   const bestMonth = useMemo(() => {
@@ -451,14 +616,14 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
 
         <div className="p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col min-w-0 h-full">
           <div className="flex items-start justify-between gap-2 text-neutral-500 text-xs mb-1">
-            <span>Rata-rata / Bulan</span>
+            <span>Rata-rata / Hari</span>
             <TrendingUp className="w-4 h-4 text-emerald-500 shrink-0" />
           </div>
           <div className="text-lg sm:text-xl break-words leading-tight font-bold text-neutral-900 dark:text-neutral-100 font-mono">
-            {formatDecimal(avgBottlesPerMonth)}
+            {formatDecimal(avgBottlesPerDay)}
           </div>
           <div className="text-[11px] text-neutral-500 mt-auto pt-0.5 break-words">
-            Botol / bulan operasional
+            {formatNumber(grandTotalBottles)} btl ÷ {totalDaysArchived} hari
           </div>
         </div>
 
@@ -816,6 +981,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
             {/* TAB 2: Vs Target, Bulan Lalu & Tahun Lalu */}
             {activeTab === 'target_eval' && (
               <div className="overflow-x-auto">
+                {editBar}
                 <table className="w-full text-left text-sm border-collapse min-w-[850px]">
                   <thead>
                     <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 text-xs bg-neutral-50 dark:bg-neutral-800/40">
@@ -867,7 +1033,17 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                           {row.vsLmPct ? formatPercent(row.vsLmPct) : '—'}
                         </td>
                         <td className="py-3 px-3 text-right text-neutral-600 dark:text-neutral-400">
-                          {row.tahunLalu ? formatDecimal(row.tahunLalu) : '—'}
+                          {editAbsen ? (
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              min={0}
+                              step="any"
+                              value={absenDraft[idx]?.ty ?? ''}
+                              onChange={e => setAbsenDraft(d => ({ ...d, [idx]: { ...d[idx], ty: e.target.value } }))}
+                              className="w-20 px-1.5 py-1 text-right text-xs font-mono rounded-md border border-brand-400 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white"
+                            />
+                          ) : (row.tahunLalu ? formatDecimal(row.tahunLalu) : '—')}
                         </td>
                         <td className="py-3 px-3 text-right text-emerald-600 dark:text-emerald-400 font-semibold">
                           {row.vsLyPct ? formatPercent(row.vsLyPct) : '—'}
@@ -913,6 +1089,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
             {/* TAB 3: Balik Botol & Kondisi Operasional YL */}
             {activeTab === 'ops_bb' && (
               <div className="overflow-x-auto">
+                {editBar}
                 <table className="w-full text-left text-sm border-collapse min-w-[900px]">
                   <thead>
                     <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 text-xs bg-neutral-50 dark:bg-neutral-800/40">
@@ -957,10 +1134,28 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                           {row.sYl !== undefined ? row.sYl : '—'}
                         </td>
                         <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">
-                          {row.absenYl !== undefined ? row.absenYl : '—'}
+                          {editAbsen ? (
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              min={0}
+                              value={absenDraft[idx]?.abs ?? ''}
+                              onChange={e => setAbsenDraft(d => ({ ...d, [idx]: { ...d[idx], abs: e.target.value } }))}
+                              className="w-16 px-1.5 py-1 text-right text-xs font-mono rounded-md border border-brand-400 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white"
+                            />
+                          ) : (row.absenYl !== undefined ? row.absenYl : '—')}
                         </td>
                         <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">
-                          {row.frekuensiAbsen !== undefined ? row.frekuensiAbsen : '—'}
+                          {editAbsen ? (
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              min={0}
+                              value={absenDraft[idx]?.frk ?? ''}
+                              onChange={e => setAbsenDraft(d => ({ ...d, [idx]: { ...d[idx], frk: e.target.value } }))}
+                              className="w-16 px-1.5 py-1 text-right text-xs font-mono rounded-md border border-brand-400 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white"
+                            />
+                          ) : (row.frekuensiAbsen !== undefined ? row.frekuensiAbsen : '—')}
                         </td>
                         <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">
                           {row.jumlahArea !== undefined ? row.jumlahArea : '—'}
@@ -1126,7 +1321,136 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
         </div>
       )}
 
-      {/* Riwayat Tahunan: tabel TKU per bulan, hanya untuk tahun yang dipilih */}
+      {/* Vs Target & Tahun Lalu: level cabang, per bulan + rata-rata setahun */}
+      {branchMonths.length > 0 && yearSummary && (
+        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm overflow-hidden p-5 space-y-4">
+          <div className="border-b border-neutral-100 dark:border-neutral-800 pb-3">
+            <h2 className="text-base font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+              <Target className="w-4 h-4 text-brand-600" />
+              <span>Vs Target &amp; Tahun Lalu — Cabang</span>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300">{selectedYear}</span>
+            </h2>
+            <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
+              Rata penjualan per hari seluruh cabang dibanding target dan tahun lalu, tiap bulan dan rata-rata setahun.
+            </p>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm border-collapse min-w-[560px]">
+              <thead>
+                <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 text-xs bg-neutral-50 dark:bg-neutral-800/40">
+                  <th className="py-2.5 px-4 font-semibold sticky left-0 bg-neutral-50 dark:bg-neutral-800 z-10">Bulan</th>
+                  <th className="py-2.5 px-3 text-right font-semibold">Rata/Hari</th>
+                  <th className="py-2.5 px-3 text-right font-semibold text-brand-600 dark:text-brand-400">Target/Hari</th>
+                  <th className="py-2.5 px-3 text-right font-bold text-brand-600 dark:text-brand-400">% Vs Tgt</th>
+                  <th className="py-2.5 px-3 text-right font-semibold text-emerald-600 dark:text-emerald-400">Thn Lalu/Hari</th>
+                  <th className="py-2.5 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400">% Vs LY</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono text-xs">
+                {branchMonths.map(m => (
+                  <tr key={m.key} className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors">
+                    <td className="py-3 px-4 font-sans font-semibold text-neutral-900 dark:text-neutral-100 sticky left-0 bg-white dark:bg-neutral-900 z-10 border-r border-neutral-100 dark:border-neutral-800">{m.label}</td>
+                    <td className="py-3 px-3 text-right font-semibold text-neutral-800 dark:text-neutral-200">{formatDecimal(m.rata)}</td>
+                    <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">{m.target > 0 ? formatDecimal(m.target) : '—'}</td>
+                    <td className="py-3 px-3 text-right font-bold">
+                      {m.vsTgt !== null ? <span className={m.vsTgt >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>{formatPercent(m.vsTgt)}</span> : '—'}
+                    </td>
+                    <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">{m.ly > 0 ? formatDecimal(m.ly) : '—'}</td>
+                    <td className="py-3 px-3 text-right font-bold">
+                      {m.vsLy !== null ? <span className={m.vsLy >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>{formatPercent(m.vsLy)}</span> : '—'}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="bg-brand-50/60 dark:bg-brand-950/30 font-bold border-t-2 border-brand-200 dark:border-brand-900/60 text-xs">
+                  <td className="py-3.5 px-4 font-sans text-brand-700 dark:text-brand-400 sticky left-0 bg-brand-50/90 dark:bg-brand-950/90 z-10 border-r border-brand-200 dark:border-brand-900">
+                    Rata-rata {selectedYear} ({branchMonths.length} bln)
+                  </td>
+                  <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{formatDecimal(yearSummary.rata)}</td>
+                  <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{yearSummary.target > 0 ? formatDecimal(yearSummary.target) : '—'}</td>
+                  <td className="py-3.5 px-3 text-right font-extrabold text-brand-700 dark:text-brand-400">{yearSummary.vsTgt !== null ? formatPercent(yearSummary.vsTgt) : '—'}</td>
+                  <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{yearSummary.ly > 0 ? formatDecimal(yearSummary.ly) : '—'}</td>
+                  <td className="py-3.5 px-3 text-right font-extrabold text-brand-700 dark:text-brand-400">{yearSummary.vsLy !== null ? formatPercent(yearSummary.vsLy) : '—'}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Grafik perbandingan Januari s/d bulan terakhir pada tahun terpilih */}
+      {branchMonths.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 px-1">
+            <TrendingUp className="w-4 h-4 text-brand-600" />
+            <h2 className="text-base font-bold text-neutral-900 dark:text-neutral-100">
+              Grafik Perbandingan {selectedYear}
+            </h2>
+            <span className="text-[11px] text-neutral-500">
+              {branchMonths[0].short} – {branchMonths[branchMonths.length - 1].short} · tap grafik untuk lihat nilai bulan
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            <ArsipLineChart
+              title="1. Penjualan vs Target & Tahun Lalu"
+              subtitle="Rata penjualan per hari, seluruh cabang"
+              months={chartMonths}
+              format={fmtChartDec}
+              series={[
+                { name: 'Penjualan', color: '#c8102e', values: branchMonths.map(m => m.rata), labels: true },
+                { name: 'Target', color: '#2563eb', values: branchMonths.map(m => (m.target > 0 ? m.target : null)), dashed: true },
+                { name: 'Tahun Lalu', color: '#8b5cf6', values: branchMonths.map(m => (m.ly > 0 ? m.ly : null)), dashed: true },
+              ]}
+            />
+            <ArsipLineChart
+              title="2. s/YL"
+              subtitle="Rata botol per YL per hari kerja"
+              months={chartMonths}
+              integer
+              series={[{ name: 's/YL', color: '#f59e0b', values: branchMonths.map(m => m.syl), labels: true }]}
+            />
+            <ArsipLineChart
+              title="3. YL Absen"
+              subtitle="Jumlah YL absen seluruh cabang"
+              months={chartMonths}
+              zeroBased
+              integer
+              series={[{ name: 'Absen', color: '#ef4444', values: branchMonths.map(m => m.absen), labels: true }]}
+            />
+            <ArsipLineChart
+              title="4. Jumlah YL"
+              subtitle="Total YL aktif seluruh cabang"
+              months={chartMonths}
+              zeroBased
+              integer
+              series={[{ name: 'Jml YL', color: '#10b981', values: branchMonths.map(m => m.jmlYl), labels: true }]}
+            />
+            <ArsipLineChart
+              title="5. YL < 250"
+              subtitle="Jumlah YL dengan penjualan di bawah 250 btl"
+              months={chartMonths}
+              zeroBased
+              integer
+              series={[{ name: 'YL < 250', color: '#e11d48', values: branchMonths.map(m => m.l250), labels: true }]}
+            />
+            <ArsipLineChart
+              title="6. Performa Varian"
+              subtitle="Rata penjualan per hari tiap varian"
+              months={chartMonths}
+              zeroBased
+              format={fmtChartDec}
+              series={VARIANTS.map((v, i) => ({
+                name: v.code,
+                color: v.color,
+                values: branchMonths.map(m => (m.varRata[i] > 0 ? m.varRata[i] : null)),
+              }))}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Riwayat Tahunan: tabel TKU per bulan, hanya untuk tahun yang dipilih (ringkasan = rata-rata, bukan akumulasi) */}
       {yearKeysAsc.length > 0 && (
         <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm overflow-hidden p-5 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-neutral-100 dark:border-neutral-800 pb-3">
@@ -1140,56 +1464,25 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
 
             {/* Historical Metric Selector */}
             <div className="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-800 p-1 rounded-xl text-xs font-semibold overflow-x-auto">
-              <button
-                onClick={() => setHistMetric('total')}
-                className={`px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
-                  histMetric === 'total'
-                    ? 'bg-white dark:bg-neutral-900 text-brand-600 dark:text-brand-400 shadow-xs'
-                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
-                }`}
-              >
-                Total Botol
-              </button>
-              <button
-                onClick={() => setHistMetric('rata')}
-                className={`px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
-                  histMetric === 'rata'
-                    ? 'bg-white dark:bg-neutral-900 text-brand-600 dark:text-brand-400 shadow-xs'
-                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
-                }`}
-              >
-                Rata/Hari
-              </button>
-              <button
-                onClick={() => setHistMetric('bb')}
-                className={`px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
-                  histMetric === 'bb'
-                    ? 'bg-white dark:bg-neutral-900 text-brand-600 dark:text-brand-400 shadow-xs'
-                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
-                }`}
-              >
-                BB
-              </button>
-              <button
-                onClick={() => setHistMetric('syl')}
-                className={`px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
-                  histMetric === 'syl'
-                    ? 'bg-white dark:bg-neutral-900 text-brand-600 dark:text-brand-400 shadow-xs'
-                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
-                }`}
-              >
-                s/YL
-              </button>
-              <button
-                onClick={() => setHistMetric('coverage')}
-                className={`px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
-                  histMetric === 'coverage'
-                    ? 'bg-white dark:bg-neutral-900 text-brand-600 dark:text-brand-400 shadow-xs'
-                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
-                }`}
-              >
-                % Coverage Area
-              </button>
+              {([
+                ['total', 'Total Botol'],
+                ['rata', 'Rata/Hari'],
+                ['bb', 'BB'],
+                ['syl', 's/YL'],
+                ['coverage', '% Coverage Area'],
+              ] as [HistoricalMetric, string][]).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setHistMetric(key)}
+                  className={`px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
+                    histMetric === key
+                      ? 'bg-white dark:bg-neutral-900 text-brand-600 dark:text-brand-400 shadow-xs'
+                      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -1204,10 +1497,10 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                     </th>
                   ))}
                   <th className="py-2.5 px-4 text-right font-bold text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-950/20">
-                    {histMetric === 'total' || histMetric === 'bb' ? `Total ${yearKeysAsc.length} Bulan` : `Rata-rata ${yearKeysAsc.length} Bulan`}
+                    Rata-rata {yearKeysAsc.length} Bulan
                   </th>
                   <th className="py-2.5 px-4 text-right font-semibold text-neutral-900 dark:text-neutral-100">
-                    {histMetric === 'total' ? 'Rata-rata/Bln' : 'Nilai Terakhir'}
+                    Nilai Terakhir
                   </th>
                 </tr>
               </thead>
@@ -1215,112 +1508,63 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                 {state.tkus.map(t => {
                   let sumVal = 0;
                   let countVal = 0;
-                  let latestVal = 0;
+                  let latestVal: number | null = null;
+
+                  const cells = yearKeysAsc.map(k => {
+                    const arc = state.archives[k];
+                    const row = arc?.rows.find(r => normNama(r.nama) === normNama(t.nama));
+                    if (!row) return { k, text: '—' };
+                    const v = histRowValue(histMetric, row, arc.d || 31);
+                    countVal += 1;
+                    sumVal += v;
+                    latestVal = v;
+                    return { k, text: fmtHist(histMetric, v) };
+                  });
 
                   return (
                     <tr key={t.id} className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors">
                       <td className="py-3 px-4 font-sans font-semibold text-neutral-900 dark:text-neutral-100 sticky left-0 bg-white dark:bg-neutral-900 z-10 border-r border-neutral-100 dark:border-neutral-800">
                         {t.nama}
                       </td>
-                      {yearKeysAsc.map(k => {
-                        const arc = state.archives[k];
-                        const row = arc?.rows.find(r => normNama(r.nama) === normNama(t.nama));
-                        let displayVal = '—';
-                        if (row) {
-                          countVal += 1;
-                          if (histMetric === 'total') {
-                            sumVal += row.total;
-                            latestVal = row.total;
-                            displayVal = formatNumber(row.total);
-                          } else if (histMetric === 'rata') {
-                            const rVal = row.rataHarian ?? (row.total / (arc?.d || 31));
-                            sumVal += rVal;
-                            latestVal = rVal;
-                            displayVal = formatDecimal(rVal);
-                          } else if (histMetric === 'bb') {
-                            const bbVal = row.akmBb || 0;
-                            sumVal += bbVal;
-                            latestVal = bbVal;
-                            displayVal = formatNumber(bbVal);
-                          } else if (histMetric === 'syl') {
-                            const sylVal = row.sYl || 0;
-                            sumVal += sylVal;
-                            latestVal = sylVal;
-                            displayVal = String(sylVal);
-                          } else if (histMetric === 'coverage') {
-                            const covVal = row.coverageArea || (row.jumlahArea ? (row.jumlahYl || 0)/row.jumlahArea : 1);
-                            sumVal += covVal;
-                            latestVal = covVal;
-                            displayVal = formatPercent(covVal);
-                          }
-                        }
-                        return (
-                          <td key={k} className="py-3 px-3 text-right font-medium text-neutral-700 dark:text-neutral-300">
-                            {displayVal}
-                          </td>
-                        );
-                      })}
+                      {cells.map(c => (
+                        <td key={c.k} className="py-3 px-3 text-right font-medium text-neutral-700 dark:text-neutral-300">
+                          {c.text}
+                        </td>
+                      ))}
 
-                      {/* Summary Col 1 */}
+                      {/* Rata-rata */}
                       <td className="py-3 px-4 text-right font-bold text-brand-700 dark:text-brand-300 bg-brand-50/40 dark:bg-brand-950/10">
-                        {histMetric === 'coverage' 
-                          ? (countVal > 0 ? formatPercent(sumVal / countVal) : '—')
-                          : (histMetric === 'syl' || histMetric === 'rata'
-                              ? (countVal > 0 ? formatDecimal(sumVal / countVal) : '—')
-                              : formatNumber(sumVal))}
+                        {countVal > 0 ? fmtHist(histMetric, sumVal / countVal, true) : '—'}
                       </td>
 
-                      {/* Summary Col 2 */}
+                      {/* Nilai terakhir */}
                       <td className="py-3 px-4 text-right font-semibold text-neutral-800 dark:text-neutral-200">
-                        {histMetric === 'total' 
-                          ? (countVal > 0 ? formatDecimal(sumVal / countVal) : '—')
-                          : (histMetric === 'coverage' ? formatPercent(latestVal) : formatNumber(latestVal))}
+                        {latestVal !== null ? fmtHist(histMetric, latestVal) : '—'}
                       </td>
                     </tr>
                   );
                 })}
 
-                {/* Grand Total Row Across All Months */}
+                {/* Total cabang per bulan + rata-rata setahun */}
                 <tr className="bg-brand-50/60 dark:bg-brand-950/30 font-bold border-t-2 border-brand-200 dark:border-brand-900/60 text-xs">
                   <td className="py-3.5 px-4 font-sans text-brand-700 dark:text-brand-400 sticky left-0 bg-brand-50/90 dark:bg-brand-950/90 z-10 border-r border-brand-200 dark:border-brand-900">
                     Total Cabang Jember
                   </td>
                   {yearKeysAsc.map(k => {
                     const arc = state.archives[k];
-                    if (!arc || !arc.rows) return <td key={k} className="py-3.5 px-3 text-right">—</td>;
-                    const d = arc.d || 31;
-                    let mVal = '—';
-                    if (histMetric === 'total') {
-                      mVal = formatNumber(arc.rows.reduce((s, r) => s + r.total, 0));
-                    } else if (histMetric === 'rata') {
-                      const totalSold = arc.rows.reduce((s, r) => s + r.total, 0);
-                      mVal = formatDecimal(totalSold / d);
-                    } else if (histMetric === 'bb') {
-                      mVal = formatNumber(arc.rows.reduce((s, r) => s + (r.akmBb || 0), 0));
-                    } else if (histMetric === 'syl') {
-                      const totalSold = arc.rows.reduce((s, r) => s + r.total, 0);
-                      const totalJwp = arc.rows.reduce((s, r) => s + (r.akmJwp || 0), 0);
-                      mVal = totalJwp > 0 ? String(Math.floor(totalSold / totalJwp)) : '—';
-                    } else if (histMetric === 'coverage') {
-                      const totalArea = arc.rows.reduce((s, r) => s + (r.jumlahArea || 0), 0);
-                      const totalYl = arc.rows.reduce((s, r) => s + (r.jumlahYl || 0), 0);
-                      mVal = totalArea > 0 ? formatPercent(totalYl / totalArea) : '100%';
-                    }
+                    const v = arc && arc.rows ? histBranchValue(histMetric, arc) : null;
                     return (
                       <td key={k} className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400 font-bold">
-                        {mVal}
+                        {v === null ? '—' : fmtHist(histMetric, v)}
                       </td>
                     );
                   })}
-                  
-                  {/* Branch Summary 1 */}
-                  <td className="py-3.5 px-4 text-right font-extrabold text-brand-700 dark:text-brand-400 bg-brand-100/60 dark:bg-brand-900/40 text-sm">
-                    {histMetric === 'total' ? formatNumber(grandTotalBottles) : '—'}
-                  </td>
 
-                  {/* Branch Summary 2 */}
+                  <td className="py-3.5 px-4 text-right font-extrabold text-brand-700 dark:text-brand-400 bg-brand-100/60 dark:bg-brand-900/40 text-sm">
+                    {branchHistAvg !== null ? fmtHist(histMetric, branchHistAvg, true) : '—'}
+                  </td>
                   <td className="py-3.5 px-4 text-right text-brand-700 dark:text-brand-400 font-extrabold">
-                    {histMetric === 'total' ? formatDecimal(avgBottlesPerMonth) : '—'}
+                    {branchHistLatest !== null ? fmtHist(histMetric, branchHistLatest) : '—'}
                   </td>
                 </tr>
               </tbody>

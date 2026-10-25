@@ -10,6 +10,7 @@ import {
   STATUS_LABEL,
   WeekDef
 } from '../services/progressEval';
+import { EvalWeeklyVisual } from './EvalWeeklyVisual';
 import { analyzeUnit, summarizeWeek, CAUSE_LABEL, WeekStatus } from '../services/weekAnalysis';
 import {
   buildExportDoc,
@@ -30,6 +31,8 @@ interface EvaluasiPanelProps {
   /** tku: index TKU yang dilihat */
   focusIdx?: number;
   showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
+  /** konten tambahan yang disisipkan tepat di bawah kartu Capaian vs target bulan */
+  afterCapaian?: React.ReactNode;
 }
 
 const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
@@ -62,7 +65,7 @@ const Arrow: React.FC<{ v: number | null; goodWhenUp?: boolean }> = ({ v, goodWh
 const th = 'px-2.5 py-2 text-right font-semibold whitespace-nowrap text-[11px] text-neutral-500';
 const td = 'px-2.5 py-2 text-right font-mono text-[11px] font-bold whitespace-nowrap';
 
-export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode, rayon = 0, focusIdx, showToast }) => {
+export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode, rayon = 0, focusIdx, showToast, afterCapaian }) => {
   const ev: ProgressEval = useMemo(
     () => buildProgressEval(state, weeks),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -131,9 +134,6 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
 
   // ---- Naik / turun (admin) ----
   const cmpUnits = units.filter(u => u.week.days.length > 0 && u.week.prev > 0);
-  const nUp = cmpUnits.filter(u => u.week.diff > 0).length;
-  const nDown = cmpUnits.filter(u => u.week.diff < 0).length;
-  const nSame = cmpUnits.length - nUp - nDown;
   const sortedUnits = [...units].sort((a, b) => b.week.diff - a.week.diff);
 
   // ---- Status naik/turun + penyebab otomatis ----
@@ -257,8 +257,6 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
       </tr>
     ));
 
-  const vt = ev.variantTrend(units);
-  const vColor: Record<string, string> = { YO: 'text-red-600 dark:text-red-400', OM: 'text-amber-600 dark:text-amber-400', OS: 'text-pink-600 dark:text-pink-400', YT: 'text-sky-600 dark:text-sky-400' };
 
   const card = 'p-3 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/40 min-w-0';
   const cap = 'text-[11px] font-bold text-neutral-500 dark:text-neutral-400';
@@ -295,11 +293,7 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
             <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">Capaian vs target bulan</span>
             <span className={`ml-auto text-[11px] font-bold px-2 py-0.5 rounded-full ${STATUS_STYLE[p.status]}`}>{STATUS_LABEL[p.status]}</span>
           </div>
-          <div className="relative h-2.5 rounded-full bg-neutral-200 dark:bg-neutral-800 overflow-hidden" title={`Posisi seharusnya hari ini: ${formatPercent(expectedPct)}`}>
-            <div className={`h-full rounded-full ${p.status === 'berat' ? 'bg-red-500' : p.status === 'waspada' ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${barPct * 100}%` }} />
-            <div className="absolute top-0 bottom-0 w-0.5 bg-neutral-900/70 dark:bg-white/80" style={{ left: `${expectedPct * 100}%` }} />
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <div className={card}>
               <div className={cap}>Capaian s/d tgl {p.updateDay}</div>
               <div className={`mt-1 text-lg font-black font-mono leading-none ${toneCls(p.pctToDate === null ? null : p.pctToDate >= 1)}`}>{formatPercent(p.pctToDate)}</div>
@@ -322,12 +316,6 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
               )}
             </div>
             <div className={card}>
-              <div className={cap}>Proyeksi akhir bulan</div>
-              <div className={`mt-1 text-lg font-black font-mono leading-none ${toneCls(p.projectedPct === null ? null : p.projectedPct >= 1)}`}>{formatPercent(p.projectedPct)}</div>
-              <div className="mt-1 text-[11px] font-mono text-neutral-500">≈ {formatNumber(Math.round(p.projectedTotal))} btl</div>
-              <div className="text-[11px] text-neutral-500">dari target {formatNumber(p.targetMonth)}</div>
-            </div>
-            <div className={card}>
               <div className={cap}>{isTku && rank ? 'Posisi di cabang' : 'Minggu ini vs lalu'}</div>
               {isTku && rank ? (
                 <>
@@ -346,6 +334,18 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
           <p className="text-[10px] text-neutral-400">Target dihitung per hari kalender. Proyeksi memakai laju rata-rata per hari jual dan sisa hari kerja tanpa Minggu (libur nasional belum diperhitungkan).</p>
         </section>
 
+        {afterCapaian}
+
+        {/* Ringkasan visual: grafik & diagram */}
+        <EvalWeeklyVisual
+          ev={ev}
+          units={units}
+          head={head}
+          isTku={isTku}
+          year={Number(state.activePeriod.slice(0, 4))}
+          month={Number(state.activePeriod.slice(5, 7)) - 1}
+        />
+
         {/* B. Minggu ini vs minggu lalu: penjualan, BB, absen, s/YL */}
         <section className="space-y-2.5">
           <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 block">
@@ -355,22 +355,8 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
             <div className="text-xs text-neutral-500">Belum ada pembanding: hari di minggu ini belum punya penjualan, atau tanggalnya belum punya padanan di minggu lalu.</div>
           ) : (
             <>
-              {!isTku && (
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/25 border border-emerald-200/70 dark:border-emerald-900/50">
-                    <div className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400 text-[11px] font-bold"><ArrowUp className="w-3 h-3" strokeWidth={3} />Naik</div>
-                    <div className="mt-1 text-xl font-black font-mono text-emerald-700 dark:text-emerald-300 leading-none">{nUp}</div>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-950/25 border border-red-200/70 dark:border-red-900/50">
-                    <div className="flex items-center gap-1 text-red-700 dark:text-red-400 text-[11px] font-bold"><ArrowDown className="w-3 h-3" strokeWidth={3} />Turun</div>
-                    <div className="mt-1 text-xl font-black font-mono text-red-700 dark:text-red-300 leading-none">{nDown}</div>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700">
-                    <div className="text-neutral-500 text-[11px] font-bold">Tetap</div>
-                    <div className="mt-1 text-xl font-black font-mono text-neutral-700 dark:text-neutral-200 leading-none">{nSame}</div>
-                  </div>
-                </div>
-              )}
+              <details className="rounded-xl border border-neutral-200 dark:border-neutral-800">
+                <summary className="px-3 py-2 text-xs font-semibold text-neutral-600 dark:text-neutral-300 cursor-pointer select-none">Tabel detail minggu ini vs lalu</summary>
               <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 overflow-x-auto">
                 <table className="w-full text-xs border-collapse">
                   <thead>
@@ -389,6 +375,7 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
                   </tbody>
                 </table>
               </div>
+              </details>
               <p className="text-[10px] text-neutral-400">Penjualan &amp; % BB: hari yang sama dengan minggu lalu (hari libur dilewati). Absen &amp; s/YL: posisi akumulatif per tgl {ev.updateDay} dibanding tgl {ev.updateDay - 7}; “—” bila belum ada catatan pembanding.</p>
 
               <details className="rounded-xl border border-neutral-200 dark:border-neutral-800">
@@ -486,32 +473,6 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
             </table>
           </div>
 
-          <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 overflow-x-auto">
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="bg-neutral-50 dark:bg-neutral-800/50">
-                  <th className={`${th} text-left px-3`}>Varian</th>
-                  {ev.weekCols.map(c => <th key={c.id} className={th}>M{c.id}</th>)}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                {vt.map(v => (
-                  <tr key={v.code}>
-                    <td className={`px-3 py-2 text-left font-extrabold ${vColor[v.code]}`}>{v.code}</td>
-                    {v.avg.map((x, i) => {
-                      const before = v.avg.slice(0, i).filter(y => y !== null).pop() as number | undefined;
-                      const d = x === null || before === undefined ? null : x - before;
-                      return (
-                        <td key={i} className={`${td} ${d === null || d === 0 ? '' : toneCls(d > 0)}`}>
-                          {x === null ? <span className="text-neutral-300 dark:text-neutral-600">—</span> : <span className="inline-flex items-center justify-end gap-0.5">{formatNumber(x)}<Arrow v={d} /></span>}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
           <p className="text-[10px] text-neutral-400">Panah = naik / turun dibanding minggu sebelumnya yang punya data. Pembagi = jumlah hari kalender dalam minggu itu (Minggu–Sabtu = 7; Minggu ikut dihitung). Minggu yang baru berjalan atau terpotong awal/akhir bulan memakai jumlah harinya sampai tgl {ev.updateDay}. Angka ÷ di bawah M1, M2, … adalah pembaginya.</p>
         </section>
 

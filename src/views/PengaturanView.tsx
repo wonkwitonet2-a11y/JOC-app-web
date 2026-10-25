@@ -31,7 +31,6 @@ import {
   CloudInspectResult
 } from '../services/storage';
 import { DEFAULT_SUPABASE_CONFIG } from '../config/defaultSupabase';
-import { PembagiHariControl } from '../components/PembagiHariControl';
 
 interface PengaturanViewProps {
   state: AppState;
@@ -255,7 +254,7 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
         </h1>
       </div>
 
-      {/* Pengaturan Pembagi Hari & Tanggal Penjualan */}
+      {/* Tanggal update (pembagi rata-rata) hanya diatur di Dashboard admin */}
       {/* 0. Bulan Kerja */}
       {onSwitchPeriod && (
         <div className="p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm space-y-4">
@@ -384,15 +383,6 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
             )}
           </div>
         </div>
-      )}
-
-      {onUpdatePembagiHari && (
-        <PembagiHariControl
-          state={state}
-          onUpdatePembagiHari={onUpdatePembagiHari}
-          onUpdateActiveDay={onUpdateActiveDay}
-          variant="banner"
-        />
       )}
 
 
