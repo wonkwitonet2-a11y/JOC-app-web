@@ -1,3 +1,4 @@
+import { fs } from '../services/displayMode';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatNumber } from '../services/storage';
 import { makeNiceAxis, makeUnitAxis, formatAxisLabel } from '../services/chartAxis';
@@ -56,17 +57,17 @@ export const TrendChart: React.FC<Props> = ({ days, today, year, monthIndex, mon
   const compact = width < 520;
 
   const g = useMemo(() => {
-    const padL = compact ? 38 : 46;
+    const padL = Math.round((compact ? 42 : 52) * fs(1));
     const padR = compact ? 10 : 16;
     const padT = 8;
     const salesH = compact ? 190 : 230;
-    const gap = 30;
+    const gap = Math.round(34 * fs(1));
     const bbH = compact ? 70 : 84;
     const salesTop = padT;
     const salesBottom = salesTop + salesH;
     const bbTop = salesBottom + gap;
     const bbBottom = bbTop + bbH;
-    const H = bbBottom + 26;
+    const H = bbBottom + Math.round(30 * fs(1));
     const inset = compact ? 8 : 12;
     const plotW = width - padL - padR;
     const step = n > 1 ? (plotW - 2 * inset) / (n - 1) : 40;
@@ -180,10 +181,10 @@ export const TrendChart: React.FC<Props> = ({ days, today, year, monthIndex, mon
           </defs>
 
           {/* Judul panel (di dalam area gambar, tidak terpotong) */}
-          <text x={g.padL} y={g.salesTop + 11} fontSize="11" fontWeight="600" className="fill-neutral-500 dark:fill-neutral-400">
+          <text x={g.padL} y={g.salesTop + 11} fontSize={fs(12)} fontWeight="600" className="fill-neutral-500 dark:fill-neutral-400">
             Penjualan (btl)
           </text>
-          <text x={g.padL} y={g.salesBottom + 20} fontSize="11" fontWeight="600" fill={C.bb}>
+          <text x={g.padL} y={g.salesBottom + 20} fontSize={fs(12)} fontWeight="600" fill={C.bb}>
             Balik Botol (btl)
           </text>
 
@@ -206,7 +207,7 @@ export const TrendChart: React.FC<Props> = ({ days, today, year, monthIndex, mon
           {salesAxis.ticks.map(tv => (
             <g key={`sy-${tv}`}>
               <line x1={g.padL} x2={width - g.padR} y1={getY(tv)} y2={getY(tv)} stroke="currentColor" className="text-neutral-200 dark:text-neutral-700/70" strokeDasharray="3 4" />
-              <text x={g.padL - 6} y={getY(tv) + 4} fontSize="11" textAnchor="end" className="fill-neutral-500 dark:fill-neutral-400 font-mono">
+              <text x={g.padL - 6} y={getY(tv) + 4} fontSize={fs(12)} textAnchor="end" className="fill-neutral-500 dark:fill-neutral-400 font-mono">
                 {salesAxis.showLabel(tv) ? formatAxisLabel(tv) : ''}
               </text>
             </g>
@@ -218,7 +219,7 @@ export const TrendChart: React.FC<Props> = ({ days, today, year, monthIndex, mon
             return (
               <g key={`by-${tv}`}>
                 <line x1={g.padL} x2={width - g.padR} y1={y} y2={y} stroke="currentColor" className="text-neutral-200 dark:text-neutral-700/70" strokeDasharray="3 4" />
-                <text x={g.padL - 6} y={y + 4} fontSize="11" textAnchor="end" fill={C.bb} className="font-mono">
+                <text x={g.padL - 6} y={y + 4} fontSize={fs(12)} textAnchor="end" fill={C.bb} className="font-mono">
                   {bbAxis.showLabel(tv) ? formatAxisLabel(tv) : ''}
                 </text>
               </g>
@@ -229,8 +230,8 @@ export const TrendChart: React.FC<Props> = ({ days, today, year, monthIndex, mon
           <line x1={g.padL} x2={width - g.padR} y1={g.salesBottom} y2={g.salesBottom} stroke="currentColor" className="text-neutral-400 dark:text-neutral-500" />
           <line x1={g.padL} x2={width - g.padR} y1={g.bbBottom} y2={g.bbBottom} stroke="currentColor" className="text-neutral-400 dark:text-neutral-500" />
           <line x1={g.padL} x2={g.padL} y1={g.salesTop} y2={g.bbBottom} stroke="currentColor" className="text-neutral-400 dark:text-neutral-500" />
-          <text x={g.padL - 6} y={g.salesBottom + 4} fontSize="11" textAnchor="end" className="fill-neutral-500 dark:fill-neutral-400 font-mono">0</text>
-          <text x={g.padL - 6} y={g.bbBottom + 4} fontSize="11" textAnchor="end" fill={C.bb} className="font-mono">0</text>
+          <text x={g.padL - 6} y={g.salesBottom + 4} fontSize={fs(12)} textAnchor="end" className="fill-neutral-500 dark:fill-neutral-400 font-mono">0</text>
+          <text x={g.padL - 6} y={g.bbBottom + 4} fontSize={fs(12)} textAnchor="end" fill={C.bb} className="font-mono">0</text>
 
           {/* Garis acuan: Target / LM / LY (sampai tanggal transaksi terakhir) */}
           {targetPts.length > 0 && (
@@ -288,7 +289,7 @@ export const TrendChart: React.FC<Props> = ({ days, today, year, monthIndex, mon
             const tx = Math.min(Math.max(x, g.padL + half), width - g.padR - half);
             const ty = y - 12 < g.salesTop + 16 ? y + 20 : y - 10;
             return (
-              <text x={tx} y={ty} fontSize="12" fontWeight="700" textAnchor="middle" fill={C.sales} stroke="#fff" strokeWidth="3" paintOrder="stroke" className="font-mono dark:[stroke:#171717]">
+              <text x={tx} y={ty} fontSize={fs(12)} fontWeight="700" textAnchor="middle" fill={C.sales} stroke="#fff" strokeWidth="3" paintOrder="stroke" className="font-mono dark:[stroke:#171717]">
                 {txt}
               </text>
             );
@@ -305,7 +306,7 @@ export const TrendChart: React.FC<Props> = ({ days, today, year, monthIndex, mon
                 <text
                   x={getX(i)}
                   y={g.bbBottom + 18}
-                  fontSize="11"
+                  fontSize={fs(12)}
                   textAnchor="middle"
                   className={`font-mono ${isSel || isToday ? 'fill-brand-600 font-bold' : d.isSun ? 'fill-red-500 font-semibold' : 'fill-neutral-600 dark:fill-neutral-400'}`}
                 >
@@ -386,15 +387,15 @@ export const TrendChart: React.FC<Props> = ({ days, today, year, monthIndex, mon
           )}
         </div>
       )}
-      <p className="text-[11px] text-neutral-400">Ketuk / arahkan ke tanggal pada grafik untuk melihat rinciannya.</p>
+      <p className="text-xs text-neutral-400">Ketuk / arahkan ke tanggal pada grafik untuk melihat rinciannya.</p>
     </div>
   );
 };
 
 const Cell: React.FC<{ label: string; value: string; sub?: string; valueClass?: string; subClass?: string }> = ({ label, value, sub, valueClass, subClass }) => (
   <div className="min-w-0 p-2 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200/70 dark:border-neutral-700/60">
-    <span className="block font-sans text-[10px] text-neutral-500 leading-tight">{label}</span>
+    <span className="block font-sans text-xs text-neutral-500 leading-tight">{label}</span>
     <span className={`block text-sm font-bold leading-tight break-words ${valueClass || ''}`}>{value}</span>
-    {sub && <span className={`block text-[11px] leading-tight ${subClass || ''}`}>{sub}</span>}
+    {sub && <span className={`block text-xs leading-tight ${subClass || ''}`}>{sub}</span>}
   </div>
 );

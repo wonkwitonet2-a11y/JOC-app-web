@@ -382,7 +382,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
 
   const th = 'px-2 py-1.5 text-center font-semibold whitespace-nowrap border-l border-neutral-200 dark:border-neutral-800';
   // Semua sel angka: ukuran & ketebalan sama
-  const td = 'px-2 py-2 text-right font-mono text-[11px] font-bold whitespace-nowrap';
+  const td = 'px-2 py-2 text-right font-mono text-xs font-bold whitespace-nowrap';
 
   const tint = (k: string, kind: TableRow['kind']) => (kind === 'tku' ? TINT[k][0] : kind === 'rayon' ? TINT[k][1] : '');
   // Latar kolom tanggal: Minggu = merah muda, tanggal genap = abu sangat tipis (pemisah antar tanggal)
@@ -474,7 +474,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
         {/* Baris 1: judul (kiri) + ekspor (kanan) */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">{isReal ? 'Realisasi' : 'Breakdown'}</h1>
+            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">{isReal ? 'Realisasi' : 'Breakdown'}</h1>
             <p className="text-xs text-neutral-500 truncate">
               {monthName}{isReal ? ` • s/d Tgl ${updateDay}` : ''}
             </p>
@@ -564,7 +564,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
       </div>
 
       {/* Keterangan warna */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1 text-[11px] font-medium text-neutral-600 dark:text-neutral-300">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1 text-xs font-medium text-neutral-600 dark:text-neutral-300">
         {(isReal
           ? [
               ['bg-emerald-500', '≥ 100% / di atas pembanding'],
@@ -615,7 +615,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                       <div className="flex items-center justify-center gap-1">
                         <span>{DAY_NAMES[w]} {d}</span>
                         {!isReal && isRealDate(d) && (
-                          <span className="text-[9px] px-1 py-px rounded bg-emerald-600 text-white font-semibold leading-none">Real</span>
+                          <span className="text-xs px-1 py-px rounded bg-emerald-600 text-white font-semibold leading-none">Real</span>
                         )}
                       </div>
                     </th>
@@ -642,7 +642,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                   VCODES.map((v, vi) => (
                     <th
                       key={`${d}${v}`}
-                      className={`px-1.5 py-1 text-center font-bold text-[10px] min-w-[44px] ${VCOL[v]} ${vi === 0 ? 'border-l border-neutral-200 dark:border-neutral-800' : ''} ${dow(d) === 0 ? 'bg-red-50 dark:bg-red-950/20' : ''}`}
+                      className={`px-1.5 py-1 text-center font-bold text-xs min-w-[44px] ${VCOL[v]} ${vi === 0 ? 'border-l border-neutral-200 dark:border-neutral-800' : ''} ${dow(d) === 0 ? 'bg-red-50 dark:bg-red-950/20' : ''}`}
                     >
                       {v}
                     </th>
@@ -751,7 +751,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
               <h2 className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
                 Kondisi TKU
               </h2>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
                 Evaluasi Operasional
               </span>
             </div>

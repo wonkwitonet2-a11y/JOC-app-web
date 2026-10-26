@@ -1,5 +1,7 @@
 import { EvalUnit, ProgressEval, STATUS_LABEL } from './progressEval';
-import { formatNumber, formatPercent, formatDiff } from './storage';
+import { formatNumber, formatPercent, formatDiff, getPeriodInfo } from './storage';
+import { listNotes, getReply } from './weeklyNotes';
+import { AppState } from '../types';
 
 // ============================================================================
 // Catatan otomatis (dipakai panel di layar DAN ekspor, supaya isinya selalu sama)
@@ -95,7 +97,7 @@ const toneOf = (x: number | null, goodWhenHigh = true): Tone =>
 
 export function buildExportDoc(
   ev: ProgressEval,
-  opts: { title: string; units: EvalUnit[]; total: EvalUnit | null; scopeLabel: string }
+  opts: { title: string; units: EvalUnit[]; total: EvalUnit | null; scopeLabel: string; state?: AppState }
 ): ExportDoc {
   const { units, total } = opts;
   const head = total ?? units[0];
@@ -181,6 +183,31 @@ export function buildExportDoc(
   if (head) {
     const items = buildNotes(ev, units, head);
     if (items.length > 0) blocks.push({ type: 'list', title: 'Catatan evaluasi', items });
+  }
+
+  // Catatan mingguan yang ditulis TKU (alasan/kendala + solusi) untuk minggu yang sedang dievaluasi.
+  if (opts.state) {
+    const st = opts.state;
+    const periode = getPeriodInfo(st).key;
+    const week = ev.cmp.weekIdx + 1;
+    const items: EvalNote[] = [];
+    units.forEach(u => {
+      if (u.idx < 0) return;
+      const tku = st.tkus[u.idx];
+      if (!tku) return;
+      const entries = listNotes(st, periode, tku.id, week);
+      if (entries.length === 0) return;
+      entries.forEach(({ k, n }) => {
+        const rp = st.weeklyReplies?.[k];
+        const parts: string[] = [];
+        if (n.l.length > 0) parts.push(`[${n.l.join(', ')}]`);
+        if (n.a.trim()) parts.push(`Kendala: ${n.a.trim()}`);
+        if (n.s.trim()) parts.push(`Solusi: ${n.s.trim()} (${n.st === 'selesai' ? 'selesai' : n.st === 'proses' ? 'proses' : 'belum'})`);
+        if (rp && rp.t.trim()) parts.push(`Tanggapan admin: ${rp.t.trim()}`);
+        items.push({ tone: 'info', text: `${u.name}: ${parts.join(' • ')}` });
+      });
+    });
+    if (items.length > 0) blocks.push({ type: 'list', title: `Catatan TKU minggu M${week}`, items });
   }
 
   return {

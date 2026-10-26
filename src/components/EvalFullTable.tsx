@@ -143,7 +143,7 @@ export const EvalFullTable: React.FC<EvalFullTableProps> = ({
     <div className={`overflow-auto border border-neutral-200 dark:border-neutral-800 shadow-sm bg-white dark:bg-neutral-900 ${fullscreen ? 'h-full rounded-lg' : 'max-h-[700px] rounded-2xl'}`}>
       <table className="w-full text-xs text-left border-collapse min-w-[1100px]">
         <thead className="sticky top-0 z-20 bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200 shadow-2xs border-b border-neutral-200 dark:border-neutral-700">
-          <tr className="text-[11px]">
+          <tr className="text-xs">
             <th className="sticky left-0 z-30 pl-2 pr-0.5 py-2 text-left font-bold bg-neutral-100 dark:bg-neutral-800 border-r border-neutral-200 dark:border-neutral-700">
               Nama TKU
             </th>

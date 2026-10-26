@@ -62,8 +62,8 @@ const Arrow: React.FC<{ v: number | null; goodWhenUp?: boolean }> = ({ v, goodWh
   return <Icon className={`w-3 h-3 shrink-0 ${toneCls(good)}`} strokeWidth={3} />;
 };
 
-const th = 'px-2.5 py-2 text-right font-semibold whitespace-nowrap text-[11px] text-neutral-500';
-const td = 'px-2.5 py-2 text-right font-mono text-[11px] font-bold whitespace-nowrap';
+const th = 'px-2.5 py-2 text-right font-semibold whitespace-nowrap text-xs text-neutral-500';
+const td = 'px-2.5 py-2 text-right font-mono text-xs font-bold whitespace-nowrap';
 
 export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode, rayon = 0, focusIdx, showToast, afterCapaian }) => {
   const ev: ProgressEval = useMemo(
@@ -98,7 +98,8 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
       title: isTku ? `Evaluasi ${head.name}` : 'Evaluasi Penjualan Cabang Jember',
       units,
       total,
-      scopeLabel
+      scopeLabel,
+      state
     });
   const fileBase = `evaluasi_${isTku ? head.name : rayon === 0 ? 'cabang' : `rayon${rayon}`}_${ev.periodLabel}_tgl${ev.updateDay}`;
 
@@ -167,11 +168,11 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
           <span className="text-xs font-bold text-neutral-900 dark:text-neutral-100 truncate">{x.u.name}</span>
           <div className="flex items-center gap-2 shrink-0">
             {x.a.status !== 'nodata' && (
-              <span className={`text-[11px] font-mono font-bold ${toneCls(x.a.diff === 0 ? null : x.a.diff > 0)}`}>
+              <span className={`text-xs font-mono font-bold ${toneCls(x.a.diff === 0 ? null : x.a.diff > 0)}`}>
                 {signed(x.a.diff)} btl
               </span>
             )}
-            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap ${chip.cls}`}>
+            <span className={`px-2 py-0.5 rounded-md text-xs font-bold whitespace-nowrap ${chip.cls}`}>
               {chip.label}
               {x.a.pct !== null && x.a.status !== 'stabil' ? ` ${Math.abs(x.a.pct * 100).toFixed(1).replace('.', ',')}%` : ''}
             </span>
@@ -180,13 +181,13 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
         {x.a.causes.length > 0 ? (
           <div className="flex flex-wrap gap-1.5">
             {x.a.causes.map(c => (
-              <span key={c.key} className={`px-2 py-1 rounded-lg border text-[11px] leading-snug ${CAUSE_CHIP[c.tone]}`}>
+              <span key={c.key} className={`px-2 py-1 rounded-lg border text-xs leading-snug ${CAUSE_CHIP[c.tone]}`}>
                 <span className="font-bold">{CAUSE_LABEL[c.key]}:</span> {c.text}
               </span>
             ))}
           </div>
         ) : (
-          <p className="text-[11px] text-neutral-500">
+          <p className="text-xs text-neutral-500">
             {x.a.status === 'turun' || x.a.status === 'naik' ? 'Belum ada faktor menonjol di data. Cek cuaca, libur, atau stok di lapangan.' : x.a.summary}
           </p>
         )}
@@ -212,20 +213,20 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
             <span className="inline-flex items-center justify-end gap-1">
               {x.bbPctCur === null ? '—' : formatPercent(x.bbPctCur)}
               {bbD !== null && Math.abs(bbD) >= 0.05 && (
-                <span className={`inline-flex items-center text-[10px] ${toneCls(bbD < 0)}`}><Arrow v={bbD} goodWhenUp={false} />{truncFixed(Math.abs(bbD), 1).replace('.', ',')}</span>
+                <span className={`inline-flex items-center text-xs ${toneCls(bbD < 0)}`}><Arrow v={bbD} goodWhenUp={false} />{truncFixed(Math.abs(bbD), 1).replace('.', ',')}</span>
               )}
             </span>
           </td>
           <td className={`${td} text-neutral-800 dark:text-neutral-100`}>
             <span className="inline-flex items-center justify-end gap-1">
               {formatNumber(x.absenNow)}
-              {abD !== null && abD !== 0 && <span className={`inline-flex items-center text-[10px] ${toneCls(abD < 0)}`}><Arrow v={abD} goodWhenUp={false} />{Math.abs(abD)}</span>}
+              {abD !== null && abD !== 0 && <span className={`inline-flex items-center text-xs ${toneCls(abD < 0)}`}><Arrow v={abD} goodWhenUp={false} />{Math.abs(abD)}</span>}
             </span>
           </td>
           <td className={`${td} text-neutral-800 dark:text-neutral-100`}>
             <span className="inline-flex items-center justify-end gap-1">
               {x.sylNow === null ? '—' : formatNumber(x.sylNow)}
-              {syD !== null && syD !== 0 && <span className={`inline-flex items-center text-[10px] ${toneCls(syD > 0)}`}><Arrow v={syD} />{Math.abs(syD)}</span>}
+              {syD !== null && syD !== 0 && <span className={`inline-flex items-center text-xs ${toneCls(syD > 0)}`}><Arrow v={syD} />{Math.abs(syD)}</span>}
             </span>
           </td>
         </tr>
@@ -252,14 +253,14 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
           <td key={c.id} className={`${td} ${c.current ? 'bg-indigo-50/60 dark:bg-indigo-950/20' : ''}`}>{trendCell(u, i)}</td>
         ))}
         <td className="px-2.5 py-2 text-left whitespace-nowrap">
-          {u.streak >= 2 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300">Turun {u.streak} mgg</span>}
+          {u.streak >= 2 && <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300">Turun {u.streak} mgg</span>}
         </td>
       </tr>
     ));
 
 
   const card = 'p-3 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/40 min-w-0';
-  const cap = 'text-[11px] font-bold text-neutral-500 dark:text-neutral-400';
+  const cap = 'text-xs font-bold text-neutral-500 dark:text-neutral-400';
 
   return (
     <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 border-t-4 border-t-indigo-500 shadow-sm overflow-hidden">
@@ -290,28 +291,28 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
         <section className="space-y-2.5">
           <div className="flex items-center gap-2">
             <Target className="w-3.5 h-3.5 text-neutral-400" />
-            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">Capaian vs target bulan</span>
-            <span className={`ml-auto text-[11px] font-bold px-2 py-0.5 rounded-full ${STATUS_STYLE[p.status]}`}>{STATUS_LABEL[p.status]}</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">Capaian vs target bulan</span>
+            <span className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_STYLE[p.status]}`}>{STATUS_LABEL[p.status]}</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <div className={card}>
               <div className={cap}>Capaian s/d tgl {p.updateDay}</div>
-              <div className={`mt-1 text-lg font-black font-mono leading-none ${toneCls(p.pctToDate === null ? null : p.pctToDate >= 1)}`}>{formatPercent(p.pctToDate)}</div>
-              <div className="mt-1 text-[11px] font-mono text-neutral-500">{formatNumber(p.acc)} / {formatNumber(p.targetToDate)} btl</div>
-              <div className={`text-[11px] font-mono font-bold ${toneCls(p.gapToDate >= 0)}`}>{formatDiff(p.gapToDate)} btl</div>
+              <div className={`mt-1 text-lg font-bold font-mono leading-none ${toneCls(p.pctToDate === null ? null : p.pctToDate >= 1)}`}>{formatPercent(p.pctToDate)}</div>
+              <div className="mt-1 text-xs font-mono text-neutral-500">{formatNumber(p.acc)} / {formatNumber(p.targetToDate)} btl</div>
+              <div className={`text-xs font-mono font-bold ${toneCls(p.gapToDate >= 0)}`}>{formatDiff(p.gapToDate)} btl</div>
             </div>
             <div className={card}>
               <div className={cap}>Sisa kebutuhan</div>
               {p.workLeft > 0 ? (
                 <>
-                  <div className="mt-1 text-lg font-black font-mono leading-none text-neutral-900 dark:text-neutral-100">{p.needPerDay === null ? '—' : formatNumber(Math.ceil(p.needPerDay))}<span className="text-[11px] font-sans font-normal text-neutral-500"> btl/hari</span></div>
-                  <div className="mt-1 text-[11px] text-neutral-500">{p.workLeft} hari kerja lagi (tanpa Minggu)</div>
-                  <div className="text-[11px] font-mono text-neutral-500">Laju kini {formatNumber(p.avgPerWorkDay)}/hari</div>
+                  <div className="mt-1 text-lg font-bold font-mono leading-none text-neutral-900 dark:text-neutral-100">{p.needPerDay === null ? '—' : formatNumber(Math.ceil(p.needPerDay))}<span className="text-xs font-sans font-normal text-neutral-500"> btl/hari</span></div>
+                  <div className="mt-1 text-xs text-neutral-500">{p.workLeft} hari kerja lagi (tanpa Minggu)</div>
+                  <div className="text-xs font-mono text-neutral-500">Laju kini {formatNumber(p.avgPerWorkDay)}/hari</div>
                 </>
               ) : (
                 <>
-                  <div className="mt-1 text-lg font-black font-mono leading-none text-neutral-900 dark:text-neutral-100">{formatNumber(p.sisaTarget)}<span className="text-[11px] font-sans font-normal text-neutral-500"> btl</span></div>
-                  <div className="mt-1 text-[11px] text-neutral-500">Tidak ada hari tersisa di bulan ini</div>
+                  <div className="mt-1 text-lg font-bold font-mono leading-none text-neutral-900 dark:text-neutral-100">{formatNumber(p.sisaTarget)}<span className="text-xs font-sans font-normal text-neutral-500"> btl</span></div>
+                  <div className="mt-1 text-xs text-neutral-500">Tidak ada hari tersisa di bulan ini</div>
                 </>
               )}
             </div>
@@ -319,19 +320,19 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
               <div className={cap}>{isTku && rank ? 'Posisi di cabang' : 'Minggu ini vs lalu'}</div>
               {isTku && rank ? (
                 <>
-                  <div className="mt-1 text-lg font-black font-mono leading-none text-neutral-900 dark:text-neutral-100">#{rank.pctCabang}<span className="text-[11px] font-sans font-normal text-neutral-500"> dari {rank.totalCabang} TKU</span></div>
-                  <div className="mt-1 text-[11px] text-neutral-500">% target • di Rayon {head.rayon}: #{rank.pctRayon}/{rank.totalRayon}</div>
-                  <div className="text-[11px] text-neutral-500">Rata/hari: #{rank.avgCabang} cabang, #{rank.avgRayon} rayon</div>
+                  <div className="mt-1 text-lg font-bold font-mono leading-none text-neutral-900 dark:text-neutral-100">#{rank.pctCabang}<span className="text-xs font-sans font-normal text-neutral-500"> dari {rank.totalCabang} TKU</span></div>
+                  <div className="mt-1 text-xs text-neutral-500">% target • di Rayon {head.rayon}: #{rank.pctRayon}/{rank.totalRayon}</div>
+                  <div className="text-xs text-neutral-500">Rata/hari: #{rank.avgCabang} cabang, #{rank.avgRayon} rayon</div>
                 </>
               ) : (
                 <>
-                  <div className={`mt-1 text-lg font-black font-mono leading-none ${hasCmp ? toneCls(w.diff === 0 ? null : w.diff > 0) : 'text-neutral-400'}`}>{hasCmp ? signed(w.diff) : '—'}<span className="text-[11px] font-sans font-normal text-neutral-500"> btl</span></div>
-                  <div className="mt-1 text-[11px] text-neutral-500">{hasCmp ? `${formatPercent(w.pct)} dari minggu lalu` : 'Belum ada pembanding'}</div>
+                  <div className={`mt-1 text-lg font-bold font-mono leading-none ${hasCmp ? toneCls(w.diff === 0 ? null : w.diff > 0) : 'text-neutral-400'}`}>{hasCmp ? signed(w.diff) : '—'}<span className="text-xs font-sans font-normal text-neutral-500"> btl</span></div>
+                  <div className="mt-1 text-xs text-neutral-500">{hasCmp ? `${formatPercent(w.pct)} dari minggu lalu` : 'Belum ada pembanding'}</div>
                 </>
               )}
             </div>
           </div>
-          <p className="text-[10px] text-neutral-400">Target dihitung per hari kalender. Proyeksi memakai laju rata-rata per hari jual dan sisa hari kerja tanpa Minggu (libur nasional belum diperhitungkan).</p>
+          <p className="text-xs text-neutral-400">Target dihitung per hari kalender. Proyeksi memakai laju rata-rata per hari jual dan sisa hari kerja tanpa Minggu (libur nasional belum diperhitungkan).</p>
         </section>
 
         {afterCapaian}
@@ -348,7 +349,7 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
 
         {/* B. Minggu ini vs minggu lalu: penjualan, BB, absen, s/YL */}
         <section className="space-y-2.5">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 block">
+          <span className="text-xs font-bold uppercase tracking-wider text-neutral-400 block">
             Minggu ini vs minggu lalu • tgl {ev.cmp.start}–{Math.min(ev.cmp.end, ev.updateDay)}
           </span>
           {ev.cmp.days.length === 0 ? (
@@ -376,14 +377,14 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
                 </table>
               </div>
               </details>
-              <p className="text-[10px] text-neutral-400">Penjualan &amp; % BB: hari yang sama dengan minggu lalu (hari libur dilewati). Absen &amp; s/YL: posisi akumulatif per tgl {ev.updateDay} dibanding tgl {ev.updateDay - 7}; “—” bila belum ada catatan pembanding.</p>
+              <p className="text-xs text-neutral-400">Penjualan &amp; % BB: hari yang sama dengan minggu lalu (hari libur dilewati). Absen &amp; s/YL: posisi akumulatif per tgl {ev.updateDay} dibanding tgl {ev.updateDay - 7}; “—” bila belum ada catatan pembanding.</p>
 
               <details className="rounded-xl border border-neutral-200 dark:border-neutral-800">
                 <summary className="px-3 py-2 text-xs font-semibold text-neutral-600 dark:text-neutral-300 cursor-pointer select-none">Rincian harian (▲ naik / ▼ turun vs tanggal − 7)</summary>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs border-collapse">
                     <thead>
-                      <tr className="bg-neutral-50 dark:bg-neutral-800/50 text-neutral-500 text-[11px]">
+                      <tr className="bg-neutral-50 dark:bg-neutral-800/50 text-neutral-500 text-xs">
                         <th className="px-3 py-2 text-left font-semibold sticky left-0 bg-neutral-50 dark:bg-neutral-800">TKU</th>
                         {ev.cmp.days.map(d => (
                           <th key={d} className="px-1.5 py-2 text-center font-semibold whitespace-nowrap">
@@ -398,7 +399,7 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
                           <td className="px-3 py-1.5 font-semibold whitespace-nowrap sticky left-0 bg-white dark:bg-neutral-900">{u.name}</td>
                           {u.week.cells.map((c, i) => (
                             <td key={i} className="px-1.5 py-1.5 text-center" title={`${signed(c)} btl`}>
-                              <span className={`inline-flex items-center justify-center min-w-6 h-6 px-1 rounded-md text-[10px] font-bold ${c > 0 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' : c < 0 ? 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400' : 'bg-neutral-100 text-neutral-400 dark:bg-neutral-800'}`}>
+                              <span className={`inline-flex items-center justify-center min-w-6 h-6 px-1 rounded-md text-xs font-bold ${c > 0 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' : c < 0 ? 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400' : 'bg-neutral-100 text-neutral-400 dark:bg-neutral-800'}`}>
                                 {c > 0 ? '▲' : c < 0 ? '▼' : '='}
                               </span>
                             </td>
@@ -416,7 +417,7 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
         {/* B2. Status naik/turun + penyebab otomatis */}
         {ev.cmp.days.length > 0 && (
           <section className="space-y-2.5">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 block">
+            <span className="text-xs font-bold uppercase tracking-wider text-neutral-400 block">
               Status &amp; penyebab • tgl {ev.cmp.start}–{Math.min(ev.cmp.end, ev.updateDay)}
             </span>
             {!isTku && (wsum.nUp + wsum.nDown > 0) && (
@@ -442,7 +443,7 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
               {analyzedTotal && analysisCard(analyzedTotal, true)}
               {(isTku ? analyzed : analyzedSorted).map(x => analysisCard(x))}
             </div>
-            <p className="text-[10px] text-neutral-400">
+            <p className="text-xs text-neutral-400">
               Penyebab dihitung otomatis dari data yang tercatat (absen, BB, YL &lt; 250, s/YL, varian) pada hari yang sama dengan minggu lalu. Faktor di luar data, misalnya cuaca, libur, atau stok, perlu dicek langsung di lapangan. Stabil = selisih di bawah 3%.
             </p>
           </section>
@@ -450,7 +451,7 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
 
         {/* C. Tren antar-minggu */}
         <section className="space-y-2.5">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 block">Tren antar-minggu • rata-rata btl per hari (pembagi 7 hari, Min–Sab)</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-neutral-400 block">Tren antar-minggu • rata-rata btl per hari (pembagi 7 hari, Min–Sab)</span>
           <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 overflow-x-auto">
             <table className="w-full text-xs border-collapse">
               <thead>
@@ -458,9 +459,9 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
                   <th className={`${th} text-left px-3 sticky left-0 bg-neutral-50 dark:bg-neutral-800`}>TKU</th>
                   {ev.weekCols.map(c => (
                     <th key={c.id} className={`${th} ${c.current ? 'text-indigo-600 dark:text-indigo-300' : ''}`}>
-                      M{c.id}<span className="block font-normal text-[9px] opacity-70">{c.start}–{c.end}</span>
-                      <span className="block font-normal text-[9px] opacity-70">÷{c.calDays}</span>
-                      {c.current && ev.updateDay < c.end && <span className="block font-normal text-[9px] text-amber-600 dark:text-amber-400">sementara</span>}
+                      M{c.id}<span className="block font-normal text-xs opacity-70">{c.start}–{c.end}</span>
+                      <span className="block font-normal text-xs opacity-70">÷{c.calDays}</span>
+                      {c.current && ev.updateDay < c.end && <span className="block font-normal text-xs text-amber-600 dark:text-amber-400">sementara</span>}
                     </th>
                   ))}
                   <th className={`${th} text-left`}>Catatan</th>
@@ -473,13 +474,13 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
             </table>
           </div>
 
-          <p className="text-[10px] text-neutral-400">Panah = naik / turun dibanding minggu sebelumnya yang punya data. Pembagi = jumlah hari kalender dalam minggu itu (Minggu–Sabtu = 7; Minggu ikut dihitung). Minggu yang baru berjalan atau terpotong awal/akhir bulan memakai jumlah harinya sampai tgl {ev.updateDay}. Angka ÷ di bawah M1, M2, … adalah pembaginya.</p>
+          <p className="text-xs text-neutral-400">Panah = naik / turun dibanding minggu sebelumnya yang punya data. Pembagi = jumlah hari kalender dalam minggu itu (Minggu–Sabtu = 7; Minggu ikut dihitung). Minggu yang baru berjalan atau terpotong awal/akhir bulan memakai jumlah harinya sampai tgl {ev.updateDay}. Angka ÷ di bawah M1, M2, … adalah pembaginya.</p>
         </section>
 
         {/* D. Catatan otomatis */}
         {notes.length > 0 && (
           <section className="space-y-1.5 text-xs text-neutral-700 dark:text-neutral-200 leading-relaxed">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 block mb-1">Catatan evaluasi</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-neutral-400 block mb-1">Catatan evaluasi</span>
             {notes.map((n, i) => (
               <div key={i} className="flex gap-2">
                 <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${NOTE_DOT[n.tone]}`} />

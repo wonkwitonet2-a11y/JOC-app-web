@@ -40,7 +40,7 @@ export const PembagiHariControl: React.FC<PembagiHariControlProps> = ({
         <div className="space-y-0.5">
           <h2 className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
             Pembagi Hari
-            <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+            <span className="ml-2 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
               {pembagi} dari {hariBulan} hari
             </span>
           </h2>

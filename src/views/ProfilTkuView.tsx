@@ -106,7 +106,7 @@ export const ProfilTkuView: React.FC<ProfilTkuViewProps> = ({
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
+          <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
             Profil TKU
           </h1>
         </div>
@@ -385,7 +385,7 @@ export const ProfilTkuView: React.FC<ProfilTkuViewProps> = ({
 
                   <td className="py-3 px-3 text-center font-sans">
                     <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                      className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold ${
                         coverPct >= 1.0
                           ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
                           : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
@@ -397,7 +397,7 @@ export const ProfilTkuView: React.FC<ProfilTkuViewProps> = ({
 
                   <td className="py-3 px-3 text-center font-sans">
                     <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
                         t.aktif
                           ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
                           : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400'

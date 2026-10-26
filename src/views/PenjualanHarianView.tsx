@@ -320,7 +320,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
       {/* 1. Header Ringkas & Pemilih Tanggal Kalender Tunggal */}
       <div className="p-4 sm:p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-lg sm:text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+          <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
             <Calendar className="w-5 h-5 text-brand-600 shrink-0" />
             <span>Rekap Penjualan Harian</span>
           </h1>
@@ -354,15 +354,15 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
       {/* 2. KPI Cards Bersih, Rapi & Simetris (5 Indikator Utama) */}
       <div className="grid grid-cols-2 md:grid-cols-6 lg:grid-cols-5 gap-2.5 sm:gap-3 items-stretch">
         {/* Card 1: Penjualan Hari Ini */}
-        <div className="p-3.5 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xs flex flex-col justify-between min-w-0 col-span-1 md:col-span-2 lg:col-span-1">
-          <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1 truncate">
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xs flex flex-col justify-between min-w-0 col-span-1 md:col-span-2 lg:col-span-1">
+          <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 uppercase tracking-wider block mb-1 truncate">
             Penjualan
           </span>
-          <div className="text-xl font-black font-mono tracking-tight text-brand-600 dark:text-brand-400 leading-tight break-words">
-            {formatNumber(cabangSum.sold)} <span className="text-xs font-normal text-neutral-400">btl</span>
+          <div className="text-lg sm:text-xl lg:text-2xl font-black font-mono tracking-tight text-brand-600 dark:text-brand-400 leading-tight break-words">
+            {formatNumber(cabangSum.sold)} <span className="text-xs font-normal text-neutral-500">btl</span>
           </div>
-          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-x-2 text-[11px]">
-            <span className="text-neutral-400 font-medium">Capaian</span>
+          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-x-2 text-xs">
+            <span className="text-neutral-500 dark:text-neutral-400 font-medium">Capaian</span>
             <span className={`font-mono font-bold ${pctCapaian >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
               {formatPercent(pctCapaian)}
             </span>
@@ -370,15 +370,15 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
         </div>
 
         {/* Card 2: Target */}
-        <div className="p-3.5 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xs flex flex-col justify-between min-w-0 col-span-1 md:col-span-2 lg:col-span-1">
-          <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1 truncate">
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xs flex flex-col justify-between min-w-0 col-span-1 md:col-span-2 lg:col-span-1">
+          <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 uppercase tracking-wider block mb-1 truncate">
             Target
           </span>
-          <div className="text-xl font-black font-mono tracking-tight text-neutral-900 dark:text-neutral-100 leading-tight break-words">
-            {formatNumber(branchTarget)} <span className="text-xs font-normal text-neutral-400">btl</span>
+          <div className="text-lg sm:text-xl lg:text-2xl font-black font-mono tracking-tight text-neutral-900 dark:text-neutral-100 leading-tight break-words">
+            {formatNumber(branchTarget)} <span className="text-xs font-normal text-neutral-500">btl</span>
           </div>
-          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-x-2 text-[11px]">
-            <span className="text-neutral-400 font-medium">Selisih</span>
+          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-x-2 text-xs">
+            <span className="text-neutral-500 dark:text-neutral-400 font-medium">Selisih</span>
             <span className={`font-mono font-bold ${diffFromTarget >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
               {diffFromTarget >= 0 ? '+' : ''}{formatNumber(diffFromTarget)} btl
             </span>
@@ -386,15 +386,15 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
         </div>
 
         {/* Card 3: BB */}
-        <div className="p-3.5 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xs flex flex-col justify-between min-w-0 col-span-1 md:col-span-2 lg:col-span-1">
-          <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1 truncate">
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xs flex flex-col justify-between min-w-0 col-span-1 md:col-span-2 lg:col-span-1">
+          <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 uppercase tracking-wider block mb-1 truncate">
             BB
           </span>
-          <div className="text-xl font-black font-mono tracking-tight text-amber-600 dark:text-amber-400 leading-tight break-words">
-            {formatNumber(cabangSum.bb)} <span className="text-xs font-normal text-neutral-400">btl</span>
+          <div className="text-lg sm:text-xl lg:text-2xl font-black font-mono tracking-tight text-amber-600 dark:text-amber-400 leading-tight break-words">
+            {formatNumber(cabangSum.bb)} <span className="text-xs font-normal text-neutral-500">btl</span>
           </div>
-          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-x-2 text-[11px]">
-            <span className="text-neutral-400 font-medium">Rasio BB</span>
+          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-x-2 text-xs">
+            <span className="text-neutral-500 dark:text-neutral-400 font-medium">Rasio BB</span>
             <span className={`font-mono font-bold ${getBbStatusClass(pctBb)}`}>
               {formatPercent(pctBb)}
             </span>
@@ -402,15 +402,15 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
         </div>
 
         {/* Card 4: PDM */}
-        <div className="p-3.5 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xs flex flex-col justify-between min-w-0 col-span-1 md:col-span-3 lg:col-span-1">
-          <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1 truncate">
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xs flex flex-col justify-between min-w-0 col-span-1 md:col-span-3 lg:col-span-1">
+          <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 uppercase tracking-wider block mb-1 truncate">
             PDM
           </span>
-          <div className="text-xl font-black font-mono tracking-tight text-sky-600 dark:text-sky-400 leading-tight break-words">
-            {formatNumber(cabangSum.pdm)} <span className="text-xs font-normal text-neutral-400">btl</span>
+          <div className="text-lg sm:text-xl lg:text-2xl font-black font-mono tracking-tight text-sky-600 dark:text-sky-400 leading-tight break-words">
+            {formatNumber(cabangSum.pdm)} <span className="text-xs font-normal text-neutral-500">btl</span>
           </div>
-          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-x-2 text-[11px]">
-            <span className="text-neutral-400 font-medium">Porsi PDM</span>
+          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-x-2 text-xs">
+            <span className="text-neutral-500 dark:text-neutral-400 font-medium">Porsi PDM</span>
             <span className="font-mono font-bold text-sky-600 dark:text-sky-400">
               {cabangSum.sold > 0 ? formatPercent(cabangSum.pdm / cabangSum.sold) : '0%'}
             </span>
@@ -418,16 +418,16 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
         </div>
 
         {/* Card 5: Capai Target */}
-        <div className="p-3.5 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xs flex flex-col justify-between min-w-0 col-span-2 md:col-span-3 lg:col-span-1">
-          <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1 truncate">
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xs flex flex-col justify-between min-w-0 col-span-2 md:col-span-3 lg:col-span-1">
+          <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 uppercase tracking-wider block mb-1 truncate">
             Capai Target
           </span>
-          <div className="text-xl font-black font-mono tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5 leading-tight break-words">
+          <div className="text-lg sm:text-xl lg:text-2xl font-black font-mono tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5 leading-tight break-words">
             <span className="text-emerald-600">{onTrackCount}</span>
-            <span className="text-neutral-400 text-xs font-normal">/ {activeCount} TKU</span>
+            <span className="text-neutral-500 text-xs font-normal">/ {activeCount} TKU</span>
           </div>
-          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-x-2 text-[11px]">
-            <span className="text-neutral-400 font-medium">Tingkat Capai</span>
+          <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-x-2 text-xs">
+            <span className="text-neutral-500 dark:text-neutral-400 font-medium">Tingkat Capai</span>
             <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
               {formatPercent(activeCount > 0 ? onTrackCount / activeCount : 0)}
             </span>
@@ -447,31 +447,31 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-[11px] border-collapse min-w-[600px] [&_th]:!px-1.5 [&_td]:!px-1.5">
+          <table className="w-full text-left text-xs border-collapse min-w-[650px] [&_th]:!px-2 [&_td]:!px-2">
             <thead>
-              <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 text-[11px] bg-neutral-50 dark:bg-neutral-800/40">
+              <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-400 text-xs bg-neutral-50 dark:bg-neutral-800/40">
                 <th className="py-2.5 px-3 font-semibold min-w-[84px]">Nama TKU</th>
                 <th className="py-2.5 px-2 text-right font-semibold text-red-600 dark:text-red-400">YO</th>
                 <th className="py-2.5 px-2 text-right font-semibold text-amber-600 dark:text-amber-400">OM</th>
                 <th className="py-2.5 px-2 text-right font-semibold text-pink-600 dark:text-pink-400">OS</th>
                 <th className="py-2.5 px-2 text-right font-semibold text-sky-600 dark:text-sky-400">YT</th>
                 <th className="py-2.5 px-3 text-right font-bold text-neutral-900 dark:text-neutral-100">Terjual</th>
-                <th className="py-2.5 px-2.5 text-right font-semibold text-neutral-500">Target</th>
+                <th className="py-2.5 px-2.5 text-right font-semibold text-neutral-600 dark:text-neutral-400">Target</th>
                 <th className="py-2.5 px-2.5 text-right font-semibold border-r border-neutral-200 dark:border-neutral-800">% Tgt</th>
                 <th className="py-2.5 px-2.5 text-right font-semibold text-amber-600 dark:text-amber-400">BB</th>
                 <th className="py-2.5 px-2.5 text-right font-semibold text-amber-600 dark:text-amber-400">% BB</th>
                 <th className="py-2.5 px-2.5 text-right font-semibold text-sky-600 dark:text-sky-400">PDM</th>
                 <th className="py-2.5 px-2.5 text-right font-semibold text-sky-600 dark:text-sky-400">JWP</th>
-                <th className="py-2.5 px-2 text-right font-semibold text-neutral-500">Abs</th>
-                <th className="py-2.5 px-2 text-right font-semibold text-neutral-500">Frk</th>
+                <th className="py-2.5 px-2 text-right font-semibold text-neutral-600 dark:text-neutral-400">Abs</th>
+                <th className="py-2.5 px-2 text-right font-semibold text-neutral-600 dark:text-neutral-400">Frk</th>
                 <th className="py-2.5 px-2.5 text-right font-semibold text-red-600 dark:text-red-400 border-l border-neutral-200 dark:border-neutral-700">&lt;250</th>
                 <th className="py-2.5 px-2.5 text-right font-semibold text-amber-600 dark:text-amber-400">&lt;300</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono text-xs">
+            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono text-xs sm:text-sm">
               {/* RAYON 1 SECTION */}
               <tr className="bg-neutral-100/60 dark:bg-neutral-800/60 font-bold text-neutral-700 dark:text-neutral-300">
-                <td colSpan={16} className="py-2 px-3 font-sans text-[11px] uppercase tracking-wider text-brand-700 dark:text-brand-400">
+                <td colSpan={16} className="py-2 px-3 font-sans text-xs uppercase tracking-wider text-brand-700 dark:text-brand-400">
                   RAYON 1 JEMBER
                 </td>
               </tr>
@@ -501,7 +501,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
                     }`}
                   >
                     <td className="py-2.5 px-3 font-sans font-semibold text-neutral-900 dark:text-neutral-100">
-                      {t.nama} <span className="text-[10px] text-neutral-400 font-normal">R{t.rayon}</span>
+                      {t.nama} <span className="text-xs text-neutral-500 font-normal">R{t.rayon}</span>
                     </td>
                     <td className="py-2.5 px-2 text-right text-neutral-700 dark:text-neutral-300">
                       {v ? formatNumber(v[0]) : '—'}
@@ -518,8 +518,8 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
                     <td className="py-2.5 px-3 text-right font-bold text-neutral-900 dark:text-neutral-100">
                       {sold !== undefined ? formatNumber(sold) : '—'}
                     </td>
-                    <td className="py-2.5 px-2.5 text-right text-neutral-500">
-                      {formatNumber(effT(t))}{getTkuDayMult(idx, selectedDay) > 1 && (<span className="ml-1 text-[9px] font-sans font-bold text-brand-600 dark:text-brand-400">×{getTkuDayMult(idx, selectedDay)}</span>)}
+                    <td className="py-2.5 px-2.5 text-right text-neutral-600 dark:text-neutral-300">
+                      {formatNumber(effT(t))}{getTkuDayMult(idx, selectedDay) > 1 && (<span className="ml-1 text-xs font-sans font-bold text-brand-600 dark:text-brand-400">×{getTkuDayMult(idx, selectedDay)}</span>)}
                     </td>
                     <td className={`py-2.5 px-2.5 text-right font-bold border-r border-neutral-200 dark:border-neutral-800 ${
                       pctCapaianTku >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
@@ -541,7 +541,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
                     <td className="py-2.5 px-2 text-right text-neutral-600 dark:text-neutral-400">
                       {absen !== undefined ? absen : '—'}
                     </td>
-                    <td className="py-2.5 px-2 text-right text-neutral-500">
+                    <td className="py-2.5 px-2 text-right text-neutral-600 dark:text-neutral-400">
                       {frek !== undefined ? frek : '—'}
                     </td>
                     <td className="py-2.5 px-2.5 text-right font-bold text-red-600 dark:text-red-400 border-l border-neutral-200 dark:border-neutral-700">
@@ -586,7 +586,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
 
               {/* RAYON 2 SECTION */}
               <tr className="bg-neutral-100/60 dark:bg-neutral-800/60 font-bold text-neutral-700 dark:text-neutral-300">
-                <td colSpan={16} className="py-2 px-3 font-sans text-[11px] uppercase tracking-wider text-brand-700 dark:text-brand-400">
+                <td colSpan={16} className="py-2 px-3 font-sans text-xs uppercase tracking-wider text-brand-700 dark:text-brand-400">
                   RAYON 2 JEMBER
                 </td>
               </tr>
@@ -616,7 +616,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
                     }`}
                   >
                     <td className="py-2.5 px-3 font-sans font-semibold text-neutral-900 dark:text-neutral-100">
-                      {t.nama} <span className="text-[10px] text-neutral-400 font-normal">R{t.rayon}</span>
+                      {t.nama} <span className="text-xs text-neutral-500 font-normal">R{t.rayon}</span>
                     </td>
                     <td className="py-2.5 px-2 text-right text-neutral-700 dark:text-neutral-300">
                       {v ? formatNumber(v[0]) : '—'}
@@ -633,8 +633,8 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
                     <td className="py-2.5 px-3 text-right font-bold text-neutral-900 dark:text-neutral-100">
                       {sold !== undefined ? formatNumber(sold) : '—'}
                     </td>
-                    <td className="py-2.5 px-2.5 text-right text-neutral-500">
-                      {formatNumber(effT(t))}{getTkuDayMult(idx, selectedDay) > 1 && (<span className="ml-1 text-[9px] font-sans font-bold text-brand-600 dark:text-brand-400">×{getTkuDayMult(idx, selectedDay)}</span>)}
+                    <td className="py-2.5 px-2.5 text-right text-neutral-600 dark:text-neutral-300">
+                      {formatNumber(effT(t))}{getTkuDayMult(idx, selectedDay) > 1 && (<span className="ml-1 text-xs font-sans font-bold text-brand-600 dark:text-brand-400">×{getTkuDayMult(idx, selectedDay)}</span>)}
                     </td>
                     <td className={`py-2.5 px-2.5 text-right font-bold border-r border-neutral-200 dark:border-neutral-800 ${
                       pctCapaianTku >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
@@ -656,7 +656,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
                     <td className="py-2.5 px-2 text-right text-neutral-600 dark:text-neutral-400">
                       {absen !== undefined ? absen : '—'}
                     </td>
-                    <td className="py-2.5 px-2 text-right text-neutral-500">
+                    <td className="py-2.5 px-2 text-right text-neutral-600 dark:text-neutral-400">
                       {frek !== undefined ? frek : '—'}
                     </td>
                     <td className="py-2.5 px-2.5 text-right font-bold text-red-600 dark:text-red-400 border-l border-neutral-200 dark:border-neutral-700">

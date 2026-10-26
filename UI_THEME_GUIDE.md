@@ -320,3 +320,12 @@ export const MetricCard: React.FC<MetricCardProps> = ({
   </main>
 </div>
 ```
+
+
+---
+
+## 7. Skala Tipografi (aturan baku)
+- Terkecil **12px** (`text-xs`) untuk label; **14px** (`text-sm`) untuk isi; **16/18/20/24px** untuk judul dan angka.
+- Dilarang memakai `text-[Npx]`; pakai kelas Tailwind (rem) agar ikut skala otomatis.
+- Judul halaman dan angka KPI: `text-lg sm:text-xl lg:text-2xl`.
+- Skala dasar ada di `src/index.css` (`html { font-size }` per lebar layar). Teks grafik SVG memakai `fs(n)` dari `src/services/displayMode.ts`.

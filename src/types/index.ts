@@ -107,6 +107,9 @@ export interface ArchiveRecord {
   d: number; // days in month
   terkunci: boolean;
   rows: ArchiveRow[];
+  // Salinan catatan Kendala & Solusi TKU (n) dan tanggapan admin (r) bulan ini, diambil saat "Simpan Bulan Ini".
+  // Arsip lama tanpa field ini menampilkan catatan langsung dari data aktif.
+  catatan?: { n: Record<string, WeeklyNote>; r: Record<string, WeeklyReply> };
 }
 
 // ===== Sisa Stock =====
@@ -122,6 +125,25 @@ export interface StockBatch {
 export interface SisaStockRecord {
   updatedAt: string; // ISO time terakhir diperbarui
   batches: Record<StockGroup, StockBatch[]>;
+}
+
+// ===== Catatan mingguan TKU =====
+// Kunci catatan: `${YYYY-MM}:${tku.id}:${nomor minggu}` (nomor minggu mulai 1, mengikuti getWeeksOfMonth).
+// Catatan TKU (weeklyNotes) dan tanggapan admin (weeklyReplies) disimpan di dua peta terpisah
+// supaya tulisan TKU dan tulisan admin tidak saling menimpa saat sinkron antar HP.
+export type SolusiStatus = 'belum' | 'proses' | 'selesai';
+
+export interface WeeklyNote {
+  a: string; // alasan / kendala
+  s: string; // solusi / tindak lanjut
+  l: string[]; // label penyebab cepat
+  st: SolusiStatus; // status solusi
+  u: string; // ISO time terakhir diubah
+}
+
+export interface WeeklyReply {
+  t: string; // tanggapan admin
+  u: string; // ISO time terakhir diubah
 }
 
 export interface MotivationQuote {
@@ -216,6 +238,8 @@ export interface AppState {
   quotes: MotivationQuote[];
   archives: Record<string, ArchiveRecord>;
   monthStore?: Record<string, MonthSnapshot>; // YYYY-MM -> data kerja bulan yang sedang tidak aktif
+  weeklyNotes?: Record<string, WeeklyNote>; // catatan mingguan yang ditulis TKU (kunci: periode:tkuId:minggu)
+  weeklyReplies?: Record<string, WeeklyReply>; // tanggapan admin atas catatan TKU (kunci sama)
   activeArchiveKey: string | null;
   supabaseConfig: SupabaseConfig;
   tkus: TkuItem[];

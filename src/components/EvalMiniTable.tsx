@@ -77,7 +77,7 @@ export const EvalMiniTable: React.FC<EvalMiniTableProps> = ({
           height: rowH,
           paddingTop: 0,
           paddingBottom: 0,
-          fontSize: Math.max(9, Math.min(13, Math.round(rowH * 0.5))),
+          fontSize: Math.max(12, Math.min(14, Math.round(rowH * 0.52))),
           lineHeight: 1,
         }
       : undefined;
@@ -207,7 +207,7 @@ export const EvalMiniTable: React.FC<EvalMiniTableProps> = ({
             <button
               type="button"
               onClick={() => setMobileMode('table')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 mobileMode === 'table'
                   ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-2xs'
                   : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
@@ -219,7 +219,7 @@ export const EvalMiniTable: React.FC<EvalMiniTableProps> = ({
             <button
               type="button"
               onClick={() => setMobileMode('matrix')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 mobileMode === 'matrix'
                   ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-2xs'
                   : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
@@ -238,11 +238,11 @@ export const EvalMiniTable: React.FC<EvalMiniTableProps> = ({
       {(mobileMode === 'table' || typeof window === 'undefined') && (
         <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-sm overflow-hidden flex-1 min-h-0 flex flex-col">
           {/* Petunjuk Geser Horizontal di HP */}
-          <div className="sm:hidden px-2 py-0.5 bg-neutral-50 dark:bg-neutral-800/70 border-b border-neutral-200/80 dark:border-neutral-800 flex items-center justify-between text-[10px] text-neutral-600 dark:text-neutral-400 shrink-0">
+          <div className="sm:hidden px-2 py-0.5 bg-neutral-50 dark:bg-neutral-800/70 border-b border-neutral-200/80 dark:border-neutral-800 flex items-center justify-between text-xs text-neutral-600 dark:text-neutral-400 shrink-0">
             <span className="flex items-center gap-1 font-medium text-brand-600 dark:text-brand-400">
               <ArrowRightLeft className="w-3 h-3 shrink-0" /> Geser tabel jika diperlukan
             </span>
-            <span className="font-mono text-[9px] text-neutral-400">11 Kolom</span>
+            <span className="font-mono text-xs text-neutral-400">11 Kolom</span>
           </div>
 
           <div ref={scrollRef} className="overflow-auto w-full flex-1 min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
@@ -309,7 +309,7 @@ export const EvalMiniTable: React.FC<EvalMiniTableProps> = ({
                 {/* Baris Atas: Nama Unit & Angka Rata2 + Capaian Target */}
                 <div className="flex items-center justify-between gap-2 border-b border-neutral-100 dark:border-neutral-800 pb-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="w-5 h-5 rounded-md bg-brand-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
+                    <span className="w-5 h-5 rounded-md bg-brand-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
                       R{r.tku.rayon}
                     </span>
                     <h3 className="font-bold text-sm text-neutral-900 dark:text-neutral-100 truncate">
@@ -317,10 +317,10 @@ export const EvalMiniTable: React.FC<EvalMiniTableProps> = ({
                     </h3>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-xs font-mono font-black text-neutral-900 dark:text-white">
-                      {formatDecimal(r.rata2)} <span className="text-[10px] font-normal text-neutral-400">btl</span>
+                    <span className="text-xs font-mono font-bold text-neutral-900 dark:text-white">
+                      {formatDecimal(r.rata2)} <span className="text-xs font-normal text-neutral-500">btl</span>
                     </span>
-                    <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md ${
+                    <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded-md ${
                       isTargetHit 
                         ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' 
                         : 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400 border border-red-200 dark:border-red-800'
@@ -331,18 +331,18 @@ export const EvalMiniTable: React.FC<EvalMiniTableProps> = ({
                 </div>
 
                 {/* Matriks 4 Kolom Teratur: Seluruh Indikator Berada di Posisi Identik */}
-                <div className="grid grid-cols-4 gap-1.5 text-center text-[10px] font-mono">
+                <div className="grid grid-cols-4 gap-1.5 text-center text-xs font-mono">
                   {/* Kolom 1: Tren Pertumbuhan */}
                   <div className="p-2 rounded-xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-100 dark:border-neutral-800 space-y-1">
-                    <span className="text-[9px] uppercase font-bold text-neutral-400 block tracking-tight">Tren</span>
+                    <span className="text-xs uppercase font-bold text-neutral-500 dark:text-neutral-400 block tracking-tight">Tren</span>
                     <div>
-                      <span className="text-[9px] text-neutral-400 block">vs LW</span>
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400 block">vs LW</span>
                       <span className={`font-bold block ${getStatusClass(r.vsLwPct !== null ? r.vsLwPct - 1 : 0)}${b('vsLwPct')}`}>
                         {r.vsLwPct !== null ? formatPercent(r.vsLwPct) : '—'}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[9px] text-neutral-400 block">vs LY</span>
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400 block">vs LY</span>
                       <span className={`font-bold block ${getStatusClass(r.diffLy)}${b('vsLyPct')}`}>
                         {formatPercent(r.vsLyPct)}
                       </span>
@@ -351,15 +351,15 @@ export const EvalMiniTable: React.FC<EvalMiniTableProps> = ({
 
                   {/* Kolom 2: Mutu Botol & s/YL */}
                   <div className="p-2 rounded-xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-100 dark:border-neutral-800 space-y-1">
-                    <span className="text-[9px] uppercase font-bold text-neutral-400 block tracking-tight">Mutu</span>
+                    <span className="text-xs uppercase font-bold text-neutral-500 dark:text-neutral-400 block tracking-tight">Mutu</span>
                     <div>
-                      <span className="text-[9px] text-neutral-400 block">% BB</span>
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400 block">% BB</span>
                       <span className={`font-bold block ${getBbStatusClass(r.pctBb)}${b('pctBb')}`}>
                         {formatPercent(r.pctBb)}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[9px] text-neutral-400 block">s/YL</span>
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400 block">s/YL</span>
                       <span className={`font-bold text-brand-600 dark:text-brand-400 block${b('syl')}`}>
                         {formatNumber(r.syl)}
                       </span>
@@ -368,15 +368,15 @@ export const EvalMiniTable: React.FC<EvalMiniTableProps> = ({
 
                   {/* Kolom 3: Presensi */}
                   <div className="p-2 rounded-xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-100 dark:border-neutral-800 space-y-1">
-                    <span className="text-[9px] uppercase font-bold text-neutral-400 block tracking-tight">Presensi</span>
+                    <span className="text-xs uppercase font-bold text-neutral-500 dark:text-neutral-400 block tracking-tight">Presensi</span>
                     <div>
-                      <span className="text-[9px] text-neutral-400 block">Absen</span>
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400 block">Absen</span>
                       <span className={`font-bold block ${r.absen > 0 ? 'text-red-600' : 'text-neutral-600 dark:text-neutral-400'}${b('absen')}`}>
                         {r.absen}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[9px] text-neutral-400 block">Frek</span>
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400 block">Frek</span>
                       <span className={`font-bold block ${r.frek > 0 ? 'text-red-600' : 'text-neutral-600 dark:text-neutral-400'}${b('frek')}`}>
                         {r.frek}
                       </span>
@@ -385,15 +385,15 @@ export const EvalMiniTable: React.FC<EvalMiniTableProps> = ({
 
                   {/* Kolom 4: Evaluasi Area & YL */}
                   <div className="p-2 rounded-xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-100 dark:border-neutral-800 space-y-1">
-                    <span className="text-[9px] uppercase font-bold text-neutral-400 block tracking-tight">Evaluasi</span>
+                    <span className="text-xs uppercase font-bold text-neutral-500 dark:text-neutral-400 block tracking-tight">Evaluasi</span>
                     <div>
-                      <span className="text-[9px] text-neutral-400 block">% CA</span>
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400 block">% CA</span>
                       <span className={`font-bold block ${r.cover >= 1 ? 'text-emerald-600' : 'text-amber-600'}${b('cover')}`}>
                         {formatPercent(r.cover)}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[9px] text-neutral-400 block">&lt;250</span>
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400 block">&lt;250</span>
                       <span className={`font-bold block ${r.pctL250 > 0 ? 'text-red-600' : 'text-emerald-600'}${b('pctL250')}`}>
                         {formatPercent(r.pctL250)}
                       </span>
@@ -412,22 +412,22 @@ export const EvalMiniTable: React.FC<EvalMiniTableProps> = ({
                 {formatPercent(cabangTotal.vsTgPct)} vs Target
               </span>
             </div>
-            <div className="grid grid-cols-4 gap-1 text-center text-[10px] font-mono pt-1 border-t border-neutral-800">
+            <div className="grid grid-cols-4 gap-1 text-center text-xs font-mono pt-1 border-t border-neutral-800">
               <div>
-                <span className="text-neutral-400 text-[9px] block">Rata/Hari</span>
-                <span className="font-bold text-xs text-white">{formatDecimal(cabangTotal.rata2)}</span>
+                <span className="text-neutral-400 text-xs block">Rata/Hari</span>
+                <span className="font-bold text-xs sm:text-sm text-white">{formatDecimal(cabangTotal.rata2)}</span>
               </div>
               <div>
-                <span className="text-neutral-400 text-[9px] block">% BB</span>
-                <span className={`font-bold text-xs ${getBbStatusClass(cabangTotal.pctBb)}`}>{formatPercent(cabangTotal.pctBb)}</span>
+                <span className="text-neutral-400 text-xs block">% BB</span>
+                <span className={`font-bold text-xs sm:text-sm ${getBbStatusClass(cabangTotal.pctBb)}`}>{formatPercent(cabangTotal.pctBb)}</span>
               </div>
               <div>
-                <span className="text-neutral-400 text-[9px] block">s/YL</span>
-                <span className="font-bold text-xs text-brand-400">{formatNumber(cabangTotal.syl)}</span>
+                <span className="text-neutral-400 text-xs block">s/YL</span>
+                <span className="font-bold text-xs sm:text-sm text-brand-400">{formatNumber(cabangTotal.syl)}</span>
               </div>
               <div>
-                <span className="text-neutral-400 text-[9px] block">% CA</span>
-                <span className="font-bold text-xs text-emerald-400">{formatPercent(cabangTotal.cover)}</span>
+                <span className="text-neutral-400 text-xs block">% CA</span>
+                <span className="font-bold text-xs sm:text-sm text-emerald-400">{formatPercent(cabangTotal.cover)}</span>
               </div>
             </div>
           </div>

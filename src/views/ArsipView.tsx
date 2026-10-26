@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { AppState, ArchiveRecord, ArchiveRow, VARIANTS } from '../types';
 import { ArsipLineChart } from '../components/ArsipYearCharts';
+import { ArsipCatatanMingguan } from '../components/ArsipCatatanMingguan';
 import { formatNumber, formatDecimal, round2, formatPercent, getPeriodInfo, getBbStatusClass } from '../services/storage';
 import { INITIAL_ARCHIVES } from '../data/initialData';
 
@@ -230,12 +231,12 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
         <>
           <button type="button" onClick={saveEditAbsen} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">Simpan</button>
           <button type="button" onClick={() => setEditAbsen(false)} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200">Batal</button>
-          <span className="text-[11px] text-neutral-500">Isi Absen, Frekuensi, atau rata-rata Tahun Lalu tiap TKU</span>
+          <span className="text-xs text-neutral-500">Isi Absen, Frekuensi, atau rata-rata Tahun Lalu tiap TKU</span>
         </>
       ) : canEditAbsen ? (
         <button type="button" onClick={startEditAbsen} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-600 text-white hover:bg-brand-700">Edit Absen, Frekuensi &amp; Tahun Lalu</button>
       ) : (
-        <span className="text-[11px] text-neutral-500">
+        <span className="text-xs text-neutral-500">
           {INITIAL_ARCHIVES[activeKey]
             ? 'Arsip bawaan tidak bisa diedit.'
             : activeArchive?.terkunci
@@ -415,7 +416,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
             <Archive className="w-5 h-5" />
           </span>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
+            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
               Arsip Penjualan
             </h1>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -464,7 +465,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
 
                 {/* Floating Menu Card */}
                 <div className="absolute right-0 top-full mt-2 z-30 w-56 p-1.5 bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 shadow-xl space-y-1 animate-in fade-in zoom-in-95">
-                  <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 border-b border-neutral-100 dark:border-neutral-700/60">
+                  <div className="px-2.5 py-1.5 text-xs font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 border-b border-neutral-100 dark:border-neutral-700/60">
                     Opsi Arsip ({activeKey})
                   </div>
 
@@ -488,7 +489,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                           <Unlock className="w-4 h-4 text-amber-500 shrink-0" />
                           <div>
                             <p className="font-semibold text-neutral-900 dark:text-neutral-100">Buka Kunci</p>
-                            <p className="text-[10px] text-neutral-500 dark:text-neutral-400">Izinkan koreksi angka arsip</p>
+                            <p className="text-xs text-neutral-500 dark:text-neutral-400">Izinkan koreksi angka arsip</p>
                           </div>
                         </>
                       ) : (
@@ -496,7 +497,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                           <Lock className="w-4 h-4 text-emerald-500 shrink-0" />
                           <div>
                             <p className="font-semibold text-neutral-900 dark:text-neutral-100">Kunci Arsip</p>
-                            <p className="text-[10px] text-neutral-500 dark:text-neutral-400">Kunci data agar aman</p>
+                            <p className="text-xs text-neutral-500 dark:text-neutral-400">Kunci data agar aman</p>
                           </div>
                         </>
                       )}
@@ -514,7 +515,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                     <Upload className="w-4 h-4 text-brand-600 dark:text-brand-400 shrink-0" />
                     <div>
                       <p className="font-semibold text-neutral-900 dark:text-neutral-100">Impor Data CSV</p>
-                      <p className="text-[10px] text-neutral-500 dark:text-neutral-400">Unggah dari Excel/CSV</p>
+                      <p className="text-xs text-neutral-500 dark:text-neutral-400">Unggah dari Excel/CSV</p>
                     </div>
                   </button>
 
@@ -531,7 +532,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                         <Trash2 className="w-4 h-4 text-red-500 shrink-0" />
                         <div>
                           <p className="font-semibold">Hapus Arsip Ini</p>
-                          <p className="text-[10px] text-red-500/80">Hapus rekapan {activeKey}</p>
+                          <p className="text-xs text-red-500/80">Hapus rekapan {activeKey}</p>
                         </div>
                       </button>
                     </div>
@@ -542,6 +543,9 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Catatan mingguan TKU untuk bulan arsip yang dipilih */}
+      <ArsipCatatanMingguan state={state} periode={activeKey} arsip={state.archives[activeKey]} />
 
       {/* Supabase Cloud Storage Info & Sync Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col min-w-0 h-full">
@@ -559,12 +563,12 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                 Database Cloud
               </h2>
               {hasSupabase ? (
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300">
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                   {syncStatus === 'syncing' ? 'Menyinkronkan...' : 'Terhubung'}
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300">
+                <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300">
                   Belum Terhubung
                 </span>
               )}
@@ -591,10 +595,10 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
             <span>Periode Arsip</span>
             <Calendar className="w-4 h-4 text-blue-500 shrink-0" />
           </div>
-          <div className="text-lg sm:text-xl break-words leading-tight font-bold text-neutral-900 dark:text-neutral-100">
+          <div className="text-lg sm:text-xl lg:text-2xl break-words leading-tight font-bold text-neutral-900 dark:text-neutral-100">
             {totalMonths} Bulan <span className="text-xs font-semibold text-neutral-500">({selectedYear})</span>
           </div>
-          <div className="text-[11px] text-neutral-500 mt-auto pt-0.5 break-words">
+          <div className="text-xs text-neutral-500 mt-auto pt-0.5 break-words">
             {yearKeysAsc.length > 0
               ? `${(state.archives[yearKeysAsc[0]]?.namaBulan || yearKeysAsc[0]).replace(/\s*\d{4}$/, '')} – ${state.archives[yearKeysAsc[yearKeysAsc.length - 1]]?.namaBulan || yearKeysAsc[yearKeysAsc.length - 1]}`
               : '—'}
@@ -606,10 +610,10 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
             <span>Total Botol Terarsip</span>
             <Layers className="w-4 h-4 text-brand-500 shrink-0" />
           </div>
-          <div className="text-lg sm:text-xl break-words leading-tight font-bold text-neutral-900 dark:text-neutral-100 font-mono">
+          <div className="text-lg sm:text-xl lg:text-2xl break-words leading-tight font-bold text-neutral-900 dark:text-neutral-100 font-mono">
             {formatNumber(grandTotalBottles)}
           </div>
-          <div className="text-[11px] text-neutral-500 mt-auto pt-0.5 break-words">
+          <div className="text-xs text-neutral-500 mt-auto pt-0.5 break-words">
             Botol seluruh cabang
           </div>
         </div>
@@ -619,10 +623,10 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
             <span>Rata-rata / Hari</span>
             <TrendingUp className="w-4 h-4 text-emerald-500 shrink-0" />
           </div>
-          <div className="text-lg sm:text-xl break-words leading-tight font-bold text-neutral-900 dark:text-neutral-100 font-mono">
+          <div className="text-lg sm:text-xl lg:text-2xl break-words leading-tight font-bold text-neutral-900 dark:text-neutral-100 font-mono">
             {formatDecimal(avgBottlesPerDay)}
           </div>
-          <div className="text-[11px] text-neutral-500 mt-auto pt-0.5 break-words">
+          <div className="text-xs text-neutral-500 mt-auto pt-0.5 break-words">
             {formatNumber(grandTotalBottles)} btl ÷ {totalDaysArchived} hari
           </div>
         </div>
@@ -635,7 +639,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
           <div className="text-sm font-bold text-neutral-900 dark:text-neutral-100 truncate">
             {bestMonth ? bestMonth.namaBulan : '—'}
           </div>
-          <div className="text-[11px] text-neutral-500 mt-0.5 font-mono">
+          <div className="text-xs text-neutral-500 mt-0.5 font-mono">
             {bestMonth ? `${formatNumber(bestMonth.total)} btl` : '—'}
           </div>
         </div>
@@ -716,7 +720,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                     }`}
                   >
                     <span>Tahun {yr}</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                    <span className={`text-xs px-1.5 py-0.2 rounded-full font-mono ${
                       isYrActive ? 'bg-brand-700 text-white' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
                     }`}>
                       {countInYr}
@@ -730,10 +734,10 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
           {/* Level 2: Pilih Bulan */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
+              <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
                 Pilih Bulan ({selectedYear}):
               </span>
-              <span className="text-[11px] text-neutral-500">
+              <span className="text-xs text-neutral-500">
                 {filteredArchiveKeysDesc.length} Bulan Tersedia
               </span>
             </div>
@@ -755,7 +759,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                       }`}
                     >
                       <span className="font-bold">{arc?.namaBulan || k}</span>
-                      <span className={`text-[10px] font-mono ${isSelected ? 'text-brand-100' : 'text-neutral-500'}`}>
+                      <span className={`text-xs font-mono ${isSelected ? 'text-brand-100' : 'text-neutral-500'}`}>
                         {formatNumber(totalBtl)} btl
                       </span>
                     </button>
@@ -767,7 +771,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                 <p className="text-xs text-neutral-600 dark:text-neutral-400 font-medium">
                   Belum ada data arsip untuk tahun {selectedYear}.
                 </p>
-                <p className="text-[11px] text-neutral-500 mt-1">
+                <p className="text-xs text-neutral-500 mt-1">
                   Data dapat diisikan nanti dari file Excel (Oktober, November, Desember 2025).
                 </p>
               </div>
@@ -790,7 +794,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
               <div className="text-lg font-bold text-neutral-900 dark:text-neutral-100 font-mono break-words leading-tight">
                 {formatNumber(activeStats.totalSold)} <span className="text-xs font-normal text-neutral-500">btl</span>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-[11px] text-neutral-500 mt-auto border-t border-neutral-100 dark:border-neutral-800 pt-1">
+              <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-xs text-neutral-500 mt-auto border-t border-neutral-100 dark:border-neutral-800 pt-1">
                 <span>Rata: <b className="text-neutral-800 dark:text-neutral-200 font-mono">{formatDecimal(activeStats.avgDailySold)}</b>/hr</span>
                 <span className={`font-bold ${activeStats.vsTargetPct >= 1 ? 'text-emerald-600' : 'text-amber-600'}`}>
                   {formatPercent(activeStats.vsTargetPct)} Tgt
@@ -807,7 +811,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
               <div className="text-lg font-bold text-neutral-900 dark:text-neutral-100 font-mono break-words leading-tight">
                 {formatNumber(activeStats.totalBb)} <span className="text-xs font-normal text-neutral-500">btl</span>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-[11px] text-neutral-500 mt-auto border-t border-neutral-100 dark:border-neutral-800 pt-1">
+              <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-xs text-neutral-500 mt-auto border-t border-neutral-100 dark:border-neutral-800 pt-1">
                 <span>Rasio Retur:</span>
                 <span className="font-bold text-sky-600 dark:text-sky-400 font-mono">
                   {formatPercent(activeStats.bbPct)}
@@ -824,7 +828,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
               <div className="text-lg font-bold text-neutral-900 dark:text-neutral-100 font-mono break-words leading-tight">
                 {activeStats.avgSyl} <span className="text-xs font-normal text-neutral-500">btl</span>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-[11px] text-neutral-500 mt-auto border-t border-neutral-100 dark:border-neutral-800 pt-1">
+              <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-xs text-neutral-500 mt-auto border-t border-neutral-100 dark:border-neutral-800 pt-1">
                 <span>Akm JWP:</span>
                 <span className="font-bold text-neutral-800 dark:text-neutral-200 font-mono">
                   {formatNumber(activeStats.totalJwp)}
@@ -841,7 +845,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
               <div className="text-lg font-bold text-neutral-900 dark:text-neutral-100 font-mono break-words leading-tight">
                 {formatPercent(activeStats.coveragePct)} <span className="text-xs font-normal text-neutral-500">Cover</span>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-[11px] text-neutral-500 mt-auto border-t border-neutral-100 dark:border-neutral-800 pt-1">
+              <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-xs text-neutral-500 mt-auto border-t border-neutral-100 dark:border-neutral-800 pt-1">
                 <span>{activeStats.totalYl}/{activeStats.totalArea} YL Area</span>
                 <span className="text-red-600 dark:text-red-400 font-semibold">
                   Absen: {activeStats.totalAbsen} (Frek {activeStats.totalFrek})
@@ -932,7 +936,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                           {row.nama}
                         </td>
                         <td className="py-3 px-2 font-sans">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${
                             row.rayon === 1 ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700'
                           }`}>
                             R{row.rayon}
@@ -1004,7 +1008,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                           {row.nama}
                         </td>
                         <td className="py-3 px-3 font-sans">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${
                             row.rayon === 1 ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700'
                           }`}>
                             Rayon {row.rayon}
@@ -1115,7 +1119,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                           {row.nama}
                         </td>
                         <td className="py-3 px-3 font-sans">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${
                             row.rayon === 1 ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700'
                           }`}>
                             Rayon {row.rayon}
@@ -1248,7 +1252,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                       <th className="py-2.5 px-3 text-right font-bold">% Cover</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono text-[11px]">
+                  <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono text-xs">
                     {activeArchive.rows.map((row, idx) => (
                       <tr key={idx} className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors">
                         <td className="py-2.5 px-3 font-sans font-semibold text-neutral-900 dark:text-neutral-100 sticky left-0 bg-white dark:bg-neutral-900 z-10 border-r border-neutral-100 dark:border-neutral-800">
@@ -1330,7 +1334,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
               <span>Vs Target &amp; Tahun Lalu — Cabang</span>
               <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300">{selectedYear}</span>
             </h2>
-            <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
               Rata penjualan per hari seluruh cabang dibanding target dan tahun lalu, tiap bulan dan rata-rata setahun.
             </p>
           </div>
@@ -1386,7 +1390,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
             <h2 className="text-base font-bold text-neutral-900 dark:text-neutral-100">
               Grafik Perbandingan {selectedYear}
             </h2>
-            <span className="text-[11px] text-neutral-500">
+            <span className="text-xs text-neutral-500">
               {branchMonths[0].short} – {branchMonths[branchMonths.length - 1].short} · tap grafik untuk lihat nilai bulan
             </span>
           </div>

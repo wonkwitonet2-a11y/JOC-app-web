@@ -249,7 +249,7 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
     <div className="space-y-6">
       {/* Top Banner */}
       <div className="p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
-        <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
+        <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
           Pengaturan
         </h1>
       </div>
@@ -344,7 +344,7 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
             {cloudResult && (
               cloudResult.ok ? (
                 <div className="space-y-1.5">
-                  <p className="text-[11px] text-neutral-500">
+                  <p className="text-xs text-neutral-500">
                     Terakhir diperbarui di Supabase: {cloudResult.mainUpdatedAt ? new Date(cloudResult.mainUpdatedAt).toLocaleString('id-ID') : '-'}
                     {cloudResult.activePeriod ? ` · bulan kerja di cloud: ${periodLabelOf(cloudResult.activePeriod.slice(0, 7))}` : ''}
                   </p>
@@ -447,18 +447,18 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
           </div>
           <div className="flex items-center gap-2">
             {isLocked && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                 <Lock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                 Terkunci (Aman)
               </span>
             )}
             {state.supabaseConfig.u && state.supabaseConfig.k ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 Terkoneksi Cloud
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
                 Mode Offline Lokal
               </span>
             )}
@@ -478,7 +478,7 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
               </div>
               <div>
                 <p className="text-xs font-bold text-amber-900 dark:text-amber-200">Kredensial Supabase Terkunci</p>
-                <p className="text-[11px] text-amber-700 dark:text-amber-400">URL & API Key dilindungi PIN Admin agar tidak terlihat sembarangan atau diubah tanpa izin.</p>
+                <p className="text-xs text-amber-700 dark:text-amber-400">URL & API Key dilindungi PIN Admin agar tidak terlihat sembarangan atau diubah tanpa izin.</p>
               </div>
             </div>
             <button
@@ -726,7 +726,7 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
           </summary>
           <div className="mt-2.5 space-y-2 text-neutral-600 dark:text-neutral-400">
             <p>Jalankan query SQL berikut di menu <strong>SQL Editor</strong> di dashboard Supabase Anda:</p>
-            <pre className="p-2.5 rounded-lg bg-neutral-900 text-neutral-100 font-mono text-[11px] overflow-x-auto select-all">
+            <pre className="p-2.5 rounded-lg bg-neutral-900 text-neutral-100 font-mono text-xs overflow-x-auto select-all">
 {`create table if not exists app_store (
   key text primary key,
   value jsonb,

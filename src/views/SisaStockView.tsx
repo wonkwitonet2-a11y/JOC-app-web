@@ -158,22 +158,22 @@ const StockEditor: React.FC<{
 
       <div className="p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] uppercase font-bold tracking-wider text-neutral-400">Sisa stock</p>
+          <p className="text-xs uppercase font-bold tracking-wider text-neutral-400">Sisa stock</p>
           <h2 className="text-base font-bold text-neutral-900 dark:text-neutral-100 truncate">{tkuName}</h2>
-          <p className="text-[11px] text-neutral-500 flex items-center gap-1 mt-0.5">
+          <p className="text-xs text-neutral-500 flex items-center gap-1 mt-0.5">
             <Clock className="w-3 h-3 shrink-0" />
             Terakhir diperbarui: {formatUpdatedAt(saved?.updatedAt || '')}
           </p>
         </div>
         <div className="text-left sm:text-right">
-          <p className="text-[10px] uppercase font-bold tracking-wider text-neutral-400">Total isian</p>
-          <p className="text-2xl font-mono font-bold tabular-nums text-neutral-900 dark:text-neutral-100">
+          <p className="text-xs uppercase font-bold tracking-wider text-neutral-400">Total isian</p>
+          <p className="text-lg sm:text-xl lg:text-2xl font-mono font-bold tabular-nums text-neutral-900 dark:text-neutral-100">
             {formatNumber(grandTotal)} <span className="text-xs font-semibold text-neutral-500">botol</span>
           </p>
         </div>
       </div>
 
-      <div className="flex items-start gap-2 p-3 rounded-xl bg-brand-50 dark:bg-brand-950/30 border border-brand-100 dark:border-brand-900 text-[11px] text-brand-800 dark:text-brand-200 leading-relaxed">
+      <div className="flex items-start gap-2 p-3 rounded-xl bg-brand-50 dark:bg-brand-950/30 border border-brand-100 dark:border-brand-900 text-xs text-brand-800 dark:text-brand-200 leading-relaxed">
         <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
         <span>
           Isi sesuai kondisi stok terkini. Saat disimpan, data lama <b>diganti</b> dengan isian ini (tidak dijumlahkan).
@@ -200,7 +200,7 @@ const StockEditor: React.FC<{
             </div>
 
             <div className="space-y-2">
-              <div className="grid grid-cols-[1fr_96px_36px] gap-2 px-0.5 text-[10px] uppercase font-bold tracking-wider text-neutral-400">
+              <div className="grid grid-cols-[1fr_96px_36px] gap-2 px-0.5 text-xs uppercase font-bold tracking-wider text-neutral-400">
                 <span>Tanggal exp</span>
                 <span>Jumlah</span>
                 <span />
@@ -237,7 +237,7 @@ const StockEditor: React.FC<{
                       </button>
                     </div>
                     {lv && (
-                      <span className={`inline-block px-2 py-0.5 rounded-md border text-[10px] font-semibold ${LEVEL_CLASS[lv]}`}>
+                      <span className={`inline-block px-2 py-0.5 rounded-md border text-xs font-semibold ${LEVEL_CLASS[lv]}`}>
                         {lv === 'expired' ? 'Kedaluwarsa' : lv === 'warn' ? 'Hampir exp' : 'Aman'} · {expLabel(r.exp, today)}
                       </span>
                     )}
@@ -295,12 +295,12 @@ const BatchChips: React.FC<{ rec: SisaStockRecord | undefined; today: string }> 
         const badge = groupBadge(g.code);
         return (
           <div key={g.code} className="flex items-start gap-2">
-            <span className={`mt-0.5 px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0 ${badge.bg} ${badge.text}`}>{g.code}</span>
+            <span className={`mt-0.5 px-2 py-0.5 rounded-md text-xs font-bold shrink-0 ${badge.bg} ${badge.text}`}>{g.code}</span>
             <div className="flex flex-wrap gap-1.5">
               {list.map(b => (
                 <span
                   key={b.exp}
-                  className={`px-2 py-0.5 rounded-md border text-[11px] font-mono font-semibold ${LEVEL_CLASS[expLevel(b.exp, today)]}`}
+                  className={`px-2 py-0.5 rounded-md border text-xs font-mono font-semibold ${LEVEL_CLASS[expLevel(b.exp, today)]}`}
                 >
                   {formatExpShort(b.exp)}: {formatNumber(b.qty)}
                 </span>
@@ -401,28 +401,28 @@ export const SisaStockView: React.FC<SisaStockViewProps> = ({ state, mode, onSav
     <div className="space-y-4 animate-in fade-in duration-200">
       <div className="grid grid-cols-3 gap-3">
         <div className="p-3.5 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xs">
-          <p className="text-[10px] uppercase font-bold tracking-wider text-neutral-400">Total Sisa Stock</p>
-          <p className="mt-1 text-xl font-mono font-bold tabular-nums text-neutral-900 dark:text-neutral-100">{formatNumber(grand)}</p>
-          <p className="text-[10px] text-neutral-500">botol, seluruh TKU</p>
+          <p className="text-xs uppercase font-bold tracking-wider text-neutral-400">Total Sisa Stock</p>
+          <p className="mt-1 text-lg sm:text-xl lg:text-2xl font-mono font-bold tabular-nums text-neutral-900 dark:text-neutral-100">{formatNumber(grand)}</p>
+          <p className="text-xs text-neutral-500">botol, seluruh TKU</p>
         </div>
         <div className="p-3.5 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xs">
-          <p className="text-[10px] uppercase font-bold tracking-wider text-neutral-400">Sudah Kedaluwarsa</p>
-          <p className={`mt-1 text-xl font-mono font-bold tabular-nums ${sumExpired > 0 ? 'text-red-600 dark:text-red-400' : 'text-neutral-900 dark:text-neutral-100'}`}>
+          <p className="text-xs uppercase font-bold tracking-wider text-neutral-400">Sudah Kedaluwarsa</p>
+          <p className={`mt-1 text-lg sm:text-xl lg:text-2xl font-mono font-bold tabular-nums ${sumExpired > 0 ? 'text-red-600 dark:text-red-400' : 'text-neutral-900 dark:text-neutral-100'}`}>
             {formatNumber(sumExpired)}
           </p>
-          <p className="text-[10px] text-neutral-500">botol lewat exp</p>
+          <p className="text-xs text-neutral-500">botol lewat exp</p>
         </div>
         <div className="p-3.5 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xs">
-          <p className="text-[10px] uppercase font-bold tracking-wider text-neutral-400">Belum Diisi</p>
-          <p className={`mt-1 text-xl font-mono font-bold tabular-nums ${belumIsi > 0 ? 'text-red-600 dark:text-red-400' : 'text-neutral-900 dark:text-neutral-100'}`}>
+          <p className="text-xs uppercase font-bold tracking-wider text-neutral-400">Belum Diisi</p>
+          <p className={`mt-1 text-lg sm:text-xl lg:text-2xl font-mono font-bold tabular-nums ${belumIsi > 0 ? 'text-red-600 dark:text-red-400' : 'text-neutral-900 dark:text-neutral-100'}`}>
             {belumIsi}
           </p>
-          <p className="text-[10px] text-neutral-500">dari {rows.length} TKU</p>
+          <p className="text-xs text-neutral-500">dari {rows.length} TKU</p>
         </div>
       </div>
 
       <div className="p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xs space-y-3">
-        <p className="text-[10px] uppercase font-bold tracking-wider text-neutral-400">Exp Terdekat per Varian &amp; TKU yang Memegangnya</p>
+        <p className="text-xs uppercase font-bold tracking-wider text-neutral-400">Exp Terdekat per Varian &amp; TKU yang Memegangnya</p>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 items-start">
           {nearestPerGroup.map(({ g, exp, qty, holders }) => {
             const badge = groupBadge(g.code);
@@ -432,12 +432,12 @@ export const SisaStockView: React.FC<SisaStockViewProps> = ({ state, mode, onSav
                 key={g.code}
                 className={`p-2.5 rounded-xl border ${lv ? LEVEL_CLASS[lv] : 'border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/40 text-neutral-400'}`}
               >
-                <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${badge.bg} ${badge.text}`}>{g.code}</span>
+                <span className={`px-1.5 py-0.5 rounded-md text-xs font-bold ${badge.bg} ${badge.text}`}>{g.code}</span>
                 {exp ? (
                   <>
                     <p className="mt-1.5 text-xs font-mono font-bold">{formatExpShort(exp)}</p>
-                    <p className="text-[10px] font-semibold opacity-80">{expLabel(exp, today)}</p>
-                    <p className="text-[10px] opacity-80">{formatNumber(qty)} botol</p>
+                    <p className="text-xs font-semibold opacity-80">{expLabel(exp, today)}</p>
+                    <p className="text-xs opacity-80">{formatNumber(qty)} botol</p>
                     <div className="mt-2 pt-2 border-t border-current/20 space-y-1">
                       {holders.map(h => (
                         <button
@@ -445,7 +445,7 @@ export const SisaStockView: React.FC<SisaStockViewProps> = ({ state, mode, onSav
                           type="button"
                           onClick={() => setEditId(h.id)}
                           title={`Buka stok ${h.nama}`}
-                          className="w-full flex items-center justify-between gap-1 text-left text-[10px] font-semibold hover:underline cursor-pointer"
+                          className="w-full flex items-center justify-between gap-1 text-left text-xs font-semibold hover:underline cursor-pointer"
                         >
                           <span className="truncate">{h.nama}</span>
                           <span className="font-mono tabular-nums shrink-0">{formatNumber(h.qty)}</span>
@@ -471,7 +471,7 @@ export const SisaStockView: React.FC<SisaStockViewProps> = ({ state, mode, onSav
         <div className="overflow-x-auto">
           <table className="w-full text-xs min-w-[720px]">
             <thead>
-              <tr className="bg-neutral-50 dark:bg-neutral-800/50 text-[10px] uppercase tracking-wider text-neutral-500">
+              <tr className="bg-neutral-50 dark:bg-neutral-800/50 text-xs uppercase tracking-wider text-neutral-500">
                 <th className="sticky left-0 z-10 bg-neutral-50 dark:bg-neutral-800 px-3 py-2 text-left font-bold">TKU</th>
                 {STOCK_GROUPS.map(g => (
                   <th key={g.code} className="px-2 py-2 text-right font-bold">{g.code}</th>
@@ -498,7 +498,7 @@ export const SisaStockView: React.FC<SisaStockViewProps> = ({ state, mode, onSav
                         >
                           <ChevronDown className={`w-3.5 h-3.5 text-neutral-400 transition-transform ${open ? 'rotate-180' : ''}`} />
                           <span className="whitespace-nowrap">{t.nama}</span>
-                          <span className="text-[10px] text-neutral-400">R{t.rayon}</span>
+                          <span className="text-xs text-neutral-400">R{t.rayon}</span>
                         </button>
                       </td>
                       {STOCK_GROUPS.map(g => (
@@ -511,7 +511,7 @@ export const SisaStockView: React.FC<SisaStockViewProps> = ({ state, mode, onSav
                       </td>
                       <td className="px-3 py-2.5">
                         {near && lv ? (
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-semibold whitespace-nowrap ${LEVEL_CLASS[lv]}`}>
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-xs font-semibold whitespace-nowrap ${LEVEL_CLASS[lv]}`}>
                             {lv === 'expired' && <AlertTriangle className="w-3 h-3" />}
                             {formatExpShort(near.exp)} ({near.group})
                           </span>
@@ -519,7 +519,7 @@ export const SisaStockView: React.FC<SisaStockViewProps> = ({ state, mode, onSav
                           <span className="text-neutral-400">-</span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 text-[11px] text-neutral-500 whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-xs text-neutral-500 whitespace-nowrap">
                         {rec?.updatedAt ? formatUpdatedAt(rec.updatedAt) : <span className="text-red-600 dark:text-red-400 font-semibold">Belum diisi</span>}
                       </td>
                       <td className="px-2 py-2.5">
@@ -560,7 +560,7 @@ export const SisaStockView: React.FC<SisaStockViewProps> = ({ state, mode, onSav
         </div>
       </div>
 
-      <p className="text-[11px] text-neutral-500 px-1">
+      <p className="text-xs text-neutral-500 px-1">
         Ketuk nama TKU untuk melihat rincian tanggal exp, atau ikon pensil untuk memperbarui stoknya.
       </p>
     </div>

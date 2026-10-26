@@ -100,6 +100,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const tyDiff = totalSold - tySum * divider;
   const tyPct = avgPerDay / (tySum || 1);
+  // Sisa Tgt / Sisa Bln Lalu / Sisa Th Lalu = rata-rata penjualan per hari yang harus dicapai ke depan agar akumulasi akhir bulan
+  // sama dengan pembanding (target / bulan lalu / tahun lalu). Sisa hari kerja tidak menghitung Minggu
+  // (cara yang sama dengan layar Evaluasi). Libur nasional tidak diketahui sistem.
+  let workLeft = 0;
+  for (let d = Math.min(divider, MD) + 1; d <= MD; d++) {
+    if (new Date(period.year, period.monthIndex, d).getDay() !== 0) workLeft++;
+  }
+  const needPerDay = (perDay: number) => {
+    const sisa = perDay * MD - totalSold;
+    if (perDay <= 0) return { text: '-', done: false };
+    if (sisa <= 0) return { text: 'Tercapai', done: true };
+    if (workLeft <= 0) return { text: '-', done: false };
+    return { text: formatNumber(Math.ceil(sisa / workLeft)), done: false };
+  };
+  const needTarget = needPerDay(totalTarget);
+  const needBl = needPerDay(blSum);
+  const needTy = needPerDay(tySum);
   const formatAkmDiffPair = (diff: number) =>
     `${formatDiff(diff)}/${formatDiff(Math.trunc(diff / Math.max(1, divider)))}`;
 
@@ -467,19 +484,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Top Bar with Segmented Rayon Controls & Pemilih Akun */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
+      <div className="flex flex-col @2xl:flex-row @2xl:items-center @2xl:justify-between gap-4 p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
+          <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
             Dashboard
           </h1>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+          <p className="text-xs text-neutral-700 dark:text-neutral-300 mt-0.5">
             {formatDateIndo(state.activeDate)} &bull; Cabang Jember
           </p>
           {/* Tanggal update = pembagi rata2 (JWP diisi manual TKU). Default: tanggal transaksi terakhir; admin bisa memilih tanggal lain. */}
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-neutral-50 dark:bg-neutral-800/90 border border-neutral-200 dark:border-neutral-700">
+            <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-1 max-w-full px-2.5 py-1.5 rounded-xl bg-neutral-50 dark:bg-neutral-800/90 border border-neutral-200 dark:border-neutral-700">
               <Calendar className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
-              <span className="text-neutral-600 dark:text-neutral-400 font-medium">Tgl update (pembagi rata2):</span>
+              <span className="text-neutral-700 dark:text-neutral-300 font-medium">Tgl update (pembagi rata2):</span>
               <input
                 type="date"
                 value={`${period.key}-${String(divider).padStart(2, '0')}`}
@@ -497,14 +514,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 className="font-mono font-bold text-neutral-900 dark:text-neutral-100 bg-transparent border-0 p-0 focus:ring-0 text-xs"
               />
             </span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${manualDivider ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' : 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'}`}>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${manualDivider ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' : 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'}`}>
               {manualDivider ? `Manual \u2022 ${divider} hari` : `Otomatis \u2022 ${divider} hari`}
             </span>
             {manualDivider && onSetPembagiManual && (
               <button
                 type="button"
                 onClick={() => onSetPembagiManual(null)}
-                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                className="px-2.5 py-1 rounded-lg text-xs font-semibold border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800"
               >
                 Kembali otomatis (tgl {autoDivider})
               </button>
@@ -526,7 +543,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
                   selectedRayon === r.id
                     ? 'bg-brand-600 text-white shadow-sm shadow-brand-600/20'
-                    : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
+                    : 'text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
                 }`}
               >
                 {r.label}
@@ -536,192 +553,205 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* KARTU TERPADU: PERFORMA PENJUALAN & KONDISI OPERASIONAL */}
+      {/* KARTU TERPADU: PERFORMA PENJUALAN & KONDISI OPERASIONAL (format sama dengan Ringkasan TKU) */}
       <div className="bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-sm p-5 md:p-6 space-y-6">
         {/* Header Kartu */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-neutral-100 dark:border-neutral-800">
           <div>
-            <h2 className="text-base md:text-lg leading-tight break-words font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+            <h2 className="text-base leading-tight break-words font-semibold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-brand-600 dark:text-brand-400" />
               <span>Rekap Penjualan &amp; Kondisi TKU</span>
             </h2>
           </div>
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <span className="text-xs px-2.5 py-1.5 rounded-xl font-semibold bg-brand-50 text-brand-700 dark:bg-brand-950/50 dark:text-brand-400 border border-brand-200/60 dark:border-brand-900/40">
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-brand-50 text-brand-700 dark:bg-brand-950/50 dark:text-brand-400 border border-brand-200/60 dark:border-brand-900/40">
               {selectedRayon === 0 ? 'Seluruh Cabang' : `Rayon ${selectedRayon}`}
+            </span>
+            <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
+              ÷ {divider} hari
             </span>
           </div>
         </div>
 
-        {/* Bagian 1: Realisasi */}
+        {/* Bagian 1: Performa Penjualan & Capaian Target */}
         <div>
-          <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 block mb-3">
-            1. Realisasi
+          <span className="text-xs font-bold uppercase tracking-wide text-neutral-700 dark:text-neutral-300 block mb-3">
+            1. Performa Penjualan &amp; Capaian Target
           </span>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          <div className="grid grid-cols-1 @lg:grid-cols-2 @4xl:grid-cols-4 gap-3.5">
             {/* 1.1 Akumulasi Penjualan */}
             <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/70 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full">
               <div>
-                <span className="text-xs font-medium text-neutral-500 block mb-1">Realisasi</span>
-                <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight break-words text-neutral-900 dark:text-neutral-100">
-                  {formatNumber(totalSold)} <span className="text-xs font-sans font-normal text-neutral-400">btl</span>
+                <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 block mb-1">Akumulasi Penjualan</span>
+                <div className="text-lg sm:text-xl lg:text-2xl font-bold font-mono tracking-tight break-words text-neutral-900 dark:text-neutral-100">
+                  {formatNumber(totalSold)} <span className="text-xs font-sans font-normal text-neutral-600 dark:text-neutral-300">btl</span>
                 </div>
               </div>
-              <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-                <span className="text-neutral-500">Rata2/hr</span>
-                <span className="font-mono font-bold text-brand-600 dark:text-brand-400">
-                  {formatDecimal(avgPerDay)} btl
-                </span>
+              <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs space-y-1">
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                  <span className="text-neutral-700 dark:text-neutral-300">Rata-rata / hari</span>
+                  <span className="font-mono font-bold text-brand-600 dark:text-brand-400">{formatDecimal(avgPerDay)} btl</span>
+                </div>
               </div>
             </div>
 
-            {/* 1.2 vs Target */}
+            {/* Capaian vs Target */}
             <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/70 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full">
               <div>
-                <div className="flex items-start justify-between gap-2 text-neutral-500 mb-1 min-w-0">
-                  <span className="text-xs font-medium">vs Target</span>
-                  <Target className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                <div className="flex items-start justify-between gap-2 text-neutral-700 dark:text-neutral-300 mb-1 min-w-0">
+                  <span className="text-xs font-semibold">Capaian vs Target</span>
+                  <Target className="w-4 h-4 text-neutral-600 dark:text-neutral-300 shrink-0" />
                 </div>
-                <div className={`text-xl sm:text-2xl font-bold font-mono tracking-tight break-words ${getStatusClass(targetDiff)}`}>
+                <div className={`text-lg sm:text-xl lg:text-2xl font-bold font-mono tracking-tight break-words ${getStatusClass(targetDiff)}`}>
                   {formatPercent(targetPct)}
                 </div>
               </div>
-              <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-                <span className="text-neutral-500">Target: {formatDecimal(totalTarget)}/hr</span>
-                <span className={`font-mono font-bold ${getStatusClass(targetDiff)}`}>
-                  {formatAkmDiffPair(targetDiff)}
-                </span>
+              <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs space-y-1">
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                  <span className="text-neutral-700 dark:text-neutral-300">Target: {formatDecimal(totalTarget)}/hr</span>
+                  <span className={`font-mono font-bold ${getStatusClass(targetDiff)}`}>
+                    {formatDiff(targetDiff)}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                  <span className="text-neutral-700 dark:text-neutral-300">Sisa Target/hr kerja</span>
+                  <span className="font-mono font-bold text-neutral-900 dark:text-neutral-100">{needTarget.text}</span>
+                </div>
               </div>
             </div>
 
-            {/* 1.3 vs Bulan Lalu */}
+            {/* vs Bulan Lalu (LM) */}
             <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/70 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full">
               <div>
-                <div className="flex items-start justify-between gap-2 text-neutral-500 mb-1 min-w-0">
-                  <span className="text-xs font-medium">vs Bln Lalu</span>
-                  <Calendar className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                <div className="flex items-start justify-between gap-2 text-neutral-700 dark:text-neutral-300 mb-1 min-w-0">
+                  <span className="text-xs font-semibold">vs Bulan Lalu (LM)</span>
+                  <Calendar className="w-4 h-4 text-neutral-600 dark:text-neutral-300 shrink-0" />
                 </div>
-                <div className={`text-xl sm:text-2xl font-bold font-mono tracking-tight break-words ${getStatusClass(blDiff)}`}>
+                <div className={`text-lg sm:text-xl lg:text-2xl font-bold font-mono tracking-tight break-words ${getStatusClass(blDiff)}`}>
                   {formatPercent(blPct)}
                 </div>
               </div>
-              <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-                <span className="text-neutral-500">LM: {formatNumber(blSum)}/hr</span>
-                <span className={`font-mono font-bold ${getStatusClass(blDiff)}`}>
-                  {formatAkmDiffPair(blDiff)}
-                </span>
+              <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs space-y-1">
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                  <span className="text-neutral-700 dark:text-neutral-300">LM: {formatNumber(blSum)}/hr</span>
+                  <span className={`font-mono font-bold ${getStatusClass(blDiff)}`}>
+                    {formatDiff(blDiff)}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                  <span className="text-neutral-700 dark:text-neutral-300">Sisa LM/hr kerja</span>
+                  <span className="font-mono font-bold text-neutral-900 dark:text-neutral-100">{needBl.text}</span>
+                </div>
               </div>
             </div>
 
-            {/* 1.4 vs Tahun Lalu */}
+            {/* vs Tahun Lalu (LY) */}
             <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/70 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full">
               <div>
-                <div className="flex items-start justify-between gap-2 text-neutral-500 mb-1 min-w-0">
-                  <span className="text-xs font-medium">vs Tahun Lalu</span>
-                  <Award className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                <div className="flex items-start justify-between gap-2 text-neutral-700 dark:text-neutral-300 mb-1 min-w-0">
+                  <span className="text-xs font-semibold">vs Tahun Lalu (LY)</span>
+                  <Award className="w-4 h-4 text-neutral-600 dark:text-neutral-300 shrink-0" />
                 </div>
-                <div className={`text-xl sm:text-2xl font-bold font-mono tracking-tight break-words ${getStatusClass(tyDiff)}`}>
+                <div className={`text-lg sm:text-xl lg:text-2xl font-bold font-mono tracking-tight break-words ${getStatusClass(tyDiff)}`}>
                   {formatPercent(tyPct)}
                 </div>
               </div>
-              <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-                <span className="text-neutral-500">LY: {formatNumber(tySum)}/hr</span>
-                <span className={`font-mono font-bold ${getStatusClass(tyDiff)}`}>
-                  {formatAkmDiffPair(tyDiff)}
-                </span>
+              <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs space-y-1">
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                  <span className="text-neutral-700 dark:text-neutral-300">LY: {formatNumber(tySum)}/hr</span>
+                  <span className={`font-mono font-bold ${getStatusClass(tyDiff)}`}>
+                    {formatDiff(tyDiff)}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                  <span className="text-neutral-700 dark:text-neutral-300">Sisa LY/hr kerja</span>
+                  <span className="font-mono font-bold text-neutral-900 dark:text-neutral-100">{needTy.text}</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Bagian 2: Kondisi TKU */}
+        {/* Bagian 2: Kondisi Operasional */}
         <div>
-          <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 block mb-3">
-            2. Kondisi TKU
+          <span className="text-xs font-bold uppercase tracking-wide text-neutral-700 dark:text-neutral-300 block mb-3">
+            2. Kondisi Operasional (Absensi, JWP, S/YL, PDM, YL &lt; 250, YL &lt; 300)
           </span>
-          <div className="grid gap-3 font-mono items-stretch" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(9.5rem, 1fr))' }}>
+          <div className="grid grid-cols-2 @xl:grid-cols-4 @6xl:grid-cols-8 gap-3 font-mono items-stretch">
             {/* 2.1 Jumlah YL */}
             <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-              <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 break-words">Jumlah YL</span>
-              <span className="text-base md:text-lg leading-tight break-words font-bold text-neutral-900 dark:text-neutral-100">
-                {totalYl} <span className="text-xs font-normal text-neutral-400 font-sans">/ {totalArea} area</span>
+              <span className="text-xs leading-tight font-sans text-neutral-700 dark:text-neutral-300 font-semibold block mb-1 break-words">Jumlah YL{vacantArea > 0 ? ` (${vacantArea} ksg)` : ''}</span>
+              <span className="text-sm md:text-base leading-tight break-words font-semibold text-neutral-900 dark:text-neutral-100">
+                {totalYl} <span className="text-xs font-normal text-neutral-600 dark:text-neutral-300 font-sans">/ {totalArea} area</span>
               </span>
-              <span className="text-[10px] text-neutral-400 block mt-auto pt-1 leading-snug font-sans break-words" title={`Cover: ${formatPercent(coverageAreaPct)} ${vacantArea > 0 ? `(${vacantArea} kosong)` : ''}`}>
-                Cover: {formatPercent(coverageAreaPct)} {vacantArea > 0 ? `(${vacantArea} ksg)` : ''}
-              </span>
-            </div>
-
-            {/* 2.2 Absen */}
-            <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-              <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 break-words">Absen</span>
-              <span className="text-base md:text-lg leading-tight break-words font-bold text-neutral-900 dark:text-neutral-100">
-                {totalAbsenSpreadsheet} <span className="text-xs font-normal text-neutral-400 font-sans">YL</span>
-              </span>
-              <span className="text-[10px] text-neutral-600 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans break-words">
-                Freq: <strong className="text-neutral-900 dark:text-neutral-100 font-mono font-bold">{totalFrekSpreadsheet}</strong>
+              <span className="text-xs text-neutral-700 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans break-words" title={`Cover: ${formatPercent(coverageAreaPct)} ${vacantArea > 0 ? `(${vacantArea} kosong)` : ''}`}>
+                Cover: {formatPercent(coverageAreaPct)}
               </span>
             </div>
-
-            {/* 2.3 JWP */}
+            {/* 2.2 Absensi */}
             <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-              <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 break-words">JWP</span>
-              <span className="text-base md:text-lg leading-tight break-words font-bold text-sky-600 dark:text-sky-400">
+              <span className="text-xs leading-tight font-sans text-neutral-700 dark:text-neutral-300 font-semibold block mb-1 break-words">Absensi</span>
+              <span className="text-sm md:text-base leading-tight break-words font-semibold text-neutral-900 dark:text-neutral-100">
+                {totalAbsenSpreadsheet} <span className="text-xs font-normal text-neutral-600 dark:text-neutral-300 font-sans">absen</span>
+              </span>
+              <span className="text-xs text-neutral-700 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans break-words">
+                Freq: <strong className="text-neutral-900 dark:text-neutral-100 font-mono font-bold">{totalFrekSpreadsheet}</strong> kali
+              </span>
+            </div>
+            {/* 2.3 Akumulasi JWP (dengan EWP di bawahnya) */}
+            <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
+              <span className="text-xs leading-tight font-sans text-neutral-700 dark:text-neutral-300 font-semibold block mb-1 break-words">Akumulasi JWP</span>
+              <span className="text-sm md:text-base leading-tight break-words font-semibold text-sky-600 dark:text-sky-400">
                 {formatNumber(totalJwpSpreadsheet)}
               </span>
-              <span className="text-[10px] text-neutral-600 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans break-words" title={`EWP: ${truncFixed(ewpPct, 1)}% ((${formatNumber(totalJwpSpreadsheet)} - ${totalFrekSpreadsheet}) ÷ ${formatNumber(totalJwpSpreadsheet)})`}>
+              <span className="text-xs text-neutral-700 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans break-words" title={`EWP: ${truncFixed(ewpPct, 1)}% ((${formatNumber(totalJwpSpreadsheet)} - ${totalFrekSpreadsheet}) ÷ ${formatNumber(totalJwpSpreadsheet)})`}>
                 EWP: <strong className="text-neutral-900 dark:text-neutral-100 font-mono font-bold">{truncFixed(ewpPct, 1)}%</strong>
               </span>
             </div>
-
-            {/* 2.4 s/YL (340: Akm Pjl / Akm JWP, 299 dihapus) */}
+            {/* 2.4 s/YL */}
             <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-              <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 break-words">s/YL</span>
-              <span className="text-base md:text-lg leading-tight break-words font-bold text-brand-600 dark:text-brand-400">
-                {sylVal > 0 ? formatNumber(sylVal) : '—'} <span className="text-xs font-normal text-neutral-400 font-sans">btl</span>
-              </span>
-              <span className="text-[10px] text-neutral-500 dark:text-neutral-400 block mt-auto pt-1 leading-snug font-sans break-words">
-                Akm Pjl &divide; Akm JWP
+              <span className="text-xs leading-tight font-sans text-neutral-700 dark:text-neutral-300 font-semibold block mb-1 break-words">s/YL</span>
+              <span className="text-sm md:text-base leading-tight break-words font-semibold text-brand-600 dark:text-brand-400">
+                {sylVal > 0 ? formatNumber(sylVal) : '—'} <span className="text-xs font-normal text-neutral-600 dark:text-neutral-300 font-sans">btl</span>
               </span>
             </div>
-
-            {/* 2.5 PDM */}
+            {/* 2.5 Akm PDM */}
             <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-              <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 break-words">PDM</span>
-              <span className="text-base md:text-lg leading-tight break-words font-bold text-indigo-600 dark:text-indigo-400">
-                {formatNumber(totalAkmPdm)} <span className="text-xs font-normal text-neutral-400 font-sans">btl</span>
+              <span className="text-xs leading-tight font-sans text-neutral-700 dark:text-neutral-300 font-semibold block mb-1 break-words">Akm PDM</span>
+              <span className="text-sm md:text-base leading-tight break-words font-semibold text-indigo-600 dark:text-indigo-400">
+                {formatNumber(totalAkmPdm)} <span className="text-xs font-normal text-neutral-600 dark:text-neutral-300 font-sans">btl</span>
               </span>
-              <span className="text-[10px] text-neutral-400 block mt-auto pt-1 leading-snug font-sans break-words">
-                Rata2: {formatDecimal(avgPdmPerDay)}/hr
+              <span className="text-xs text-neutral-700 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans break-words">
+                Rata: {formatDecimal(avgPdmPerDay)} btl/hr
               </span>
             </div>
-
-            {/* 2.6 BB */}
+            {/* 2.6 Akm BB */}
             <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-              <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 break-words">BB</span>
-              <span className="text-base md:text-lg leading-tight break-words font-bold text-neutral-900 dark:text-neutral-100">
-                {formatNumber(totalAkmBb)} <span className="text-xs font-normal text-neutral-400 font-sans">btl</span>
+              <span className="text-xs leading-tight font-sans text-neutral-700 dark:text-neutral-300 font-semibold block mb-1 break-words">Akm BB</span>
+              <span className="text-sm md:text-base leading-tight break-words font-semibold text-neutral-900 dark:text-neutral-100">
+                {formatNumber(totalAkmBb)} <span className="text-xs font-normal text-neutral-600 dark:text-neutral-300 font-sans">btl</span>
               </span>
-              <span className="text-[10px] text-neutral-400 block mt-auto pt-1 leading-snug font-sans break-words">
-                Rasio: <strong className={getBbStatusClass(bbPercent)}>{formatPercent(bbPercent)}</strong>
+              <span className="text-xs text-neutral-700 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans break-words">
+                % BB: <strong className={getBbStatusClass(bbPercent)}>{formatPercent(bbPercent)}</strong>
               </span>
             </div>
             {/* 2.7 YL < 250 */}
             <div className="p-3.5 rounded-2xl bg-red-50/60 dark:bg-red-950/30 border border-red-200/60 dark:border-red-900/40 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-              <span className="text-[11px] leading-tight font-sans text-red-700 dark:text-red-400 font-medium block mb-1 break-words">YL &lt; 250</span>
-              <span className="text-base md:text-lg leading-tight break-words font-bold text-red-700 dark:text-red-400">
+              <span className="text-xs leading-tight font-sans text-red-700 dark:text-red-400 font-semibold block mb-1 break-words">YL &lt; 250</span>
+              <span className="text-sm md:text-base leading-tight break-words font-semibold text-red-700 dark:text-red-400">
                 {totalL250} <span className="text-xs font-normal text-red-500 font-sans">YL</span>
               </span>
-              <span className="text-[10px] text-red-600 dark:text-red-400 block mt-auto pt-1 leading-snug font-sans break-words">
+              <span className="text-xs text-red-600 dark:text-red-400 block mt-auto pt-1 leading-snug font-sans break-words font-medium">
                 Rasio: {formatPercent(pctTotalL250)}
               </span>
             </div>
             {/* 2.8 YL < 300 */}
             <div className="p-3.5 rounded-2xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-              <span className="text-[11px] leading-tight font-sans text-amber-700 dark:text-amber-400 font-medium block mb-1 break-words">YL &lt; 300</span>
-              <span className="text-base md:text-lg leading-tight break-words font-bold text-amber-700 dark:text-amber-400">
+              <span className="text-xs leading-tight font-sans text-amber-700 dark:text-amber-400 font-semibold block mb-1 break-words">YL &lt; 300</span>
+              <span className="text-sm md:text-base leading-tight break-words font-semibold text-amber-700 dark:text-amber-400">
                 {totalL300} <span className="text-xs font-normal text-amber-500 font-sans">YL</span>
               </span>
-              <span className="text-[10px] text-amber-600 dark:text-amber-400 block mt-auto pt-1 leading-snug font-sans break-words">
+              <span className="text-xs text-amber-600 dark:text-amber-400 block mt-auto pt-1 leading-snug font-sans break-words font-medium">
                 Rasio: {formatPercent(pctTotalL300)}
               </span>
             </div>
@@ -732,7 +762,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Variant Composition Grid */}
       <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm overflow-hidden p-5">
         <div className="mb-4">
-          <h2 className="text-base font-bold text-neutral-900 dark:text-neutral-100">
+          <h2 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
             Komposisi Varian
           </h2>
         </div>
@@ -740,7 +770,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm border-collapse">
             <thead>
-              <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 text-xs bg-neutral-50 dark:bg-neutral-800/40">
+              <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 text-xs bg-neutral-50 dark:bg-neutral-800/40">
                 <th className="py-2.5 px-4 font-semibold">Varian Produk</th>
                 <th className="py-2.5 px-4 text-right font-semibold">Akumulasi</th>
                 <th className="py-2.5 px-4 text-right font-semibold" title={`Rata-rata dihitung dengan pembagi ${divider} hari (${dividerLabel})`}>
@@ -771,7 +801,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <td className="py-3 px-4 text-right font-semibold text-neutral-900 dark:text-neutral-100">
                       {formatNumber(val)}
                     </td>
-                    <td className="py-3 px-4 text-right text-neutral-600 dark:text-neutral-300">
+                    <td className="py-3 px-4 text-right text-neutral-700 dark:text-neutral-300">
                       {formatDecimal(avg)}
                     </td>
                     <td className="py-3 px-4 text-right font-semibold text-neutral-700 dark:text-neutral-300">
@@ -799,7 +829,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Grafik Tren Penjualan Harian & Balik Botol */}
       <div className="bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-sm p-4 sm:p-6 space-y-4 min-w-0">
         <div>
-          <h2 className="text-base font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+          <h2 className="text-base font-semibold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-brand-600 shrink-0" />
             <span>Tren Penjualan</span>
           </h2>
@@ -832,10 +862,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <h2 className="text-base font-bold text-neutral-900 dark:text-neutral-100">
+              <h2 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
                 Peringkat TKU
               </h2>
-              <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 font-semibold">
+              <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 font-semibold">
                 {rankedTkus.length} Unit
               </span>
             </div>
@@ -851,7 +881,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                     rekapTab === id
                       ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-sm'
-                      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                      : 'text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
                   }`}
                 >
                   {label}
@@ -866,7 +896,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                   rankingCriteria === 'gabungan'
                     ? 'bg-brand-600 text-white shadow-sm'
-                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                    : 'text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
                 }`}
               >
                 Gabungan
@@ -876,7 +906,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                   rankingCriteria === 'target'
                     ? 'bg-brand-600 text-white shadow-sm'
-                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                    : 'text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
                 }`}
               >
                 vs Target
@@ -886,7 +916,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                   rankingCriteria === 'bulanLalu'
                     ? 'bg-amber-600 text-white shadow-sm'
-                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                    : 'text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
                 }`}
               >
                 vs Bln Lalu
@@ -896,7 +926,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                   rankingCriteria === 'tahunLalu'
                     ? 'bg-sky-600 text-white shadow-sm'
-                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                    : 'text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
                 }`}
               >
                 vs Th Lalu
@@ -911,7 +941,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm border-collapse min-w-[950px]">
             <thead>
-              <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 text-xs bg-neutral-50 dark:bg-neutral-800/40">
+              <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 text-xs bg-neutral-50 dark:bg-neutral-800/40">
                 <th className="py-2.5 px-3 font-semibold w-10 text-center">#</th>
                 <th className="py-2.5 px-3 font-semibold">Nama TKU</th>
                 <th className="py-2.5 px-2 font-semibold">Rayon</th>
@@ -920,15 +950,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   Rata2/hr
                 </th>
                 <th className="py-2.5 px-3 text-right font-semibold text-amber-600 dark:text-amber-400 border-l border-neutral-200 dark:border-neutral-700">BB</th>
-                <th className="py-2.5 px-2.5 text-right font-semibold text-amber-600 dark:text-amber-400">% BB<div className="whitespace-nowrap text-[10px] font-normal text-neutral-400">poin</div></th>
+                <th className="py-2.5 px-2.5 text-right font-semibold text-amber-600 dark:text-amber-400">% BB<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">poin</div></th>
                 <th className="py-2.5 px-3 text-right font-semibold border-l border-neutral-200 dark:border-neutral-700">vs Target</th>
                 <th className="py-2.5 px-3 text-right font-semibold">vs LM</th>
                 <th className="py-2.5 px-3 text-right font-semibold">vs LY</th>
-                <th className="py-2.5 px-3 text-right font-semibold">Poin Penjualan<div className="whitespace-nowrap text-[10px] font-normal text-neutral-400">maks {TOTAL_HASIL}+ poin</div></th>
+                <th className="py-2.5 px-3 text-right font-semibold">Poin Penjualan<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">maks {TOTAL_HASIL}+ poin</div></th>
                 <th className="py-2.5 px-3 font-semibold w-28 text-left">Diagram Capaian</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono text-xs">
+            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono text-xs sm:text-sm">
               {rankedTkus.map((row, idx) => {
                 const isTop1 = idx === 0;
                 const isTop2 = idx === 1;
@@ -946,14 +976,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 return (
                   <tr key={row.t.id} className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors">
                     <td className="py-3 px-3 text-center">
-                      <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold ${
+                      <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
                         isTop1 
                           ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' 
                           : isTop2
                           ? 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
                           : isTop3
                           ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
-                          : 'text-neutral-500'
+                          : 'text-neutral-700 dark:text-neutral-300'
                       }`}>
                         {idx + 1}
                       </span>
@@ -963,7 +993,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       {row.t.nama}
                     </td>
 
-                    <td className="py-3 px-2 font-sans text-neutral-500">
+                    <td className="py-3 px-2 font-sans text-neutral-700 dark:text-neutral-300">
                       R{row.t.rayon}
                     </td>
 
@@ -971,7 +1001,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       {formatNumber(row.akm)}
                     </td>
 
-                    <td className="py-3 px-3 text-right text-neutral-600 dark:text-neutral-300">
+                    <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">
                       {formatDecimal(row.avg)}
                     </td>
 
@@ -981,7 +1011,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                     <td className={`py-3 px-2.5 text-right font-semibold ${getBbStatusClass(row.pctBb)}`}>
                       {formatPercent(row.pctBb)}
-                      <div className="whitespace-nowrap text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.bb.poin)} poin</div>
+                      <div className="whitespace-nowrap text-xs text-neutral-700 dark:text-neutral-300 font-normal">{fmtPoin(row.skor.kategori.bb.poin)} poin</div>
                     </td>
 
                     <td className={`py-3 px-3 text-right border-l border-neutral-200 dark:border-neutral-700 ${
@@ -990,10 +1020,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <div className={getStatusClass(row.diffTg)}>
                         {formatPercent(row.pctTg)}
                       </div>
-                      <div className="text-[10px] text-neutral-400 font-normal">
+                      <div className="text-xs text-neutral-700 dark:text-neutral-300 font-normal">
                         {formatAkmDiffPair(row.diffTg)}
                       </div>
-                      <div className="whitespace-nowrap text-[10px] text-brand-600 dark:text-brand-400 font-semibold">
+                      <div className="whitespace-nowrap text-xs text-brand-600 dark:text-brand-400 font-semibold">
                         {fmtPoin(row.skor.kategori.target.poin)} poin
                       </div>
                     </td>
@@ -1001,13 +1031,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <td className={`py-3 px-3 text-right ${
                       rankingCriteria === 'bulanLalu' ? 'bg-amber-50/40 dark:bg-amber-950/20 font-bold' : ''
                     }`}>
-                      <div className={getStatusClass(row.diffBl)}>
+                      <div className={getStatusClass(row.diffBl)}
+                      >
                         {formatPercent(row.pctBl)}
                       </div>
-                      <div className="text-[10px] text-neutral-400 font-normal">
+                      <div className="text-xs text-neutral-700 dark:text-neutral-300 font-normal">
                         {formatAkmDiffPair(row.diffBl)}
                       </div>
-                      <div className="whitespace-nowrap text-[10px] text-brand-600 dark:text-brand-400 font-semibold">
+                      <div className="whitespace-nowrap text-xs text-brand-600 dark:text-brand-400 font-semibold">
                         {fmtPoin(row.skor.kategori.mom.poin)} poin
                       </div>
                     </td>
@@ -1018,10 +1049,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <div className={getStatusClass(row.diffTy)}>
                         {formatPercent(row.pctTy)}
                       </div>
-                      <div className="text-[10px] text-neutral-400 font-normal">
+                      <div className="text-xs text-neutral-700 dark:text-neutral-300 font-normal">
                         {formatAkmDiffPair(row.diffTy)}
                       </div>
-                      <div className="whitespace-nowrap text-[10px] text-brand-600 dark:text-brand-400 font-semibold">
+                      <div className="whitespace-nowrap text-xs text-brand-600 dark:text-brand-400 font-semibold">
                         {fmtPoin(row.skor.kategori.yoy.poin)} poin
                       </div>
                     </td>
@@ -1032,7 +1063,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <div className={`font-bold ${getStatusClass(row.skor.skorHasil - TOTAL_HASIL)}`}>
                         {fmtPoin(row.skor.skorHasil)}
                       </div>
-                      <div className="text-[10px] text-neutral-400 font-normal font-sans">
+                      <div className="text-xs text-neutral-700 dark:text-neutral-300 font-normal font-sans">
                         LY + Target + LM
                       </div>
                     </td>
@@ -1044,7 +1075,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           style={{ width: `${barWidth}%` }}
                         />
                       </div>
-                      <div className="text-[10px] text-neutral-400 text-right mt-0.5">
+                      <div className="text-xs text-neutral-700 dark:text-neutral-300 text-right mt-0.5">
                         {rankingCriteria === 'gabungan' ? `${fmtPoin(activeBarPct)} poin` : formatPercent(activeBarPct)}
                       </div>
                     </td>
@@ -1073,7 +1104,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     return (a + b) > 0 ? b / (a + b) : 0;
                   })())}
                 </td>
-                <td colSpan={5} className="py-3 px-3 text-neutral-400 font-sans font-normal text-[11px] text-right">
+                <td colSpan={5} className="py-3 px-3 text-neutral-600 dark:text-neutral-300 font-sans font-normal text-xs text-right">
                   {rankedTkus.length} Unit TKU
                 </td>
               </tr>
@@ -1099,40 +1130,40 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             return (
               <table className="w-full text-left text-sm border-collapse min-w-[960px]">
                 <thead>
-                  <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 text-xs bg-neutral-50 dark:bg-neutral-800/40">
+                  <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 text-xs bg-neutral-50 dark:bg-neutral-800/40">
                     <th className="py-2.5 px-3 font-semibold w-10 text-center">#</th>
                     <th className="py-2.5 px-3 font-semibold">Nama TKU</th>
                     <th className="py-2.5 px-2 font-semibold">Rayon</th>
                     <th className={`py-2.5 px-3 text-right font-semibold ${bd}`}>Area</th>
                     <th className="py-2.5 px-3 text-right font-semibold">YL</th>
-                    <th className="py-2.5 px-3 text-right font-semibold">% Cover<div className="whitespace-nowrap text-[10px] font-normal text-neutral-400">poin maks {BOBOT.area}</div></th>
+                    <th className="py-2.5 px-3 text-right font-semibold">% Cover<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">poin maks {BOBOT.area}</div></th>
                     <th className={`py-2.5 px-3 text-right font-semibold text-sky-600 dark:text-sky-400 ${bd}`}>JWP</th>
-                    <th className="py-2.5 px-3 text-right font-semibold">s/YL<div className="whitespace-nowrap text-[10px] font-normal text-neutral-400">poin maks {BOBOT.syl}</div></th>
-                    <th className={`py-2.5 px-3 text-right font-semibold ${bd}`}>Absen<div className="whitespace-nowrap text-[10px] font-normal text-neutral-400">poin maks {BOBOT.absen}</div></th>
-                    <th className="py-2.5 px-3 text-right font-semibold">Frek (EWP)<div className="whitespace-nowrap text-[10px] font-normal text-neutral-400">poin maks {BOBOT.ewp}</div></th>
+                    <th className="py-2.5 px-3 text-right font-semibold">s/YL<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">poin maks {BOBOT.syl}</div></th>
+                    <th className={`py-2.5 px-3 text-right font-semibold ${bd}`}>Absen<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">poin maks {BOBOT.absen}</div></th>
+                    <th className="py-2.5 px-3 text-right font-semibold">Frek (EWP)<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">poin maks {BOBOT.ewp}</div></th>
                     <th className={`py-2.5 px-3 text-right font-semibold text-red-600 dark:text-red-400 ${bd}`}>&lt;250</th>
-                    <th className="py-2.5 px-3 text-right font-semibold text-red-600 dark:text-red-400">%&lt;250<div className="whitespace-nowrap text-[10px] font-normal text-neutral-400">poin maks {BOBOT.yl250}</div></th>
-                    <th className={`py-2.5 px-3 text-right font-semibold text-amber-600 dark:text-amber-400 ${bd}`}>&lt;300<div className="whitespace-nowrap text-[10px] font-normal text-neutral-400">poin maks {BOBOT.yl300}</div></th>
+                    <th className="py-2.5 px-3 text-right font-semibold text-red-600 dark:text-red-400">%&lt;250<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">poin maks {BOBOT.yl250}</div></th>
+                    <th className={`py-2.5 px-3 text-right font-semibold text-amber-600 dark:text-amber-400 ${bd}`}>&lt;300<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">poin maks {BOBOT.yl300}</div></th>
                     <th className="py-2.5 px-3 text-right font-semibold text-amber-600 dark:text-amber-400">%&lt;300</th>
-                    <th className={`py-2.5 px-3 text-right font-semibold text-brand-600 dark:text-brand-400 ${bd}`}>Skor Kondisi<div className="whitespace-nowrap text-[10px] font-normal text-neutral-400">maks {TOTAL_KONDISI} poin</div></th>
+                    <th className={`py-2.5 px-3 text-right font-semibold text-brand-600 dark:text-brand-400 ${bd}`}>Skor Kondisi<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">maks {TOTAL_KONDISI} poin</div></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono text-xs">
+                <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono text-xs sm:text-sm">
                   {kondisiRows.map((row, idx) => (
                     <tr key={row.t.id} className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors">
-                      <td className="py-3 px-3 text-center text-neutral-500">{idx + 1}</td>
+                      <td className="py-3 px-3 text-center text-neutral-700 dark:text-neutral-300">{idx + 1}</td>
                       <td className="py-3 px-3 font-sans font-semibold text-neutral-900 dark:text-neutral-100">{row.t.nama}</td>
-                      <td className="py-3 px-2 font-sans text-neutral-500">R{row.t.rayon}</td>
+                      <td className="py-3 px-2 font-sans text-neutral-700 dark:text-neutral-300">R{row.t.rayon}</td>
                       <td className={`py-3 px-3 text-right ${bd}`}>{row.area}</td>
                       <td className="py-3 px-3 text-right">{row.yl}</td>
-                      <td className={`py-3 px-3 text-right font-bold ${row.cover >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>{formatPercent(row.cover)}<div className="whitespace-nowrap text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.area.poin)} poin</div></td>
+                      <td className={`py-3 px-3 text-right font-bold ${row.cover >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>{formatPercent(row.cover)}<div className="whitespace-nowrap text-xs text-neutral-700 dark:text-neutral-300 font-normal">{fmtPoin(row.skor.kategori.area.poin)} poin</div></td>
                       <td className={`py-3 px-3 text-right text-sky-600 dark:text-sky-400 ${bd}`}>{formatNumber(row.jwp)}</td>
-                      <td className="py-3 px-3 text-right font-bold text-brand-600 dark:text-brand-400">{row.s_yl > 0 ? formatNumber(row.s_yl) : '—'}<div className="whitespace-nowrap text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.syl.poin)} poin</div></td>
-                      <td className={`py-3 px-3 text-right ${bd}`}>{row.abs > 0 ? <span className="font-bold text-red-600 dark:text-red-400">{row.abs}</span> : <span className="text-neutral-400">0</span>}<div className="whitespace-nowrap text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.absen.poin)} poin</div></td>
-                      <td className="py-3 px-3 text-right">{row.frk > 0 ? <span className="font-bold text-red-600 dark:text-red-400">{row.frk}</span> : <span className="text-neutral-400">0</span>}<div className="whitespace-nowrap text-[10px] text-neutral-400 font-normal">{row.skor.kategori.ewp.nilai !== null ? `${row.skor.kategori.ewp.nilai.toFixed(2).replace('.', ',')}% · ` : ''}{fmtPoin(row.skor.kategori.ewp.poin)} poin</div></td>
+                      <td className="py-3 px-3 text-right font-bold text-brand-600 dark:text-brand-400">{row.s_yl > 0 ? formatNumber(row.s_yl) : '—'}<div className="whitespace-nowrap text-xs text-neutral-700 dark:text-neutral-300 font-normal">{fmtPoin(row.skor.kategori.syl.poin)} poin</div></td>
+                      <td className={`py-3 px-3 text-right ${bd}`}>{row.abs > 0 ? <span className="font-bold text-red-600 dark:text-red-400">{row.abs}</span> : <span className="text-neutral-600 dark:text-neutral-300">0</span>}<div className="whitespace-nowrap text-xs text-neutral-700 dark:text-neutral-300 font-normal">{fmtPoin(row.skor.kategori.absen.poin)} poin</div></td>
+                      <td className="py-3 px-3 text-right">{row.frk > 0 ? <span className="font-bold text-red-600 dark:text-red-400">{row.frk}</span> : <span className="text-neutral-600 dark:text-neutral-300">0</span>}<div className="whitespace-nowrap text-xs text-neutral-700 dark:text-neutral-300 font-normal">{row.skor.kategori.ewp.nilai !== null ? `${row.skor.kategori.ewp.nilai.toFixed(2).replace('.', ',')}% · ` : ''}{fmtPoin(row.skor.kategori.ewp.poin)} poin</div></td>
                       <td className={`py-3 px-3 text-right text-red-600 dark:text-red-400 ${bd}`}>{row.l250}</td>
-                      <td className="py-3 px-3 text-right font-semibold text-red-600 dark:text-red-400">{formatPercent(row.pctL250)}<div className="whitespace-nowrap text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.yl250.poin)} poin</div></td>
-                      <td className={`py-3 px-3 text-right text-amber-600 dark:text-amber-400 ${bd}`}>{row.l300}<div className="whitespace-nowrap text-[10px] text-neutral-400 font-normal">{fmtPoin(row.skor.kategori.yl300.poin)} poin</div></td>
+                      <td className="py-3 px-3 text-right font-semibold text-red-600 dark:text-red-400">{formatPercent(row.pctL250)}<div className="whitespace-nowrap text-xs text-neutral-700 dark:text-neutral-300 font-normal">{fmtPoin(row.skor.kategori.yl250.poin)} poin</div></td>
+                      <td className={`py-3 px-3 text-right text-amber-600 dark:text-amber-400 ${bd}`}>{row.l300}<div className="whitespace-nowrap text-xs text-neutral-700 dark:text-neutral-300 font-normal">{fmtPoin(row.skor.kategori.yl300.poin)} poin</div></td>
                       <td className="py-3 px-3 text-right font-semibold text-amber-600 dark:text-amber-400">{formatPercent(row.pctL300)}</td>
                       <td className={`py-3 px-3 text-right font-bold text-brand-600 dark:text-brand-400 ${bd}`}>{fmtPoin(row.skor.skorKondisi)}</td>
                     </tr>

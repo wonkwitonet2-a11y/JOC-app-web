@@ -11,6 +11,7 @@ import {
   LayoutGrid,
   Building2,
   PackageSearch,
+  StickyNote,
   X
 } from 'lucide-react';
 
@@ -44,6 +45,7 @@ export const ADMIN_MENUS: MenuItem[] = [
   { id: "Penjualan Harian", label: "Penjualan Harian", short: "Harian", icon: CalendarCheck, group: "Pantau" },
   { id: "Evaluasi", label: "Evaluasi", short: "Evaluasi", icon: TrendingUp, group: "Pantau" },
   { id: "Breakdown & Realisasi", label: "Breakdown & Realisasi", short: "Bd & Real", icon: GitCompare, group: "Pantau" },
+  { id: "Kendala & Solusi", label: "Kendala & Solusi", short: "Kendala", icon: StickyNote, group: "Pantau" },
   { id: "Sisa Stock", label: "Sisa Stock", short: "Stock", icon: PackageSearch, group: "Pantau" },
   { id: "Target", label: "Target", short: "Target", icon: Target, group: "Kelola" },
   { id: "Profil TKU", label: "Profil TKU", short: "Profil", icon: Users, group: "Kelola" },
@@ -56,11 +58,12 @@ export const TKU_MENUS: MenuItem[] = [
   { id: "input", label: "Penjualan", short: "Penjualan", icon: CalendarCheck, group: "Menu Utama TKU" },
   { id: "breakdown", label: "Breakdown", short: "Breakdown", icon: Target, group: "Menu Utama TKU" },
   { id: "realisasi", label: "Realisasi", short: "Realisasi", icon: GitCompare, group: "Menu Utama TKU" },
+  { id: "kendala", label: "Kendala & Solusi", short: "Kendala", icon: StickyNote, group: "Menu Utama TKU" },
   { id: "stok", label: "Sisa Stock", short: "Stock", icon: PackageSearch, group: "Menu Utama TKU" },
 ];
 
-const ADMIN_BOTTOM_IDS = ["Dashboard", "Penjualan Harian", "Evaluasi", "Breakdown & Realisasi"];
-const TKU_BOTTOM_IDS = ["ringkasan", "input", "breakdown", "realisasi", "stok"];
+const ADMIN_BOTTOM_IDS = ["Dashboard", "Penjualan Harian", "Evaluasi", "Breakdown & Realisasi", "Kendala & Solusi"];
+const TKU_BOTTOM_IDS = ["ringkasan", "input", "breakdown", "realisasi", "kendala", "stok"];
 
 const NavList: React.FC<{
   menus: MenuItem[];
@@ -141,7 +144,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ) : (
               <>
                 <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 uppercase tracking-wider">Navigasi</span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 dark:bg-brand-950/50 dark:text-brand-400 font-semibold">{tkusCount} Unit</span>
+                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 dark:bg-brand-950/50 dark:text-brand-400 font-semibold">{tkusCount} Unit</span>
               </>
             )}
           </div>
@@ -153,7 +156,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className="flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold bg-neutral-100 hover:bg-brand-50 dark:bg-neutral-800 dark:hover:bg-brand-950/50 text-neutral-600 hover:text-brand-600 dark:text-neutral-300 dark:hover:text-brand-400 transition-colors border border-neutral-200 dark:border-neutral-700 shadow-2xs shrink-0"
           >
             <X className="w-3.5 h-3.5" />
-            <span className="text-[11px]">Tutup</span>
+            <span className="text-xs">Tutup</span>
           </button>
         </div>
 
@@ -185,7 +188,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur border-t border-neutral-200 dark:border-neutral-800"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        <div className={`grid grid-cols-5 h-16`}>
+        <div className="grid h-16" style={{ gridTemplateColumns: `repeat(${bottomIds.length + (isTku ? 0 : 1)}, minmax(0, 1fr))` }}>
           {bottomIds.map(id => {
             const item = menus.find(m => m.id === id);
             if (!item) return null;
@@ -196,7 +199,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 key={id}
                 onClick={() => onSelectMenu(id)}
                 aria-current={active ? 'page' : undefined}
-                className={`flex flex-col items-center justify-center gap-1 min-w-0 px-1 text-[11px] leading-none font-medium transition-colors ${
+                className={`flex flex-col items-center justify-center gap-1 min-w-0 px-1 text-xs leading-none font-medium transition-colors ${
                   active ? 'text-brand-600 dark:text-brand-400' : 'text-neutral-500 dark:text-neutral-400'
                 }`}
               >
@@ -211,7 +214,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {!isTku && (
             <button
               onClick={onOpenDrawer}
-              className={`flex flex-col items-center justify-center gap-1 min-w-0 px-1 text-[11px] leading-none font-medium transition-colors ${
+              className={`flex flex-col items-center justify-center gap-1 min-w-0 px-1 text-xs leading-none font-medium transition-colors ${
                 inMore ? 'text-brand-600 dark:text-brand-400' : 'text-neutral-500 dark:text-neutral-400'
               }`}
             >

@@ -24,7 +24,9 @@ export const SYNC_KEYS = [
   'targetPerVariant',
   'tkus',
   'archives',
-  'monthStore'
+  'monthStore',
+  'weeklyNotes',
+  'weeklyReplies'
 ] as const;
 
 export type SyncKey = typeof SYNC_KEYS[number];
@@ -42,7 +44,9 @@ const DEPTH: Record<Exclude<SyncKey, 'tkus'>, number> = {
   targetTahunLalu: 1,
   targetPerVariant: 2,
   archives: 1,
-  monthStore: 1
+  monthStore: 1,
+  weeklyNotes: 1, // kunci periode:tku:minggu -> satu catatan utuh
+  weeklyReplies: 1
 };
 
 export interface MergeStats {

@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { AppState, TkuItem, DailySalesRecord, SupabaseConfig, ArchiveRecord, ArchiveRow, SisaStockRecord, MonthSnapshot, TkuMonthlyFields } from '../types';
+import { AppState, TkuItem, DailySalesRecord, SupabaseConfig, ArchiveRecord, ArchiveRow, SisaStockRecord, MonthSnapshot, TkuMonthlyFields, WeeklyNote, WeeklyReply } from '../types';
 import {
   INITIAL_TKUS,
   INITIAL_TARGET_BL,
@@ -1627,12 +1627,26 @@ export function buildArchiveFromState(state: AppState): ArchiveRecord {
     };
   });
 
+  // Salin catatan Kendala & Solusi (+ tanggapan admin) bulan ini ke arsip, supaya tersimpan sesuai bulannya.
+  const catatanN: Record<string, WeeklyNote> = {};
+  const catatanR: Record<string, WeeklyReply> = {};
+  const prefix = `${currentKey}:`;
+  Object.keys(state.weeklyNotes || {}).forEach(k => {
+    if (!k.startsWith(prefix)) return;
+    const n = state.weeklyNotes![k];
+    if (!n || !((n.a || '').trim() || (n.s || '').trim() || (n.l || []).length)) return;
+    catatanN[k] = { ...n, l: [...(n.l || [])] };
+    const r = state.weeklyReplies?.[k];
+    if (r) catatanR[k] = { ...r };
+  });
+
   return {
     periode: currentKey,
     namaBulan: curP.label,
     d: curP.daysInMonth,
     terkunci: true,
-    rows
+    rows,
+    catatan: { n: catatanN, r: catatanR }
   };
 }
 
@@ -1746,6 +1760,8 @@ export function getDefaultState(): AppState {
     quotes: [...INITIAL_QUOTES],
     archives: { ...INITIAL_ARCHIVES },
     monthStore: {},
+    weeklyNotes: {},
+    weeklyReplies: {},
     activeArchiveKey: '2026-08',
     supabaseConfig: loadSupabaseConfigFromVault(),
     tkus: [...INITIAL_TKUS],
@@ -1864,6 +1880,8 @@ export function loadAppState(): AppState {
           activeTkuId: activeSession?.tkuId ?? defaultState.activeTkuId,
           theme: parsed.theme || defaultState.theme,
           monthStore: carriedStore,
+          weeklyNotes: { ...(parsed.weeklyNotes || {}) },
+          weeklyReplies: { ...(parsed.weeklyReplies || {}) },
           pjd: { ...defaultState.pjd, ...(parsed.pjd || {}) },
           hjd: { ...(defaultState.hjd || {}), ...(parsed.hjd || {}) },
           sisaStock: userStock,
@@ -2215,6 +2233,8 @@ export function saveAppState(state: AppState) {
         sisaStock: state.sisaStock,
         archives: state.archives,
         monthStore: state.monthStore,
+        weeklyNotes: state.weeklyNotes,
+        weeklyReplies: state.weeklyReplies,
         targetPerVariant: state.targetPerVariant,
         breakdown: state.breakdown,
         breakdownPerVariant: state.breakdownPerVariant

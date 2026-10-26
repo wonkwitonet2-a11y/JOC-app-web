@@ -67,7 +67,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
         <div className="bg-gradient-to-r from-brand-800 via-brand-900 to-brand-950 p-6 text-white text-center relative overflow-hidden">
           <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-white/10 rounded-full blur-xl pointer-events-none" />
           <img src={`${import.meta.env.BASE_URL}icon-putih.svg`} alt="Logo JOC" className="inline-block w-14 h-14 rounded-2xl shadow-md mb-3" />
-          <h1 className="text-xl font-bold tracking-tight">JOC</h1>
+          <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight">JOC</h1>
           <p className="text-xs text-brand-100 mt-1 font-medium">
             Jember Operation Center
           </p>
@@ -148,7 +148,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 <Database className="w-3.5 h-3.5 text-neutral-400" />
                 Penyimpanan Eksternal Supabase (Opsional)
               </span>
-              <span className="text-[11px] font-semibold">{showConfig ? 'Tutup' : 'Buka'}</span>
+              <span className="text-xs font-semibold">{showConfig ? 'Tutup' : 'Buka'}</span>
             </button>
 
             {showConfig && (
@@ -158,18 +158,18 @@ export const LoginView: React.FC<LoginViewProps> = ({
                     <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                     <div>
                       <p className="font-bold">Database Supabase Terkoneksi & Terkunci</p>
-                      <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
+                      <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
                         Kredensial database cloud telah dikunci oleh Admin untuk keamanan. Untuk mengubahnya, silakan masuk ke akun Admin &gt; Menu Pengaturan.
                       </p>
                     </div>
                   </div>
                 ) : (
                   <>
-                    <p className="text-[11px] text-neutral-500 dark:text-neutral-400 leading-normal">
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-normal">
                       Sistem bekerja offline/lokal secara otomatis. Jika memiliki database Supabase, Anda dapat menghubungkannya di sini.
                     </p>
                     <div>
-                      <label className="block text-[11px] text-neutral-600 dark:text-neutral-300 mb-1">
+                      <label className="block text-xs text-neutral-600 dark:text-neutral-300 mb-1">
                         Project URL
                       </label>
                       <input
@@ -181,7 +181,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] text-neutral-600 dark:text-neutral-300 mb-1">
+                      <label className="block text-xs text-neutral-600 dark:text-neutral-300 mb-1">
                         Anon Public Key
                       </label>
                       <input

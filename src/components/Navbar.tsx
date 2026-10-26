@@ -76,7 +76,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
 
           <div className="min-w-0 leading-tight">
-            <h1 className="text-[15px] font-bold text-neutral-900 dark:text-neutral-100 truncate">{title}</h1>
+            <h1 className="text-sm font-bold text-neutral-900 dark:text-neutral-100 truncate">{title}</h1>
             <p className="text-xs text-neutral-500 dark:text-neutral-400 truncate">{subtitle}</p>
           </div>
         </div>
@@ -148,7 +148,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       {(onSwitchToTku || onSwitchToAdmin) && (
         <div className="sm:hidden px-3 py-1.5 bg-neutral-50 dark:bg-neutral-950/60 border-t border-neutral-200/70 dark:border-neutral-800/70 flex items-center gap-2">
           <UserCheck className="w-3.5 h-3.5 text-brand-600 shrink-0" />
-          <span className="text-[11px] font-semibold text-neutral-500 shrink-0">Pilih:</span>
+          <span className="text-xs font-semibold text-neutral-500 shrink-0">Pilih:</span>
           <select
             value={currentSelectValue}
             onChange={(e) => handleSelectChange(e.target.value)}

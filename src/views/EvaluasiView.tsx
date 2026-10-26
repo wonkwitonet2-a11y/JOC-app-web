@@ -188,26 +188,26 @@ const RingkasanPrestasiPanel: React.FC<RingkasanPrestasiPanelProps> = ({
     <div
       key={c.id}
       onClick={() => handleCardClick(c)}
-      className={`p-1.5 sm:p-2 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xs flex flex-col justify-center gap-0.5 sm:gap-1 min-w-0 overflow-hidden cursor-pointer hover:border-brand-500/50 hover:shadow-xs transition-all group ${c.span2 && isCompact ? 'col-span-2' : ''}`}
+      className={`p-2 sm:p-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xs flex flex-col justify-center gap-1 min-w-0 overflow-hidden cursor-pointer hover:border-brand-500/50 hover:shadow-xs transition-all group ${c.span2 && isCompact ? 'col-span-2' : ''}`}
     >
       {/* Baris 1: Judul Kategori | Nilainya */}
-      <div className="flex items-center justify-between gap-1 leading-none">
-        <div className="flex items-center gap-1 min-w-0">
+      <div className="flex items-center justify-between gap-1 leading-tight">
+        <div className="flex items-center gap-1.5 min-w-0">
           <c.icon className={`w-3.5 h-3.5 ${c.iconColor} shrink-0`} />
-          <span className="text-[9.5px] sm:text-[10px] font-bold text-neutral-800 dark:text-neutral-200 truncate">
+          <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 truncate">
             {c.title}
           </span>
         </div>
-        <div className="flex items-center gap-0.5 shrink-0 font-mono text-[10px] sm:text-[10.5px]">
+        <div className="flex items-center gap-1 shrink-0 font-mono text-xs">
           <span className="text-neutral-300 dark:text-neutral-600 font-normal">|</span>
-          <span className={`font-black ${c.valColor}`}>{c.value}</span>
+          <span className={`font-bold ${c.valColor}`}>{c.value}</span>
         </div>
       </div>
 
-      {/* Baris 2: TKU tsb. (mepet ke atas ke garis pemisah, menumpuk jika panjang) */}
-      <div className="min-w-0 mt-0.5 pt-0.5 border-t border-neutral-100 dark:border-neutral-800/80">
+      {/* Baris 2: TKU tsb. */}
+      <div className="min-w-0 mt-0.5 pt-1 border-t border-neutral-100 dark:border-neutral-800/80">
         <span 
-          className="text-[9px] sm:text-[9.5px] font-bold text-neutral-600 dark:text-neutral-300 block leading-tight break-words group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors line-clamp-2" 
+          className="text-xs font-semibold text-neutral-600 dark:text-neutral-300 block leading-snug break-words group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors line-clamp-2" 
           title={c.shortNames}
         >
           {c.shortNames}
@@ -235,7 +235,7 @@ const RingkasanPrestasiPanel: React.FC<RingkasanPrestasiPanelProps> = ({
                   <h3 className="text-sm font-bold text-neutral-900 dark:text-white uppercase tracking-wider">
                     {modalDetail.title}
                   </h3>
-                  <p className="text-xs font-mono font-black text-brand-600 dark:text-brand-400">
+                  <p className="text-xs font-mono font-bold text-brand-600 dark:text-brand-400">
                     Capaian: {modalDetail.value}
                   </p>
                 </div>
@@ -249,7 +249,7 @@ const RingkasanPrestasiPanel: React.FC<RingkasanPrestasiPanelProps> = ({
             </div>
 
             <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
-              <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-tight block">
+              <span className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-tight block">
                 Unit TKU Terpilih ({modalDetail.namesList.length} Unit):
               </span>
               <div className="grid grid-cols-1 gap-1.5">
@@ -261,7 +261,7 @@ const RingkasanPrestasiPanel: React.FC<RingkasanPrestasiPanelProps> = ({
                     <span className="text-xs font-bold text-neutral-900 dark:text-neutral-100">
                       {nm}
                     </span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-brand-100 text-brand-800 dark:bg-brand-950 dark:text-brand-300 font-bold shrink-0">
+                    <span className="text-xs font-mono px-2 py-0.5 rounded bg-brand-100 text-brand-800 dark:bg-brand-950 dark:text-brand-300 font-bold shrink-0">
                       {abbreviateTkuName(nm)}
                     </span>
                   </div>
@@ -280,26 +280,26 @@ const RingkasanPrestasiPanel: React.FC<RingkasanPrestasiPanelProps> = ({
       )}
 
       {layout === 'row' ? (
-        <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 gap-1.5 sm:gap-2 items-stretch ${className}`}>
+        <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 gap-2 items-stretch ${className}`}>
           {cards.map(c => renderSingleCard(c, false))}
         </div>
       ) : (
         <div className={`flex flex-col h-full overflow-hidden ${className}`}>
           {/* Header Panel */}
-          <div className="flex items-center justify-between px-1 pb-1 shrink-0 border-b border-neutral-200/80 dark:border-neutral-800 mb-1">
-            <div className="flex items-center gap-1 min-w-0">
-              <Bookmark className="w-3 h-3 text-brand-600 dark:text-brand-400 shrink-0" />
-              <span className="text-[10px] font-black uppercase tracking-wider text-neutral-900 dark:text-white truncate">
+          <div className="flex items-center justify-between px-1.5 pb-1.5 shrink-0 border-b border-neutral-200/80 dark:border-neutral-800 mb-1.5">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Bookmark className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400 shrink-0" />
+              <span className="text-xs font-black uppercase tracking-wider text-neutral-900 dark:text-white truncate">
                 RINGKASAN PRESTASI
               </span>
             </div>
-            <span className="text-[8px] font-mono font-bold px-1.5 py-0.2 rounded bg-neutral-200 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 shrink-0">
+            <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 shrink-0">
               9 Metrik
             </span>
           </div>
 
           {/* 2-Kolom Grid Kartu Pas Vertikal (Mode Landscape) */}
-          <div className="flex-1 min-h-0 grid grid-cols-2 gap-1 auto-rows-fr h-full">
+          <div className="flex-1 min-h-0 grid grid-cols-2 gap-1.5 auto-rows-fr h-full">
             {cards.map(c => renderSingleCard(c, true))}
           </div>
         </div>
@@ -345,7 +345,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
       <div className="p-4 sm:p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 min-w-0">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-lg sm:text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-brand-600 shrink-0" />
               <span>Evaluasi</span>
             </h1>
@@ -523,7 +523,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
                 <TableIcon className="w-4 h-4 text-emerald-600" />
                 <span>Tabel Lengkap</span>
               </h2>
-              <span className="text-[11px] text-neutral-500 font-mono">
+              <span className="text-xs text-neutral-500 font-mono">
                 Total {displayedRows.length} Unit TKU &bull; Pembagi {divider} Hari
               </span>
             </div>
@@ -580,16 +580,16 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
                       </span>
                       <div className="min-w-0">
                         <p className="font-bold text-xs text-neutral-900 dark:text-white break-words">{r.tku.nama} (Rayon {r.tku.rayon})</p>
-                        <span className="text-[10px] text-neutral-500 font-mono block break-words">
+                        <span className="text-xs text-neutral-500 font-mono block break-words">
                           Rata: {formatNumber(r.rata2)} btl/hr &bull; s/YL: {r.syl} &bull; % BB: {formatPercent(r.pctBb)}
                         </span>
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <span className="text-sm font-black font-mono break-words leading-tight text-emerald-600 dark:text-emerald-400">
+                      <span className="text-sm font-bold font-mono break-words leading-tight text-emerald-600 dark:text-emerald-400">
                         {formatPercent(r.vsTgPct)}
                       </span>
-                      <span className="text-[10px] text-neutral-400 block">vs Target</span>
+                      <span className="text-xs text-neutral-400 block">vs Target</span>
                     </div>
                   </div>
                 ))}
@@ -611,16 +611,16 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
                       </span>
                       <div className="min-w-0">
                         <p className="font-bold text-xs text-neutral-900 dark:text-white break-words">{r.tku.nama} (Rayon {r.tku.rayon})</p>
-                        <span className="text-[10px] text-neutral-500 font-mono block break-words">
+                        <span className="text-xs text-neutral-500 font-mono block break-words">
                           Rata: {formatNumber(r.rata2)} btl/hr &bull; YL &lt; 250: {r.l250} ({formatPercent(r.pctL250)})
                         </span>
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <span className="text-sm font-black font-mono break-words leading-tight text-red-600 dark:text-red-400">
+                      <span className="text-sm font-bold font-mono break-words leading-tight text-red-600 dark:text-red-400">
                         {formatPercent(r.vsTgPct)}
                       </span>
-                      <span className="text-[10px] text-neutral-400 block">vs Target</span>
+                      <span className="text-xs text-neutral-400 block">vs Target</span>
                     </div>
                   </div>
                 ))}
@@ -637,21 +637,21 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch text-xs text-neutral-700 dark:text-neutral-300">
               <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200/70 dark:border-neutral-700 space-y-1.5 min-w-0 h-full break-words">
-                <span className="font-bold text-brand-600 dark:text-brand-400 uppercase text-[10px] tracking-wider block">1. Evaluasi Ritme &amp; Target</span>
+                <span className="font-bold text-brand-600 dark:text-brand-400 uppercase text-xs tracking-wider block">1. Evaluasi Ritme &amp; Target</span>
                 <p>
                   Pencapaian Cabang Jember mencapai rata-rata <strong className="font-mono">{formatNumber(cabangTotal.rata2)} btl/hari</strong> ({formatPercent(cabangTotal.vsTgPct)} vs Target). Unit dengan tren pertumbuhan mingguan (vs LW) tertinggi dipimpin oleh <strong className="text-emerald-600">{highlights.topLw?.name || '—'}</strong>.
                 </p>
               </div>
 
               <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200/70 dark:border-neutral-700 space-y-1.5 min-w-0 h-full break-words">
-                <span className="font-bold text-amber-600 dark:text-amber-400 uppercase text-[10px] tracking-wider block">2. Mutu Operasional &amp; BB</span>
+                <span className="font-bold text-amber-600 dark:text-amber-400 uppercase text-xs tracking-wider block">2. Mutu Operasional &amp; BB</span>
                 <p>
                   Rasio Balik Botol Cabang berada di angka <strong className="font-mono">{formatPercent(cabangTotal.pctBb)}</strong>. Unit dengan kontrol botol terbersih adalah <strong className="text-amber-600">{highlights.bestBb.name}</strong> ({formatPercent(highlights.bestBb.pct)}).
                 </p>
               </div>
 
               <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200/70 dark:border-neutral-700 space-y-1.5 min-w-0 h-full break-words">
-                <span className="font-bold text-emerald-600 dark:text-emerald-400 uppercase text-[10px] tracking-wider block">3. Produktivitas &amp; YL &lt; 250</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400 uppercase text-xs tracking-wider block">3. Produktivitas &amp; YL &lt; 250</span>
                 <p>
                   Total YL dengan rata-rata &lt; 250 botol/hari tercatat sebanyak <strong className="font-mono text-red-600">{cabangTotal.l250} YL</strong> ({formatPercent(cabangTotal.pctL250)}). Perlu pendampingan khusus pada rute dan pembagian area YL tersebut.
                 </p>
@@ -673,10 +673,10 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
             {/* Kiri: Judul + Periode + Rayon Filter */}
             <div className="flex items-center gap-1 min-w-0">
               <TrendingUp className="w-3 h-3 text-brand-400 shrink-0" />
-              <h2 className="text-[10px] font-bold tracking-tight text-white uppercase truncate max-w-[100px] sm:max-w-[180px]">
+              <h2 className="text-xs font-bold tracking-tight text-white uppercase truncate max-w-[100px] sm:max-w-[180px]">
                 EVALUASI TKU
               </h2>
-              <span className="text-[8.5px] font-mono px-1 py-0 rounded bg-neutral-800 text-brand-300 font-semibold shrink-0">
+              <span className="text-xs font-mono px-1 py-0 rounded bg-neutral-800 text-brand-300 font-semibold shrink-0">
                 {period.label} (÷{divider}hr)
               </span>
 
@@ -690,7 +690,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
                   <button
                     key={r.id}
                     onClick={() => onUpdateRayon(r.id)}
-                    className={`px-1 py-0 text-[9px] font-bold rounded transition-all cursor-pointer ${
+                    className={`px-2 py-1 text-xs font-bold rounded transition-all cursor-pointer ${
                       selectedRayon === r.id
                         ? 'bg-brand-600 text-white shadow-2xs'
                         : 'text-neutral-400 hover:text-white'
@@ -708,7 +708,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
               <div className="inline-flex p-0.2 bg-neutral-800 rounded">
                 <button
                   onClick={() => setEvalMode('mini')}
-                  className={`flex items-center gap-0.5 px-1.5 py-0 text-[9px] font-bold rounded transition-all cursor-pointer ${
+                  className={`flex items-center gap-0.5 px-2 py-1 text-xs font-bold rounded transition-all cursor-pointer ${
                     evalMode === 'mini'
                       ? 'bg-emerald-600 text-white shadow-2xs'
                       : 'text-neutral-400 hover:text-white'
@@ -719,7 +719,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
                 </button>
                 <button
                   onClick={() => setEvalMode('full')}
-                  className={`flex items-center gap-0.5 px-1.5 py-0 text-[9px] font-bold rounded transition-all cursor-pointer ${
+                  className={`flex items-center gap-0.5 px-2 py-1 text-xs font-bold rounded transition-all cursor-pointer ${
                     evalMode === 'full'
                       ? 'bg-brand-600 text-white shadow-2xs'
                       : 'text-neutral-400 hover:text-white'
@@ -730,7 +730,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
                 </button>
                 <button
                   onClick={() => setEvalMode('analisa')}
-                  className={`flex items-center gap-0.5 px-1.5 py-0 text-[9px] font-bold rounded transition-all cursor-pointer ${
+                  className={`flex items-center gap-0.5 px-2 py-1 text-xs font-bold rounded transition-all cursor-pointer ${
                     evalMode === 'analisa'
                       ? 'bg-brand-600 text-white shadow-2xs'
                       : 'text-neutral-400 hover:text-white'
@@ -744,7 +744,7 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
               {/* Tombol Tutup Layar Penuh */}
               <button
                 onClick={() => setIsFullscreen(false)}
-                className="flex items-center gap-0.5 px-1.5 py-0 text-[9px] font-bold rounded bg-brand-600 hover:bg-brand-700 text-white transition-all cursor-pointer shadow-2xs shrink-0"
+                className="flex items-center gap-0.5 px-2 py-1 text-xs font-bold rounded bg-brand-600 hover:bg-brand-700 text-white transition-all cursor-pointer shadow-2xs shrink-0"
               >
                 <Minimize2 className="w-2.5 h-2.5" />
                 <span>Keluar</span>
@@ -799,8 +799,8 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
                   )}
                 </div>
                 {/* Legend Bawah */}
-                <div className="flex items-center gap-1.5 text-[8.5px] text-neutral-500 pt-1 shrink-0 border-t border-neutral-100 dark:border-neutral-800">
-                  <span className="w-2 h-2 rounded bg-emerald-100 dark:bg-emerald-900/50 border border-emerald-500 inline-block" />
+                <div className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400 pt-1.5 shrink-0 border-t border-neutral-100 dark:border-neutral-800">
+                  <span className="w-2.5 h-2.5 rounded bg-emerald-100 dark:bg-emerald-900/50 border border-emerald-500 inline-block" />
                   <span><strong className="text-emerald-700 dark:text-emerald-400">Sel hijau</strong> = Performa terbaik unit TKU</span>
                 </div>
               </div>
@@ -855,8 +855,8 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
                     fullscreen={true}
                   />
                 )}
-                <div className="flex items-center gap-1.5 text-[9px] text-neutral-500 pt-1.5 shrink-0 border-t border-neutral-100 dark:border-neutral-800 mt-1">
-                  <span className="w-2 h-2 rounded bg-emerald-100 dark:bg-emerald-900/50 border border-emerald-500 inline-block" />
+                <div className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400 pt-1.5 shrink-0 border-t border-neutral-100 dark:border-neutral-800 mt-1">
+                  <span className="w-2.5 h-2.5 rounded bg-emerald-100 dark:bg-emerald-900/50 border border-emerald-500 inline-block" />
                   <span><strong className="text-emerald-700 dark:text-emerald-400">Sel hijau</strong> = Performa terbaik unit TKU</span>
                 </div>
               </div>

@@ -1,3 +1,4 @@
+import { fs } from '../services/displayMode';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 export interface ChartSeries {
@@ -76,7 +77,7 @@ export const ArsipLineChart: React.FC<LineChartProps> = ({
 
   const n = months.length;
   const compact = width < 420;
-  const padL = compact ? 40 : 48;
+  const padL = Math.round((compact ? 44 : 54) * fs(1));
   const padR = 14;
   const padT = 18;
   const plotH = compact ? 150 : 180;
@@ -128,12 +129,12 @@ export const ArsipLineChart: React.FC<LineChartProps> = ({
     <div className="p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm min-w-0">
       <div className="mb-2">
         <h3 className="text-sm font-bold text-neutral-900 dark:text-neutral-100">{title}</h3>
-        {subtitle && <p className="text-[11px] text-neutral-500 dark:text-neutral-400">{subtitle}</p>}
+        {subtitle && <p className="text-xs text-neutral-500 dark:text-neutral-400">{subtitle}</p>}
       </div>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1.5">
         {series.map(s => (
-          <span key={s.name} className="inline-flex items-center gap-1.5 text-[11px] text-neutral-600 dark:text-neutral-300">
+          <span key={s.name} className="inline-flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-300">
             <span
               className="inline-block w-4 h-0.5 rounded"
               style={{
@@ -174,7 +175,7 @@ export const ArsipLineChart: React.FC<LineChartProps> = ({
                   y={y(t) + 3}
                   textAnchor="end"
                   className="fill-neutral-500 dark:fill-neutral-400"
-                  fontSize={10}
+                  fontSize={fs(12)}
                 >
                   {format(t)}
                 </text>
@@ -202,7 +203,7 @@ export const ArsipLineChart: React.FC<LineChartProps> = ({
                 y={H - 8}
                 textAnchor="middle"
                 className={i === sel ? 'fill-neutral-900 dark:fill-neutral-100' : 'fill-neutral-500 dark:fill-neutral-400'}
-                fontSize={10}
+                fontSize={fs(12)}
                 fontWeight={i === sel ? 700 : 400}
               >
                 {m}
@@ -230,7 +231,7 @@ export const ArsipLineChart: React.FC<LineChartProps> = ({
                           x={x(i)}
                           y={y(v) - 8}
                           textAnchor="middle"
-                          fontSize={10}
+                          fontSize={fs(12)}
                           fontWeight={600}
                           fill={s.color}
                         >
@@ -248,7 +249,7 @@ export const ArsipLineChart: React.FC<LineChartProps> = ({
 
       {/* pembacaan nilai bulan terpilih */}
       {n > 0 && sel >= 0 && sel < n && (
-        <div className="mt-1 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
+        <div className="mt-1 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
           <span className="font-bold text-neutral-800 dark:text-neutral-200">{months[sel]}</span>
           {series.map(s => (
             <span key={s.name} className="inline-flex items-center gap-1 text-neutral-600 dark:text-neutral-300">

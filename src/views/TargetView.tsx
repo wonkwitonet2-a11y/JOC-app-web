@@ -101,7 +101,7 @@ export const TargetView: React.FC<TargetViewProps> = ({
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+          <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
             <Target className="w-5 h-5 text-brand-600 shrink-0" />
             <span>Target</span>
           </h1>
@@ -131,15 +131,15 @@ export const TargetView: React.FC<TargetViewProps> = ({
               </span>
               <Calendar className="w-4 h-4 text-brand-500 shrink-0" />
             </div>
-            <div className="text-2xl font-bold font-mono text-brand-600 dark:text-brand-400 mt-2 break-words">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold font-mono text-brand-600 dark:text-brand-400 mt-2 break-words">
               {formatDecimal(totalTgCabang)} <span className="block text-xs font-sans font-normal text-neutral-500">btl/hari</span>
             </div>
           </div>
-          <div className="mt-3 pt-3 border-t border-brand-100 dark:border-brand-900/40 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] font-mono [&>div]:min-w-0 [&>div]:flex [&>div]:items-baseline [&>div]:justify-between [&>div]:gap-1">
-            <div><span className="text-neutral-400 block text-[9px]">ORI</span><span className="font-bold text-neutral-800 dark:text-neutral-200">{formatDecimal(totalOriTg)}</span></div>
-            <div><span className="text-amber-500 block text-[9px]">OM</span><span className="font-bold text-amber-600 dark:text-amber-400">{formatDecimal(totalOmTg)}</span></div>
-            <div><span className="text-pink-400 block text-[9px]">OS</span><span className="font-bold text-pink-600 dark:text-pink-400">{formatDecimal(totalOsTg)}</span></div>
-            <div><span className="text-sky-500 block text-[9px]">YT</span><span className="font-bold text-sky-600 dark:text-sky-400">{formatDecimal(totalYtTg)}</span></div>
+          <div className="mt-3 pt-3 border-t border-brand-100 dark:border-brand-900/40 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs font-mono [&>div]:min-w-0 [&>div]:flex [&>div]:items-baseline [&>div]:justify-between [&>div]:gap-1">
+            <div><span className="text-neutral-400 block text-xs">ORI</span><span className="font-bold text-neutral-800 dark:text-neutral-200">{formatDecimal(totalOriTg)}</span></div>
+            <div><span className="text-amber-500 block text-xs">OM</span><span className="font-bold text-amber-600 dark:text-amber-400">{formatDecimal(totalOmTg)}</span></div>
+            <div><span className="text-pink-400 block text-xs">OS</span><span className="font-bold text-pink-600 dark:text-pink-400">{formatDecimal(totalOsTg)}</span></div>
+            <div><span className="text-sky-500 block text-xs">YT</span><span className="font-bold text-sky-600 dark:text-sky-400">{formatDecimal(totalYtTg)}</span></div>
           </div>
         </div>
 
@@ -151,15 +151,15 @@ export const TargetView: React.FC<TargetViewProps> = ({
               </span>
               <History className="w-4 h-4 text-neutral-400 shrink-0" />
             </div>
-            <div className="text-2xl font-bold font-mono text-neutral-900 dark:text-neutral-100 mt-2 break-words">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold font-mono text-neutral-900 dark:text-neutral-100 mt-2 break-words">
               {formatNumber(totalBlCabang)} <span className="block text-xs font-sans font-normal text-neutral-500">btl/hari</span>
             </div>
           </div>
-          <div className="mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-800 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] font-mono [&>div]:min-w-0 [&>div]:flex [&>div]:items-baseline [&>div]:justify-between [&>div]:gap-1">
-            <div><span className="text-neutral-400 block text-[9px]">ORI</span><span className="font-semibold text-neutral-700 dark:text-neutral-300">{formatNumber(totalOriBl)}</span></div>
-            <div><span className="text-amber-500 block text-[9px]">OM</span><span className="font-semibold text-amber-600 dark:text-amber-400">{formatNumber(totalOmBl)}</span></div>
-            <div><span className="text-pink-400 block text-[9px]">OS</span><span className="font-semibold text-pink-600 dark:text-pink-400">{formatNumber(totalOsBl)}</span></div>
-            <div><span className="text-sky-500 block text-[9px]">YT</span><span className="font-semibold text-sky-600 dark:text-sky-400">{formatNumber(totalYtBl)}</span></div>
+          <div className="mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-800 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs font-mono [&>div]:min-w-0 [&>div]:flex [&>div]:items-baseline [&>div]:justify-between [&>div]:gap-1">
+            <div><span className="text-neutral-400 block text-xs">ORI</span><span className="font-semibold text-neutral-700 dark:text-neutral-300">{formatNumber(totalOriBl)}</span></div>
+            <div><span className="text-amber-500 block text-xs">OM</span><span className="font-semibold text-amber-600 dark:text-amber-400">{formatNumber(totalOmBl)}</span></div>
+            <div><span className="text-pink-400 block text-xs">OS</span><span className="font-semibold text-pink-600 dark:text-pink-400">{formatNumber(totalOsBl)}</span></div>
+            <div><span className="text-sky-500 block text-xs">YT</span><span className="font-semibold text-sky-600 dark:text-sky-400">{formatNumber(totalYtBl)}</span></div>
           </div>
         </div>
 
@@ -171,15 +171,15 @@ export const TargetView: React.FC<TargetViewProps> = ({
               </span>
               <TrendingUp className="w-4 h-4 text-neutral-400 shrink-0" />
             </div>
-            <div className="text-2xl font-bold font-mono text-neutral-900 dark:text-neutral-100 mt-2 break-words">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold font-mono text-neutral-900 dark:text-neutral-100 mt-2 break-words">
               {formatNumber(totalTyCabang)} <span className="block text-xs font-sans font-normal text-neutral-500">btl/hari</span>
             </div>
           </div>
-          <div className="mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-800 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] font-mono [&>div]:min-w-0 [&>div]:flex [&>div]:items-baseline [&>div]:justify-between [&>div]:gap-1">
-            <div><span className="text-neutral-400 block text-[9px]">ORI</span><span className="font-semibold text-neutral-700 dark:text-neutral-300">{formatNumber(totalOriTy)}</span></div>
-            <div><span className="text-amber-500 block text-[9px]">OM</span><span className="font-semibold text-amber-600 dark:text-amber-400">{formatNumber(totalOmTy)}</span></div>
-            <div><span className="text-neutral-400 block text-[9px]">OS</span><span className="text-neutral-400">—</span></div>
-            <div><span className="text-sky-500 block text-[9px]">YT</span><span className="font-semibold text-sky-600 dark:text-sky-400">{formatNumber(totalYtTy)}</span></div>
+          <div className="mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-800 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs font-mono [&>div]:min-w-0 [&>div]:flex [&>div]:items-baseline [&>div]:justify-between [&>div]:gap-1">
+            <div><span className="text-neutral-400 block text-xs">ORI</span><span className="font-semibold text-neutral-700 dark:text-neutral-300">{formatNumber(totalOriTy)}</span></div>
+            <div><span className="text-amber-500 block text-xs">OM</span><span className="font-semibold text-amber-600 dark:text-amber-400">{formatNumber(totalOmTy)}</span></div>
+            <div><span className="text-neutral-400 block text-xs">OS</span><span className="text-neutral-400">—</span></div>
+            <div><span className="text-sky-500 block text-xs">YT</span><span className="font-semibold text-sky-600 dark:text-sky-400">{formatNumber(totalYtTy)}</span></div>
           </div>
         </div>
       </div>
@@ -259,7 +259,7 @@ export const TargetView: React.FC<TargetViewProps> = ({
             <div className="overflow-x-auto rounded-xl border border-neutral-200 dark:border-neutral-800">
               <table className="w-full text-left text-xs border-collapse min-w-[760px]">
                 <thead>
-                  <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-400 text-[11px] bg-neutral-50 dark:bg-neutral-800/60">
+                  <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-400 text-xs bg-neutral-50 dark:bg-neutral-800/60">
                     <th className="py-2.5 px-3 font-semibold text-center w-10">No</th>
                     <th className="py-2.5 px-3 font-semibold">Nama TKU</th>
                     <th className="py-2.5 px-2 font-semibold text-center w-14">Rayon</th>
@@ -437,7 +437,7 @@ export const TargetView: React.FC<TargetViewProps> = ({
             <div className="overflow-x-auto rounded-xl border border-neutral-200 dark:border-neutral-800">
               <table className="w-full text-left text-xs border-collapse min-w-[680px]">
                 <thead>
-                  <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-400 text-[11px] bg-neutral-50 dark:bg-neutral-800/60">
+                  <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-400 text-xs bg-neutral-50 dark:bg-neutral-800/60">
                     <th className="py-2.5 px-3 font-semibold text-center w-10">No</th>
                     <th className="py-2.5 px-3 font-semibold">Nama TKU</th>
                     <th className="py-2.5 px-2 font-semibold text-center w-14">Rayon</th>
@@ -604,7 +604,7 @@ export const TargetView: React.FC<TargetViewProps> = ({
             <div className="overflow-x-auto rounded-xl border border-neutral-200 dark:border-neutral-800">
               <table className="w-full text-left text-xs border-collapse min-w-[680px]">
                 <thead>
-                  <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-400 text-[11px] bg-neutral-50 dark:bg-neutral-800/60">
+                  <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-400 text-xs bg-neutral-50 dark:bg-neutral-800/60">
                     <th className="py-2.5 px-3 font-semibold text-center w-10">No</th>
                     <th className="py-2.5 px-3 font-semibold">Nama TKU</th>
                     <th className="py-2.5 px-2 font-semibold text-center w-14">Rayon</th>
@@ -770,7 +770,7 @@ export const TargetView: React.FC<TargetViewProps> = ({
             <div className="overflow-x-auto rounded-xl border border-neutral-200 dark:border-neutral-800">
               <table className="w-full text-left text-xs border-collapse min-w-[760px]">
                 <thead>
-                  <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-400 text-[11px] bg-neutral-50 dark:bg-neutral-800/60">
+                  <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-400 text-xs bg-neutral-50 dark:bg-neutral-800/60">
                     <th className="py-2.5 px-3 font-semibold text-center w-10">No</th>
                     <th className="py-2.5 px-3 font-semibold">Nama TKU</th>
                     <th className="py-2.5 px-2 font-semibold text-center w-14">Rayon</th>

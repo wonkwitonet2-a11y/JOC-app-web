@@ -26,6 +26,7 @@ import { TrendChart } from '../components/TrendChart';
 import { EvaluasiPanel } from '../components/EvaluasiPanel';
 import { 
   formatNumber, 
+  formatDecimal, 
   formatPercent, 
   formatDiff, 
   getStatusClass, 
@@ -957,6 +958,23 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   const tyPct = tyHarian > 0 ? (tkuDailyAvg / tyHarian) : 0;
   const akmDiffVsTy = tkuAkmTotal - tyHarian * divider;
 
+  // Sisa Target / LM / LY per hari kerja (sama dengan dashboard admin): rata-rata penjualan per hari
+  // yang harus dicapai ke depan agar akumulasi akhir bulan sama dengan pembanding. Minggu tidak dihitung.
+  let workLeft = 0;
+  for (let d = Math.min(divider, DIM) + 1; d <= DIM; d++) {
+    if (new Date(PY, PM0, d).getDay() !== 0) workLeft++;
+  }
+  const needPerDay = (perDay: number) => {
+    const sisa = perDay * DIM - tkuAkmTotal;
+    if (perDay <= 0) return { text: '-', done: false };
+    if (sisa <= 0) return { text: 'Tercapai', done: true };
+    if (workLeft <= 0) return { text: '-', done: false };
+    return { text: formatNumber(Math.ceil(sisa / workLeft)), done: false };
+  };
+  const needTarget = needPerDay(targetHarian);
+  const needBl = needPerDay(blHarian);
+  const needTy = needPerDay(tyHarian);
+
 
 
   // Variant breakdown calculation for TKU
@@ -1105,7 +1123,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
           <SlidersHorizontal className="w-5 h-5 text-emerald-600" />
           Kondisi TKU
           {opsDirty && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
               belum disimpan
             </span>
           )}
@@ -1284,17 +1302,17 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       const dash = <span className="text-neutral-300 dark:text-neutral-600 font-normal">—</span>;
       return [
         <tr key={`wh${wk.id}`} className="bg-neutral-100 dark:bg-neutral-800 font-sans">
-          <td colSpan={5} className="pt-2 pb-1 px-2.5 text-[11px] text-neutral-700 dark:text-neutral-200">
+          <td colSpan={5} className="pt-2 pb-1 px-2.5 text-xs text-neutral-700 dark:text-neutral-200">
             <div className="flex flex-wrap items-center justify-between gap-x-3">
               <span><span className="font-bold">Minggu {wk.id}</span><span className="text-neutral-500 dark:text-neutral-400"> · Tgl {wk.start}–{wk.end}</span></span>
-              <span className="text-[10px]">{wkInfo}</span>
+              <span className="text-xs">{wkInfo}</span>
             </div>
           </td>
           <td className={TOTAL_FRAME} />
           <td colSpan={OPS_COLS} />
         </tr>,
         <tr key={`wa${wk.id}`} className="bg-neutral-100 dark:bg-neutral-800 font-mono">
-          <td className="pb-2 pt-0 px-2.5 text-[10px] leading-tight text-neutral-500 dark:text-neutral-400 font-sans whitespace-nowrap">
+          <td className="pb-2 pt-0 px-2.5 text-xs leading-tight text-neutral-500 dark:text-neutral-400 font-sans whitespace-nowrap">
             Rata2<span className="block">÷ {started ? cut : '—'}</span>
           </td>
           {avgV.map((x, k) => (
@@ -1302,7 +1320,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
           ))}
           <td className={`pb-2 pt-0 px-2.5 text-right font-bold text-neutral-900 dark:text-white ${TOTAL_FRAME}`}>
             {started ? formatNumber(avgT) : dash}
-            {started && <span className="block text-[9px] font-normal font-sans text-neutral-500 dark:text-neutral-400">Akm {formatNumber(akmT)}</span>}
+            {started && <span className="block text-xs font-normal font-sans text-neutral-500 dark:text-neutral-400">Akm {formatNumber(akmT)}</span>}
           </td>
           <td colSpan={OPS_COLS} />
         </tr>
@@ -1314,13 +1332,13 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
         {/* Akumulasi & rata-rata realisasi (pembagi = tanggal update) */}
         <div className="p-3 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-xs flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <span className="text-[10px] font-bold tracking-wide text-neutral-500 dark:text-neutral-400 block">AKM REALISASI {period.label.toUpperCase()}</span>
-            <span className="text-xl font-mono font-extrabold text-neutral-900 dark:text-white">{formatNumber(akmReal)}</span>
+            <span className="text-xs font-bold tracking-wide text-neutral-500 dark:text-neutral-400 block">AKM REALISASI {period.label.toUpperCase()}</span>
+            <span className="text-lg font-mono font-bold text-neutral-900 dark:text-white">{formatNumber(akmReal)}</span>
             <span className="text-xs text-neutral-400 font-sans"> btl</span>
           </div>
           <div className="text-right min-w-0">
-            <span className="text-[10px] font-bold tracking-wide text-neutral-500 dark:text-neutral-400 block">RATA2/HR (÷ {upd})</span>
-            <span className="text-xl font-mono font-extrabold text-emerald-600 dark:text-emerald-400">{formatNumber(avgReal)}</span>
+            <span className="text-xs font-bold tracking-wide text-neutral-500 dark:text-neutral-400 block">RATA2/HR (÷ {upd})</span>
+            <span className="text-lg font-mono font-bold text-emerald-600 dark:text-emerald-400">{formatNumber(avgReal)}</span>
             <span className="text-xs text-neutral-400 font-sans"> btl</span>
           </div>
         </div>
@@ -1333,18 +1351,18 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
               style={{ borderLeft: `4px solid ${c.accent}` }}
             >
               <div className="flex flex-wrap items-center justify-between gap-1">
-                <span className="text-[10px] font-bold tracking-wide text-neutral-500 break-words">{c.label}</span>
-                <span className={`text-[10px] font-mono font-bold px-1.5 py-px rounded ${c.diffPerDay >= 0 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400'}`}>
+                <span className="text-xs font-bold tracking-wide text-neutral-500 break-words">{c.label}</span>
+                <span className={`text-xs font-mono font-bold px-1.5 py-px rounded ${c.diffPerDay >= 0 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400'}`}>
                   {formatDiff(c.diffPerDay)}
                 </span>
               </div>
-              <div className={`text-lg font-mono font-extrabold leading-tight ${c.pct >= 1 ? 'text-emerald-600' : 'text-red-600'}`}>
+              <div className={`text-base font-mono font-bold leading-tight ${c.pct >= 1 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {c.base > 0 ? formatPercent(c.pct) : '—'}
               </div>
-              <div className="text-[10px] text-neutral-500 font-mono break-words">
+              <div className="text-xs text-neutral-500 font-mono break-words">
                 {c.short}: {formatNumber(c.base)}/hr
               </div>
-              <div className={`text-[10px] font-mono break-words ${c.diffTotal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+              <div className={`text-xs font-mono break-words ${c.diffTotal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 Selisih: {formatDiff(c.diffTotal)}
               </div>
             </div>
@@ -1359,7 +1377,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                 <CalendarRange className="w-4 h-4 text-emerald-600" />
                 Realisasi {period.label}
               </h3>
-              <p className="text-[10px] text-neutral-500 dark:text-neutral-400 leading-snug">
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-snug">
                 Kolom Total vs pencapaian minggu lalu (hari sama):{' '}
                 <span className="inline-block w-3 h-3 rounded-sm align-[-2px] mx-0.5 bg-red-300 dark:bg-red-500/50" />kurang,{' '}
                 <span className="inline-block w-3 h-3 rounded-sm align-[-2px] mx-0.5 bg-emerald-300 dark:bg-emerald-500/50" />lebih,{' '}
@@ -1447,7 +1465,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                     >
                       <td className={`py-1.5 px-2.5 font-sans whitespace-nowrap sticky left-0 z-[5] ${isToday ? 'bg-emerald-50 dark:bg-emerald-950' : isSun ? 'bg-amber-50 dark:bg-amber-950' : 'bg-white dark:bg-neutral-900'}`}>
                         <span className={`font-bold ${isToday ? 'text-emerald-600 dark:text-emerald-400' : 'text-neutral-900 dark:text-neutral-100'}`}>Tgl {d}</span>
-                        <span className={`block text-[10px] leading-none ${isSun ? 'text-amber-600 font-medium' : 'text-neutral-400'}`}>{dateObj.toLocaleDateString('id-ID', { weekday: 'short' })}{isSun ? ' · libur' : ''}</span>
+                        <span className={`block text-xs leading-none ${isSun ? 'text-amber-600 font-medium' : 'text-neutral-400'}`}>{dateObj.toLocaleDateString('id-ID', { weekday: 'short' })}{isSun ? ' · libur' : ''}</span>
                       </td>
 
                       {/* YO */}
@@ -1867,7 +1885,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                   <td className="py-3 px-2.5 text-right text-brand-600 font-bold">{tkuOps.syl !== null ? formatNumber(tkuOps.syl) : '—'}</td>
                   <td className="py-3 px-2 text-right text-red-600 border-l border-neutral-200 dark:border-neutral-700 font-bold">{tku.l250 ?? l250 ?? 0}</td>
                   <td className="py-3 px-2 text-right text-amber-600 font-bold">{tku.l300 ?? l300 ?? 0}</td>
-                  <td className="py-3 px-2.5 text-center border-l border-neutral-200 dark:border-neutral-700 text-[10px] text-neutral-400 font-sans font-normal">
+                  <td className="py-3 px-2.5 text-center border-l border-neutral-200 dark:border-neutral-700 text-xs text-neutral-400 font-sans font-normal">
                     {realisasiDaysToShow.length} Hari
                   </td>
                 </tr>
@@ -1893,14 +1911,14 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <h1 className="text-base md:text-lg leading-tight break-words font-bold text-neutral-900 dark:text-neutral-100 tracking-tight">
+                <h1 className="text-base leading-tight break-words font-semibold text-neutral-900 dark:text-neutral-100 tracking-tight">
                   {tku.nama} (R{tku.rayon})
                 </h1>
-                <span className="text-[10px] font-semibold px-2 py-0.2 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                <span className="text-xs font-semibold px-2 py-0.2 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
                   {tku.aktif ? 'Aktif' : 'Non-Aktif'}
                 </span>
               </div>
-              <p className="text-[11px] text-neutral-400">
+              <p className="text-xs text-neutral-600 dark:text-neutral-300">
                 Unit Operasional Rayon {tku.rayon}
               </p>
             </div>
@@ -1910,34 +1928,34 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
         {/* Informasi Ringkas: 2x2 Kanan Kiri Atas Bawah */}
         <div className="grid grid-cols-2 @xl:grid-cols-4 gap-2 text-xs">
           <div className="p-2 px-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-100 dark:border-neutral-800 flex items-center gap-2">
-            <Users className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+            <Users className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-300 shrink-0" />
             <div className="min-w-0">
-              <span className="text-[9px] uppercase font-bold tracking-wider text-neutral-400 block leading-tight">PIC</span>
-              <p className="font-semibold text-neutral-800 dark:text-neutral-200 truncate text-[11px]">{tku.pic || 'andriani w'}</p>
+              <span className="text-xs uppercase font-bold tracking-wide text-neutral-600 dark:text-neutral-300 block leading-tight">PIC</span>
+              <p className="font-semibold text-neutral-800 dark:text-neutral-200 truncate text-xs">{tku.pic || 'andriani w'}</p>
             </div>
           </div>
 
           <div className="p-2 px-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-100 dark:border-neutral-800 flex items-center gap-2">
-            <Phone className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+            <Phone className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-300 shrink-0" />
             <div className="min-w-0">
-              <span className="text-[9px] uppercase font-bold tracking-wider text-neutral-400 block leading-tight">HP</span>
-              <p className="font-mono font-semibold text-neutral-800 dark:text-neutral-200 truncate text-[11px]">{tku.hp || '0812-3456-7890'}</p>
+              <span className="text-xs uppercase font-bold tracking-wide text-neutral-600 dark:text-neutral-300 block leading-tight">HP</span>
+              <p className="font-mono font-semibold text-neutral-800 dark:text-neutral-200 truncate text-xs">{tku.hp || '0812-3456-7890'}</p>
             </div>
           </div>
 
           <div className="p-2 px-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-100 dark:border-neutral-800 flex items-center gap-2">
-            <MapPin className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+            <MapPin className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-300 shrink-0" />
             <div className="min-w-0">
-              <span className="text-[9px] uppercase font-bold tracking-wider text-neutral-400 block leading-tight">Wilayah</span>
-              <p className="font-semibold text-neutral-800 dark:text-neutral-200 truncate text-[11px]">{tku.alamat || 'jember kota'}</p>
+              <span className="text-xs uppercase font-bold tracking-wide text-neutral-600 dark:text-neutral-300 block leading-tight">Wilayah</span>
+              <p className="font-semibold text-neutral-800 dark:text-neutral-200 truncate text-xs">{tku.alamat || 'jember kota'}</p>
             </div>
           </div>
 
           <div className="p-2 px-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-100 dark:border-neutral-800 flex items-center gap-2">
             <Clock className="w-3.5 h-3.5 text-brand-500 shrink-0" />
             <div className="min-w-0">
-              <span className="text-[9px] uppercase font-bold tracking-wider text-neutral-400 block leading-tight">Tgl Update</span>
-              <p className="font-semibold text-neutral-800 dark:text-neutral-200 truncate text-[11px]">
+              <span className="text-xs uppercase font-bold tracking-wide text-neutral-600 dark:text-neutral-300 block leading-tight">Tgl Update</span>
+              <p className="font-semibold text-neutral-800 dark:text-neutral-200 truncate text-xs">
                 {formatDateIndo(state.activeDate)}
               </p>
             </div>
@@ -1961,7 +1979,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                   <label htmlFor="tku-input-date" className="text-xs font-bold text-neutral-900 dark:text-neutral-100 block">
                     Pilih Tanggal Input
                   </label>
-                  <p className="text-[11px] text-neutral-500 mt-0.5">
+                  <p className="text-xs text-neutral-500 mt-0.5">
                     Kelewatan input? Pilih tanggalnya, isi penjualan, lalu simpan.
                   </p>
                 </div>
@@ -1997,7 +2015,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
               </div>
             </div>
             {isBackdate && (
-              <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 text-[11px] text-amber-900 dark:text-amber-200 flex items-start gap-2">
+              <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2">
                 <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 <span>
                   Kamu sedang mengisi tanggal <strong>{formatDateIndo(inputDate)}</strong> (bukan hari ini).{' '}
@@ -2033,7 +2051,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: v.color }} />
                       {v.code}
                     </label>
-                    <span className="block text-[11px] leading-tight text-neutral-500 dark:text-neutral-400 truncate" title={v.name}>{v.name}</span>
+                    <span className="block text-xs leading-tight text-neutral-500 dark:text-neutral-400 truncate" title={v.name}>{v.name}</span>
                   </div>
                   <div className="relative">
                     <input
@@ -2076,7 +2094,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                 <div key={v.code} className="p-4 rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50/60 dark:bg-neutral-800/40 min-w-0">
                   <div className="mb-2 min-w-0">
                     <label className="block text-xs font-bold leading-tight text-neutral-700 dark:text-neutral-300">BB {v.code}</label>
-                    <span className="block text-[11px] leading-tight text-neutral-500 dark:text-neutral-400 truncate" title={v.name}>{v.name}</span>
+                    <span className="block text-xs leading-tight text-neutral-500 dark:text-neutral-400 truncate" title={v.name}>{v.name}</span>
                   </div>
                   <div className="relative">
                     <input
@@ -2128,7 +2146,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: v.color }} />
                       PDM {v.code}
                     </label>
-                    <span className="block text-[11px] leading-tight text-neutral-500 dark:text-neutral-400 truncate" title={v.name}>{v.name}</span>
+                    <span className="block text-xs leading-tight text-neutral-500 dark:text-neutral-400 truncate" title={v.name}>{v.name}</span>
                   </div>
                   <div className="relative">
                     <input
@@ -2152,8 +2170,8 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
 
             {/* PDM Variant Breakdown Summary */}
             <div className="p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-2xl border border-neutral-200/60 dark:border-neutral-700/60 flex flex-wrap items-center justify-between text-xs text-neutral-600 dark:text-neutral-400 gap-2">
-              <span className="font-medium text-[11px]">Rincian PDM:</span>
-              <div className="flex flex-wrap items-center gap-3 font-mono text-[11px]">
+              <span className="font-medium text-xs">Rincian PDM:</span>
+              <div className="flex flex-wrap items-center gap-3 font-mono text-xs">
                 {VARIANTS.map((v, i) => (
                   <span key={v.code} className="inline-flex items-center gap-1">
                     <strong style={{ color: v.color }}>{v.code}:</strong> {formatNumber(pdmV[i])} btl
@@ -2180,31 +2198,31 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
 
             <div className="grid grid-cols-2 @2xl:grid-cols-6 @4xl:grid-cols-5 gap-3 font-mono text-xs items-stretch">
               <div className="p-3.5 bg-white/90 dark:bg-neutral-800/90 rounded-2xl border border-brand-100/80 dark:border-neutral-700/80 shadow-2xs flex flex-col justify-between min-w-0 h-full overflow-hidden col-span-1 @2xl:col-span-2 @4xl:col-span-1">
-                <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">Total Terjual</span>
+                <span className="text-xs leading-tight font-sans text-neutral-500 block mb-1 truncate">Total Terjual</span>
                 <span className="text-base font-bold text-neutral-900 dark:text-neutral-100 truncate">
                   {formatNumber(totalSoldToday)} <span className="text-xs font-normal text-neutral-400 font-sans">btl</span>
                 </span>
               </div>
               <div className="p-3.5 bg-white/90 dark:bg-neutral-800/90 rounded-2xl border border-brand-100/80 dark:border-neutral-700/80 shadow-2xs flex flex-col justify-between min-w-0 h-full overflow-hidden col-span-1 @2xl:col-span-2 @4xl:col-span-1">
-                <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">Total PDM</span>
+                <span className="text-xs leading-tight font-sans text-neutral-500 block mb-1 truncate">Total PDM</span>
                 <span className="text-base font-bold text-indigo-600 dark:text-indigo-400 truncate">
                   {formatNumber(totalPdmToday)} <span className="text-xs font-normal text-neutral-400 font-sans">btl</span>
                 </span>
               </div>
               <div className="p-3.5 bg-white/90 dark:bg-neutral-800/90 rounded-2xl border border-brand-100/80 dark:border-neutral-700/80 shadow-2xs flex flex-col justify-between min-w-0 h-full overflow-hidden col-span-1 @2xl:col-span-2 @4xl:col-span-1">
-                <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">% BB</span>
+                <span className="text-xs leading-tight font-sans text-neutral-500 block mb-1 truncate">% BB</span>
                 <span className={`text-base font-bold truncate ${getBbStatusClass(bbPct)}`}>
                   {formatPercent(bbPct)}
                 </span>
               </div>
               <div className="p-3.5 bg-white/90 dark:bg-neutral-800/90 rounded-2xl border border-brand-100/80 dark:border-neutral-700/80 shadow-2xs flex flex-col justify-between min-w-0 h-full overflow-hidden col-span-1 @2xl:col-span-3 @4xl:col-span-1">
-                <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">YL &lt; 250 / &lt; 300</span>
+                <span className="text-xs leading-tight font-sans text-neutral-500 block mb-1 truncate">YL &lt; 250 / &lt; 300</span>
                 <span className="text-sm font-bold text-neutral-900 dark:text-neutral-100 truncate">
                   {formatPercent(pctL250)} / {formatPercent(pctL300)}
                 </span>
               </div>
               <div className="p-3.5 bg-white/90 dark:bg-neutral-800/90 rounded-2xl border border-brand-100/80 dark:border-neutral-700/80 shadow-2xs flex flex-col justify-between min-w-0 h-full overflow-hidden col-span-2 @2xl:col-span-3 @4xl:col-span-1">
-                <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">s/YL</span>
+                <span className="text-xs leading-tight font-sans text-neutral-500 block mb-1 truncate">s/YL</span>
                 <span className="text-base font-bold text-neutral-900 dark:text-neutral-100 truncate">
                   {syl ? formatNumber(syl) : '—'}
                 </span>
@@ -2309,7 +2327,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                 >
                   <td className="py-1.5 px-2.5 font-sans whitespace-nowrap">
                     <span className={`font-bold ${isToday ? 'text-brand-600 dark:text-brand-400' : 'text-neutral-900 dark:text-neutral-100'}`}>Tgl {d}</span>
-                    <span className={`block text-[10px] leading-none ${isSun ? 'text-amber-600 font-medium' : 'text-neutral-400'}`}>{dayShort}{isSun ? ' · libur' : ''}</span>
+                    <span className={`block text-xs leading-none ${isSun ? 'text-amber-600 font-medium' : 'text-neutral-400'}`}>{dayShort}{isSun ? ' · libur' : ''}</span>
                   </td>
                   {VARIANTS.map(v => (
                     <td
@@ -2381,16 +2399,16 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                 }
                 rows.push(
                   <tr key={`wh${wk.id}`} className="bg-neutral-100 dark:bg-neutral-800 font-sans">
-                    <td colSpan={5} className="pt-2 pb-1 px-2.5 text-[11px] text-neutral-700 dark:text-neutral-200">
+                    <td colSpan={5} className="pt-2 pb-1 px-2.5 text-xs text-neutral-700 dark:text-neutral-200">
                       <div className="flex flex-wrap items-center justify-between gap-x-3">
                         <span><span className="font-bold">Minggu {wk.id}</span><span className="text-neutral-500 dark:text-neutral-400"> · Tgl {wk.start}–{wk.end}</span></span>
-                        <span className="text-[10px]">{wkInfo}</span>
+                        <span className="text-xs">{wkInfo}</span>
                       </div>
                     </td>
                     <td className={`${TOTAL_FRAME}`} />
                   </tr>,
                   <tr key={`wa${wk.id}`} className="bg-neutral-100 dark:bg-neutral-800 font-mono">
-                    <td className="pb-2 pt-0 px-2.5 text-[10px] leading-tight text-neutral-500 dark:text-neutral-400 font-sans whitespace-nowrap">
+                    <td className="pb-2 pt-0 px-2.5 text-xs leading-tight text-neutral-500 dark:text-neutral-400 font-sans whitespace-nowrap">
                       Rata2<span className="block">÷ {wDiv}</span>
                     </td>
                     {avgV.map((x, k) => (
@@ -2398,7 +2416,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                     ))}
                     <td className={`pb-2 pt-0 px-2.5 text-right font-bold text-neutral-900 dark:text-white ${TOTAL_FRAME}`}>
                       {formatNumber(avgT)}
-                      <span className="block text-[9px] font-normal font-sans text-neutral-500 dark:text-neutral-400">Akm {formatNumber(cw.cumTotal)}</span>
+                      <span className="block text-xs font-normal font-sans text-neutral-500 dark:text-neutral-400">Akm {formatNumber(cw.cumTotal)}</span>
                     </td>
                   </tr>
                 );
@@ -2410,13 +2428,13 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                 {/* Akumulasi & rata-rata breakdown sebulan (pembagi = tanggal terakhir bulan) */}
                 <div className="p-3 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-xs flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <span className="text-[10px] font-bold tracking-wide text-neutral-500 dark:text-neutral-400 block">AKM BREAKDOWN {period.label.toUpperCase()}</span>
-                    <span className="text-xl font-mono font-extrabold text-neutral-900 dark:text-white">{formatNumber(cumAll)}</span>
+                    <span className="text-xs font-bold tracking-wide text-neutral-500 dark:text-neutral-400 block">AKM BREAKDOWN {period.label.toUpperCase()}</span>
+                    <span className="text-lg font-mono font-bold text-neutral-900 dark:text-white">{formatNumber(cumAll)}</span>
                     <span className="text-xs text-neutral-400 font-sans"> btl</span>
                   </div>
                   <div className="text-right min-w-0">
-                    <span className="text-[10px] font-bold tracking-wide text-neutral-500 dark:text-neutral-400 block">RATA2/HR (÷ {DIM})</span>
-                    <span className="text-xl font-mono font-extrabold text-brand-600 dark:text-brand-400">{formatNumber(avgAll)}</span>
+                    <span className="text-xs font-bold tracking-wide text-neutral-500 dark:text-neutral-400 block">RATA2/HR (÷ {DIM})</span>
+                    <span className="text-lg font-mono font-bold text-brand-600 dark:text-brand-400">{formatNumber(avgAll)}</span>
                     <span className="text-xs text-neutral-400 font-sans"> btl</span>
                   </div>
                 </div>
@@ -2430,18 +2448,18 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                       style={{ borderLeft: `4px solid ${c.accent}` }}
                     >
                       <div className="flex flex-wrap items-center justify-between gap-1">
-                        <span className="text-[10px] font-bold tracking-wide text-neutral-500 break-words">{c.label}</span>
-                        <span className={`text-[10px] font-mono font-bold px-1.5 py-px rounded ${c.diffPerDay >= 0 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400'}`}>
+                        <span className="text-xs font-bold tracking-wide text-neutral-500 break-words">{c.label}</span>
+                        <span className={`text-xs font-mono font-bold px-1.5 py-px rounded ${c.diffPerDay >= 0 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400'}`}>
                           {formatDiff(c.diffPerDay)}
                         </span>
                       </div>
-                      <div className={`text-lg font-mono font-extrabold leading-tight ${c.pct >= 1 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      <div className={`text-base font-mono font-bold leading-tight ${c.pct >= 1 ? 'text-emerald-600' : 'text-red-600'}`}>
                         {c.base > 0 ? formatPercent(c.pct) : '—'}
                       </div>
-                      <div className="text-[10px] text-neutral-500 font-mono break-words">
+                      <div className="text-xs text-neutral-500 font-mono break-words">
                         {c.short}: {formatNumber(c.base)}/hr
                       </div>
-                      <div className={`text-[10px] font-mono break-words ${c.diffTotal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      <div className={`text-xs font-mono break-words ${c.diffTotal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                         Selisih: {formatDiff(c.diffTotal)}
                       </div>
                     </div>
@@ -2455,7 +2473,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                       <Target className="w-4 h-4 text-brand-600" />
                       Breakdown {period.label}
                     </h3>
-                    <p className="text-[10px] text-neutral-500 dark:text-neutral-400 leading-snug">
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-snug">
                       <span className="inline-block w-3 h-3 rounded-sm align-[-2px] mr-1 bg-emerald-300 dark:bg-emerald-500/50" />kolom varian hijau = realisasi tersimpan.
                       {' '}Kolom Total vs pencapaian minggu lalu (hari sama):{' '}
                       <span className="inline-block w-3 h-3 rounded-sm align-[-2px] mx-0.5 bg-red-300 dark:bg-red-500/50" />kurang,{' '}
@@ -2509,7 +2527,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
             {/* Header Kartu */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-neutral-100 dark:border-neutral-800">
               <div>
-                <h2 className="text-base md:text-lg leading-tight break-words font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+                <h2 className="text-base leading-tight break-words font-semibold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-brand-600 dark:text-brand-400" />
                   <span>Rekap Penjualan &amp; Kondisi TKU</span>
                 </h2>
@@ -2518,7 +2536,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                 <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-brand-50 text-brand-700 dark:bg-brand-950/50 dark:text-brand-400 border border-brand-200/60 dark:border-brand-900/40">
                   {tku.nama} (Rayon {tku.rayon})
                 </span>
-                <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
+                <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
                   ÷ {divider} hari
                 </span>
               </div>
@@ -2526,80 +2544,98 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
 
             {/* Bagian 1: Performa Penjualan & Capaian Target */}
             <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 block mb-3">
+              <span className="text-xs font-bold uppercase tracking-wide text-neutral-700 dark:text-neutral-300 block mb-3">
                 1. Performa Penjualan & Capaian Target
               </span>
               <div className="grid grid-cols-1 @lg:grid-cols-2 @4xl:grid-cols-4 gap-3.5">
                 {/* 1.1 Akumulasi Penjualan */}
                 <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/70 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full">
                   <div>
-                    <span className="text-xs font-medium text-neutral-500 block mb-1">Akumulasi Penjualan</span>
-                    <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight break-words text-neutral-900 dark:text-neutral-100">
-                      {formatNumber(tkuAkmTotal)} <span className="text-xs font-sans font-normal text-neutral-400">btl</span>
+                    <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 block mb-1">Akumulasi Penjualan</span>
+                    <div className="text-lg sm:text-xl font-semibold font-mono tracking-tight break-words text-neutral-900 dark:text-neutral-100">
+                      {formatNumber(tkuAkmTotal)} <span className="text-xs font-sans font-normal text-neutral-600 dark:text-neutral-300">btl</span>
                     </div>
                   </div>
-                  <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-                    <span className="text-neutral-500">Rata-rata / hari</span>
-                    <span className="font-mono font-bold text-brand-600 dark:text-brand-400">
-                      {formatNumber(tkuDailyAvg)} btl
-                    </span>
+                  <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs space-y-1">
+                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                      <span className="text-neutral-700 dark:text-neutral-300">Rata-rata / hari</span>
+                      <span className="font-mono font-bold text-brand-600 dark:text-brand-400">{formatDecimal(tkuDailyAvg)} btl</span>
+                    </div>
                   </div>
                 </div>
 
-                {/* 1.2 vs Target Bulan Ini */}
+                {/* 1.2 Capaian vs Target */}
                 <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/70 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full">
                   <div>
-                    <div className="flex items-start justify-between gap-2 text-neutral-500 mb-1 min-w-0">
-                      <span className="text-xs font-medium">Capaian vs Target</span>
-                      <Target className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                    <div className="flex items-start justify-between gap-2 text-neutral-700 dark:text-neutral-300 mb-1 min-w-0">
+                      <span className="text-xs font-semibold">Capaian vs Target</span>
+                      <Target className="w-4 h-4 text-neutral-600 dark:text-neutral-300 shrink-0" />
                     </div>
-                    <div className={`text-xl sm:text-2xl font-bold font-mono tracking-tight break-words ${getStatusClass(diffVsTarget)}`}>
+                    <div className={`text-lg sm:text-xl font-semibold font-mono tracking-tight break-words ${getStatusClass(akmDiffVsTarget)}`}>
                       {formatPercent(targetPct)}
                     </div>
                   </div>
-                  <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-                    <span className="text-neutral-500">Target: {formatNumber(targetHarian)}/hr</span>
-                    <span className={`font-mono font-bold ${getStatusClass(diffVsTarget)}`}>
-                      {formatAkmDiffPair(akmDiffVsTarget)}
-                    </span>
+                  <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs space-y-1">
+                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                      <span className="text-neutral-700 dark:text-neutral-300">Target: {formatDecimal(targetHarian)}/hr</span>
+                      <span className={`font-mono font-bold ${getStatusClass(akmDiffVsTarget)}`}>
+                        {formatDiff(akmDiffVsTarget)}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                      <span className="text-neutral-700 dark:text-neutral-300">Sisa Target/hr kerja</span>
+                      <span className="font-mono font-bold text-neutral-900 dark:text-neutral-100">{needTarget.text}</span>
+                    </div>
                   </div>
                 </div>
 
                 {/* 1.3 vs Bulan Lalu (LM) */}
                 <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/70 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full">
                   <div>
-                    <div className="flex items-start justify-between gap-2 text-neutral-500 mb-1 min-w-0">
-                      <span className="text-xs font-medium">vs Bulan Lalu (LM)</span>
-                      <Calendar className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                    <div className="flex items-start justify-between gap-2 text-neutral-700 dark:text-neutral-300 mb-1 min-w-0">
+                      <span className="text-xs font-semibold">vs Bulan Lalu (LM)</span>
+                      <Calendar className="w-4 h-4 text-neutral-600 dark:text-neutral-300 shrink-0" />
                     </div>
-                    <div className={`text-xl sm:text-2xl font-bold font-mono tracking-tight break-words ${getStatusClass(blDiff)}`}>
+                    <div className={`text-lg sm:text-xl font-semibold font-mono tracking-tight break-words ${getStatusClass(akmDiffVsBl)}`}>
                       {formatPercent(blPct)}
                     </div>
                   </div>
-                  <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-                    <span className="text-neutral-500">LM: {formatNumber(blHarian)}/hr</span>
-                    <span className={`font-mono font-bold ${getStatusClass(blDiff)}`}>
-                      {formatAkmDiffPair(akmDiffVsBl)}
-                    </span>
+                  <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs space-y-1">
+                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                      <span className="text-neutral-700 dark:text-neutral-300">LM: {formatNumber(blHarian)}/hr</span>
+                      <span className={`font-mono font-bold ${getStatusClass(akmDiffVsBl)}`}>
+                        {formatDiff(akmDiffVsBl)}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                      <span className="text-neutral-700 dark:text-neutral-300">Sisa LM/hr kerja</span>
+                      <span className="font-mono font-bold text-neutral-900 dark:text-neutral-100">{needBl.text}</span>
+                    </div>
                   </div>
                 </div>
 
                 {/* 1.4 vs Tahun Lalu (LY) */}
                 <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/70 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full">
                   <div>
-                    <div className="flex items-start justify-between gap-2 text-neutral-500 mb-1 min-w-0">
-                      <span className="text-xs font-medium">vs Tahun Lalu (LY)</span>
-                      <Clock className="w-3.5 h-3.5 text-neutral-400" />
+                    <div className="flex items-start justify-between gap-2 text-neutral-700 dark:text-neutral-300 mb-1 min-w-0">
+                      <span className="text-xs font-semibold">vs Tahun Lalu (LY)</span>
+                      <Clock className="w-4 h-4 text-neutral-600 dark:text-neutral-300 shrink-0" />
                     </div>
-                    <div className={`text-xl sm:text-2xl font-bold font-mono tracking-tight break-words ${getStatusClass(tyDiff)}`}>
+                    <div className={`text-lg sm:text-xl font-semibold font-mono tracking-tight break-words ${getStatusClass(akmDiffVsTy)}`}>
                       {formatPercent(tyPct)}
                     </div>
                   </div>
-                  <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-                    <span className="text-neutral-500">LY: {formatNumber(tyHarian)}/hr</span>
-                    <span className={`font-mono font-bold ${getStatusClass(tyDiff)}`}>
-                      {formatAkmDiffPair(akmDiffVsTy)}
-                    </span>
+                  <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs space-y-1">
+                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                      <span className="text-neutral-700 dark:text-neutral-300">LY: {formatNumber(tyHarian)}/hr</span>
+                      <span className={`font-mono font-bold ${getStatusClass(akmDiffVsTy)}`}>
+                        {formatDiff(akmDiffVsTy)}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                      <span className="text-neutral-700 dark:text-neutral-300">Sisa LY/hr kerja</span>
+                      <span className="font-mono font-bold text-neutral-900 dark:text-neutral-100">{needTy.text}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2607,94 +2643,91 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
 
             {/* Bagian 2: Kondisi Operasional (8 Kolom Lengkap) */}
             <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 block mb-3">
+              <span className="text-xs font-bold uppercase tracking-wide text-neutral-700 dark:text-neutral-300 block mb-3">
                 2. Kondisi Operasional (Absensi, JWP, S/YL, PDM, YL &lt; 250, YL &lt; 300)
               </span>
               <div className="grid grid-cols-2 @xl:grid-cols-4 @6xl:grid-cols-8 gap-3 font-mono items-stretch">
                 {/* 2.1 Jumlah YL */}
                 <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-                  <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">Jumlah YL</span>
-                  <span className="text-base md:text-lg leading-tight truncate font-bold text-neutral-900 dark:text-neutral-100">
-                    {yl} <span className="text-xs font-normal text-neutral-400 font-sans">/ {ar} area</span>
+                  <span className="text-xs leading-tight font-sans text-neutral-700 dark:text-neutral-300 font-semibold block mb-1 break-words">Jumlah YL</span>
+                  <span className="text-sm md:text-base leading-tight break-words font-semibold text-neutral-900 dark:text-neutral-100">
+                    {yl} <span className="text-xs font-normal text-neutral-600 dark:text-neutral-300 font-sans">/ {ar} area</span>
                   </span>
-                  <span className="text-[10px] text-neutral-400 block mt-auto pt-1 leading-snug font-sans truncate" title={`Cover: ${ar > 0 ? truncFixed(((yl / ar) * 100), 0) : 100}%`}>
+                  <span className="text-xs text-neutral-700 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans break-words" title={`Cover: ${ar > 0 ? truncFixed(((yl / ar) * 100), 0) : 100}%`}>
                     Cover: {ar > 0 ? truncFixed(((yl / ar) * 100), 0) : 100}%
                   </span>
                 </div>
 
                 {/* 2.2 Absensi (Absen dulu, baru Freq) */}
                 <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-                  <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">Absensi</span>
-                  <span className="text-base md:text-lg leading-tight truncate font-bold text-neutral-900 dark:text-neutral-100">
-                    {akmOps.akmAbsen} <span className="text-xs font-normal text-neutral-400 font-sans">absen</span>
+                  <span className="text-xs leading-tight font-sans text-neutral-700 dark:text-neutral-300 font-semibold block mb-1 break-words">Absensi</span>
+                  <span className="text-sm md:text-base leading-tight break-words font-semibold text-neutral-900 dark:text-neutral-100">
+                    {akmOps.akmAbsen} <span className="text-xs font-normal text-neutral-600 dark:text-neutral-300 font-sans">absen</span>
                   </span>
-                  <span className="text-[10px] text-neutral-600 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans truncate">
+                  <span className="text-xs text-neutral-700 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans break-words">
                     Freq: <strong className="text-neutral-900 dark:text-neutral-100 font-mono font-bold">{akmOps.akmFrek}</strong> kali
                   </span>
                 </div>
 
                 {/* 2.3 Akumulasi JWP (dengan EWP di bawahnya) */}
                 <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-                  <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">Akumulasi JWP</span>
-                  <span className="text-base md:text-lg leading-tight truncate font-bold text-sky-600 dark:text-sky-400">
+                  <span className="text-xs leading-tight font-sans text-neutral-700 dark:text-neutral-300 font-semibold block mb-1 break-words">Akumulasi JWP</span>
+                  <span className="text-sm md:text-base leading-tight break-words font-semibold text-sky-600 dark:text-sky-400">
                     {formatNumber(effectiveJwp)}
                   </span>
-                  <span className="text-[10px] text-neutral-600 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans truncate" title={`EWP: ${effectiveJwp > 0 ? truncFixed((((effectiveJwp - akmOps.akmFrek) / effectiveJwp) * 100), 1) : '0.0'}% ((${formatNumber(effectiveJwp)} - ${akmOps.akmFrek}) ÷ ${formatNumber(effectiveJwp)})`}>
-                    EWP: <strong className="text-neutral-900 dark:text-neutral-100 font-mono font-bold">{effectiveJwp > 0 ? truncFixed((((effectiveJwp - akmOps.akmFrek) / effectiveJwp) * 100), 1) : '0.0'}%</strong> <span className="text-neutral-400 font-normal">({effectiveJwp - akmOps.akmFrek}/{formatNumber(effectiveJwp)})</span>
+                  <span className="text-xs text-neutral-700 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans break-words" title={`EWP: ${effectiveJwp > 0 ? truncFixed((((effectiveJwp - akmOps.akmFrek) / effectiveJwp) * 100), 1) : '0.0'}% ((${formatNumber(effectiveJwp)} - ${akmOps.akmFrek}) ÷ ${formatNumber(effectiveJwp)})`}>
+                    EWP: <strong className="text-neutral-900 dark:text-neutral-100 font-mono font-bold">{effectiveJwp > 0 ? truncFixed((((effectiveJwp - akmOps.akmFrek) / effectiveJwp) * 100), 1) : '0.0'}%</strong>
                   </span>
                 </div>
 
                 {/* 2.4 s/YL */}
                 <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-                  <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">s/YL</span>
-                  <span className="text-base md:text-lg leading-tight truncate font-bold text-brand-600 dark:text-brand-400">
-                    {formatNumber(syl !== null ? syl : (effectiveJwp > 0 ? (tkuAkmTotal / effectiveJwp) : 0))} <span className="text-xs font-normal text-neutral-400 font-sans">btl</span>
-                  </span>
-                  <span className="text-[10px] text-neutral-500 dark:text-neutral-400 block mt-auto pt-1 leading-snug font-sans truncate">
-                    Akm Pjl &divide; Akm JWP
+                  <span className="text-xs leading-tight font-sans text-neutral-700 dark:text-neutral-300 font-semibold block mb-1 break-words">s/YL</span>
+                  <span className="text-sm md:text-base leading-tight break-words font-semibold text-brand-600 dark:text-brand-400">
+                    {formatNumber(syl !== null ? syl : (effectiveJwp > 0 ? (tkuAkmTotal / effectiveJwp) : 0))} <span className="text-xs font-normal text-neutral-600 dark:text-neutral-300 font-sans">btl</span>
                   </span>
                 </div>
 
                 {/* 2.5 Akm PDM (Terupdate) */}
                 <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-                  <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">Akm PDM</span>
-                  <span className="text-base md:text-lg leading-tight truncate font-bold text-indigo-600 dark:text-indigo-400">
-                    {formatNumber(akmOps.akmPdm)} <span className="text-xs font-normal text-neutral-400 font-sans">btl</span>
+                  <span className="text-xs leading-tight font-sans text-neutral-700 dark:text-neutral-300 font-semibold block mb-1 break-words">Akm PDM</span>
+                  <span className="text-sm md:text-base leading-tight break-words font-semibold text-indigo-600 dark:text-indigo-400">
+                    {formatNumber(akmOps.akmPdm)} <span className="text-xs font-normal text-neutral-600 dark:text-neutral-300 font-sans">btl</span>
                   </span>
-                  <span className="text-[10px] text-neutral-400 block mt-auto pt-1 leading-snug font-sans truncate">
+                  <span className="text-xs text-neutral-700 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans break-words">
                     Rata: {divider > 0 ? truncFixed((akmOps.akmPdm / divider), 1) : 0} btl/hr
                   </span>
                 </div>
 
                 {/* 2.6 Akm BB */}
                 <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-                  <span className="text-[11px] leading-tight font-sans text-neutral-500 block mb-1 truncate">Akm BB</span>
-                  <span className="text-base md:text-lg leading-tight truncate font-bold text-neutral-900 dark:text-neutral-100">
-                    {formatNumber(akmOps.akmBb)} <span className="text-xs font-normal text-neutral-400 font-sans">btl</span>
+                  <span className="text-xs leading-tight font-sans text-neutral-700 dark:text-neutral-300 font-semibold block mb-1 break-words">Akm BB</span>
+                  <span className="text-sm md:text-base leading-tight break-words font-semibold text-neutral-900 dark:text-neutral-100">
+                    {formatNumber(akmOps.akmBb)} <span className="text-xs font-normal text-neutral-600 dark:text-neutral-300 font-sans">btl</span>
                   </span>
-                  <span className="text-[10px] text-neutral-400 block mt-auto pt-1 leading-snug font-sans truncate">
+                  <span className="text-xs text-neutral-700 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans break-words">
                     % BB: <strong className={getBbStatusClass(akmBbRatio)}>{formatPercent(akmBbRatio)}</strong>
                   </span>
                 </div>
 
                 {/* 2.7 YL < 250 */}
                 <div className="p-3.5 rounded-2xl bg-red-50/60 dark:bg-red-950/30 border border-red-200/60 dark:border-red-900/40 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-                  <span className="text-[11px] leading-tight font-sans text-red-700 dark:text-red-400 font-medium block mb-1 truncate">YL &lt; 250</span>
-                  <span className="text-base md:text-lg leading-tight truncate font-bold text-red-700 dark:text-red-400">
+                  <span className="text-xs leading-tight font-sans text-red-700 dark:text-red-400 font-semibold block mb-1 break-words">YL &lt; 250</span>
+                  <span className="text-sm md:text-base leading-tight break-words font-semibold text-red-700 dark:text-red-400">
                     {tku.l250 ?? l250 ?? 0} <span className="text-xs font-normal text-red-500 font-sans">YL</span>
                   </span>
-                  <span className="text-[10px] text-red-600 dark:text-red-400 block mt-auto pt-1 leading-snug font-sans truncate">
+                  <span className="text-xs text-red-600 dark:text-red-400 block mt-auto pt-1 leading-snug font-sans break-words font-medium">
                     Rasio: {formatPercent(yl > 0 ? (tku.l250 ?? l250 ?? 0) / yl : 0)}
                   </span>
                 </div>
 
                 {/* 2.8 YL < 300 */}
                 <div className="p-3.5 rounded-2xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40 flex flex-col justify-between min-w-0 h-full overflow-hidden">
-                  <span className="text-[11px] leading-tight font-sans text-amber-700 dark:text-amber-400 font-medium block mb-1 truncate">YL &lt; 300</span>
-                  <span className="text-base md:text-lg leading-tight truncate font-bold text-amber-700 dark:text-amber-400">
+                  <span className="text-xs leading-tight font-sans text-amber-700 dark:text-amber-400 font-semibold block mb-1 break-words">YL &lt; 300</span>
+                  <span className="text-sm md:text-base leading-tight break-words font-semibold text-amber-700 dark:text-amber-400">
                     {tku.l300 ?? l300 ?? 0} <span className="text-xs font-normal text-amber-500 font-sans">YL</span>
                   </span>
-                  <span className="text-[10px] text-amber-600 dark:text-amber-400 block mt-auto pt-1 leading-snug font-sans truncate">
+                  <span className="text-xs text-amber-600 dark:text-amber-400 block mt-auto pt-1 leading-snug font-sans break-words font-medium">
                     Rasio: {formatPercent(yl > 0 ? (tku.l300 ?? l300 ?? 0) / yl : 0)}
                   </span>
                 </div>
@@ -2716,7 +2749,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 font-semibold bg-neutral-50 dark:bg-neutral-800/50">
+                  <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 font-semibold bg-neutral-50 dark:bg-neutral-800/50">
                     <th className="py-2.5 px-3">Varian Produk</th>
                     <th className="py-2.5 px-3 text-right">Akumulasi (btl)</th>
                     <th className="py-2.5 px-3 text-right">Kontribusi</th>
@@ -2735,19 +2768,19 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                         <span className="flex items-center gap-2">
                           <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.variant.color }} />
                           <span style={{ color: item.variant.color }}>{item.variant.code}</span>
-                          <span className="text-neutral-500 font-normal">&bull; {item.variant.name}</span>
+                          <span className="text-neutral-700 dark:text-neutral-300 font-normal">&bull; {item.variant.name}</span>
                         </span>
                       </td>
                       <td className="py-3 px-3 text-right font-bold text-neutral-900 dark:text-neutral-100">
                         {formatNumber(item.akm)}
                       </td>
-                      <td className="py-3 px-3 text-right text-neutral-600 dark:text-neutral-400">
+                      <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">
                         {truncFixed(item.share, 1)}%
                       </td>
                       <td className="py-3 px-3 text-right font-bold">
                         {formatNumber(item.avg)}
                       </td>
-                      <td className="py-3 px-3 text-right text-neutral-500">
+                      <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">
                         {formatNumber(item.vTg)}
                       </td>
                       <td className="py-3 px-3 text-right font-bold">
@@ -2756,12 +2789,12 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                         </span>
                       </td>
                       <td className="py-3 px-3 text-right font-semibold">
-                        <span className={item.pctBl >= 1 ? 'text-emerald-600' : 'text-neutral-600 dark:text-neutral-400'}>
+                        <span className={item.pctBl >= 1 ? 'text-emerald-600' : 'text-neutral-700 dark:text-neutral-300'}>
                           {formatPercent(item.pctBl)}
                         </span>
                       </td>
                       <td className="py-3 px-3 text-right font-semibold">
-                        <span className={item.pctTy >= 1 ? 'text-emerald-600' : 'text-neutral-600 dark:text-neutral-400'}>
+                        <span className={item.pctTy >= 1 ? 'text-emerald-600' : 'text-neutral-700 dark:text-neutral-300'}>
                           {formatPercent(item.pctTy)}
                         </span>
                       </td>

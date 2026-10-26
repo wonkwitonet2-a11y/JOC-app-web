@@ -1,3 +1,4 @@
+import { fs } from '../services/displayMode';
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, BarChart3 } from 'lucide-react';
 import { EvalUnit, ProgressEval, STATUS_LABEL } from '../services/progressEval';
@@ -22,7 +23,7 @@ const NEUTRAL = '#a3a3a3';
 
 const cardCls = 'p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm min-w-0';
 const titleCls = 'text-sm font-bold text-neutral-900 dark:text-neutral-100';
-const subCls = 'text-[11px] text-neutral-500 dark:text-neutral-400';
+const subCls = 'text-xs text-neutral-500 dark:text-neutral-400';
 
 function useWidth(initial = 320) {
   const ref = useRef<HTMLDivElement>(null);
@@ -79,14 +80,14 @@ const DonutCapaian: React.FC<{ head: EvalUnit }> = ({ head }) => {
             transform={`rotate(-90 ${size / 2} ${size / 2})`}
           />
           <line x1={tx1} y1={ty1} x2={tx2} y2={ty2} className="stroke-neutral-900 dark:stroke-white" strokeWidth={2.5} strokeLinecap="round" />
-          <text x={size / 2} y={size / 2 - 2} textAnchor="middle" className="fill-neutral-900 dark:fill-neutral-100" fontSize={22} fontWeight={800}>
+          <text x={size / 2} y={size / 2 - 2} textAnchor="middle" className="fill-neutral-900 dark:fill-neutral-100" fontSize={fs(22)} fontWeight={800}>
             {formatPercent(p.pctToDate)}
           </text>
-          <text x={size / 2} y={size / 2 + 15} textAnchor="middle" className="fill-neutral-500" fontSize={10}>
+          <text x={size / 2} y={size / 2 + 15} textAnchor="middle" className="fill-neutral-500" fontSize={fs(12)}>
             s/d tgl {p.updateDay}
           </text>
         </svg>
-        <div className="min-w-0 space-y-2 text-[11px] text-neutral-600 dark:text-neutral-300">
+        <div className="min-w-0 space-y-2 text-xs text-neutral-600 dark:text-neutral-300">
           <div>
             <div className="text-neutral-500">Realisasi / target bulan</div>
             <div className="font-mono font-bold text-neutral-900 dark:text-neutral-100">
@@ -157,9 +158,9 @@ const KpiTiles: React.FC<{ head: EvalUnit }> = ({ head }) => {
           const Icon = t.d !== null && t.d > 0 ? ArrowUp : ArrowDown;
           return (
             <div key={t.label} className="p-3 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50/60 dark:bg-neutral-800/30">
-              <div className="text-[11px] font-semibold text-neutral-500">{t.label}</div>
-              <div className="text-xl font-black font-mono text-neutral-900 dark:text-neutral-100 leading-tight">{t.now}</div>
-              <span className={`mt-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold ${col}`}>
+              <div className="text-xs font-semibold text-neutral-500">{t.label}</div>
+              <div className="text-xl font-bold font-mono text-neutral-900 dark:text-neutral-100 leading-tight">{t.now}</div>
+              <span className={`mt-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-xs font-bold ${col}`}>
                 {flat ? '● tetap' : (<><Icon className="w-3 h-3" strokeWidth={3} />{t.dText}</>)}
               </span>
             </div>
@@ -176,9 +177,9 @@ const DailyDelta: React.FC<{ ev: ProgressEval; head: EvalUnit; year: number; mon
   const days = ev.cmp.days;
   const cells = head.week.cells;
   const n = days.length;
-  const H = 190;
+  const H = Math.round(200 * fs(1));
   const padT = 22;
-  const padB = 34;
+  const padB = Math.round(40 * fs(1));
   const padX = 12;
   const plotH = H - padT - padB;
   const maxAbs = Math.max(1, ...cells.map(c => Math.abs(c)));
@@ -207,12 +208,12 @@ const DailyDelta: React.FC<{ ev: ProgressEval; head: EvalUnit; year: number; mon
                 <g key={d}>
                   <rect x={cx - bw / 2} y={up ? mid - h : mid} width={bw} height={Math.max(h, v === 0 ? 0 : 2)} rx={3} fill={v === 0 ? NEUTRAL : up ? GOOD : BAD} />
                   {(n <= 8 || i % 2 === 0) && (
-                    <text x={cx} y={up ? mid - h - 4 : mid + h + 11} textAnchor="middle" fontSize={9.5} fontWeight={700} fill={v === 0 ? NEUTRAL : up ? GOOD : BAD}>
+                    <text x={cx} y={up ? mid - h - 4 : mid + h + 11} textAnchor="middle" fontSize={fs(12)} fontWeight={700} fill={v === 0 ? NEUTRAL : up ? GOOD : BAD}>
                       {signed(v)}
                     </text>
                   )}
-                  <text x={cx} y={H - 18} textAnchor="middle" className="fill-neutral-500 dark:fill-neutral-400" fontSize={10}>{dow}</text>
-                  <text x={cx} y={H - 6} textAnchor="middle" className="fill-neutral-700 dark:fill-neutral-300" fontSize={10} fontWeight={600}>{d}</text>
+                  <text x={cx} y={H - Math.round(18 * fs(1))} textAnchor="middle" className="fill-neutral-500 dark:fill-neutral-400" fontSize={fs(12)}>{dow}</text>
+                  <text x={cx} y={H - Math.round(6 * fs(1))} textAnchor="middle" className="fill-neutral-700 dark:fill-neutral-300" fontSize={fs(12)} fontWeight={600}>{d}</text>
                 </g>
               );
             })}
@@ -229,11 +230,11 @@ const StackedVariants: React.FC<{ ev: ProgressEval; units: EvalUnit[] }> = ({ ev
   const cols = ev.weekCols.filter(c => !c.future);
   const vt = ev.variantTrend(units);
   const n = cols.length;
-  const H = 210;
-  const padL = 44;
+  const H = Math.round(222 * fs(1));
+  const padL = Math.round(48 * fs(1));
   const padR = 10;
   const padT = 22;
-  const padB = 24;
+  const padB = Math.round(30 * fs(1));
   const plotH = H - padT - padB;
   const colIdx = cols.map(c => ev.weekCols.indexOf(c));
   const totals = colIdx.map(ci => vt.reduce((s, v) => s + (v.avg[ci] ?? 0), 0));
@@ -249,7 +250,7 @@ const StackedVariants: React.FC<{ ev: ProgressEval; units: EvalUnit[] }> = ({ ev
       <p className={subCls}>Rata botol per hari, ditumpuk per varian</p>
       <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
         {VARIANTS.map(v => (
-          <span key={v.code} className="inline-flex items-center gap-1.5 text-[11px] text-neutral-600 dark:text-neutral-300">
+          <span key={v.code} className="inline-flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-300">
             <span className="w-2.5 h-2.5 rounded-sm" style={{ background: v.color }} />{v.code}
           </span>
         ))}
@@ -262,7 +263,7 @@ const StackedVariants: React.FC<{ ev: ProgressEval; units: EvalUnit[] }> = ({ ev
             {axis.ticks.map(t => (
               <g key={t}>
                 <line x1={padL} x2={width - padR} y1={y(t)} y2={y(t)} className="stroke-neutral-200 dark:stroke-neutral-700" />
-                <text x={padL - 6} y={y(t) + 3} textAnchor="end" className="fill-neutral-500 dark:fill-neutral-400" fontSize={10}>{formatNumber(t)}</text>
+                <text x={padL - 6} y={y(t) + 3} textAnchor="end" className="fill-neutral-500 dark:fill-neutral-400" fontSize={fs(12)}>{formatNumber(t)}</text>
               </g>
             ))}
             {cols.map((c, i) => {
@@ -280,11 +281,11 @@ const StackedVariants: React.FC<{ ev: ProgressEval; units: EvalUnit[] }> = ({ ev
                     return <rect key={v.code} x={cx - bw / 2} y={y1} width={bw} height={Math.max(0, y0 - y1)} fill={v.color} />;
                   })}
                   {totals[i] > 0 && (
-                    <text x={cx} y={y(totals[i]) - 5} textAnchor="middle" fontSize={10} fontWeight={700} className="fill-neutral-800 dark:fill-neutral-200">
+                    <text x={cx} y={y(totals[i]) - 5} textAnchor="middle" fontSize={fs(12)} fontWeight={700} className="fill-neutral-800 dark:fill-neutral-200">
                       {formatNumber(totals[i])}
                     </text>
                   )}
-                  <text x={cx} y={H - 8} textAnchor="middle" fontSize={10} fontWeight={c.current ? 700 : 400} className={c.current ? 'fill-indigo-600 dark:fill-indigo-300' : 'fill-neutral-500 dark:fill-neutral-400'}>
+                  <text x={cx} y={H - Math.round(8 * fs(1))} textAnchor="middle" fontSize={fs(12)} fontWeight={c.current ? 700 : 400} className={c.current ? 'fill-indigo-600 dark:fill-indigo-300' : 'fill-neutral-500 dark:fill-neutral-400'}>
                     M{c.id}{c.current && ev.updateDay < c.end ? '*' : ''}
                   </text>
                 </g>
@@ -301,9 +302,9 @@ const StackedVariants: React.FC<{ ev: ProgressEval; units: EvalUnit[] }> = ({ ev
 const VariantPairs: React.FC<{ head: EvalUnit }> = ({ head }) => {
   const [ref, width] = useWidth();
   const w = head.week;
-  const H = 190;
+  const H = Math.round(200 * fs(1));
   const padT = 22;
-  const padB = 38;
+  const padB = Math.round(44 * fs(1));
   const padX = 10;
   const plotH = H - padT - padB;
   const maxV = Math.max(1, ...w.vCur, ...w.vPrev);
@@ -334,11 +335,11 @@ const VariantPairs: React.FC<{ head: EvalUnit }> = ({ head }) => {
                 <g key={v.code}>
                   <rect x={cx - bw - 1.5} y={padT + plotH - hOf(prev)} width={bw} height={hOf(prev)} rx={3} fill={NEUTRAL} opacity={0.7} />
                   <rect x={cx + 1.5} y={padT + plotH - hOf(cur)} width={bw} height={hOf(cur)} rx={3} fill={v.color} />
-                  <text x={cx + 1.5 + bw / 2} y={padT + plotH - hOf(cur) - 4} textAnchor="middle" fontSize={9.5} fontWeight={700} className="fill-neutral-800 dark:fill-neutral-200">
+                  <text x={cx + 1.5 + bw / 2} y={padT + plotH - hOf(cur) - 4} textAnchor="middle" fontSize={fs(12)} fontWeight={700} className="fill-neutral-800 dark:fill-neutral-200">
                     {formatNumber(cur)}
                   </text>
-                  <text x={cx} y={H - 22} textAnchor="middle" fontSize={11} fontWeight={800} fill={v.color}>{v.code}</text>
-                  <text x={cx} y={H - 8} textAnchor="middle" fontSize={10} fontWeight={700} fill={d === 0 ? NEUTRAL : d > 0 ? GOOD : BAD}>
+                  <text x={cx} y={H - Math.round(22 * fs(1))} textAnchor="middle" fontSize={fs(12)} fontWeight={800} fill={v.color}>{v.code}</text>
+                  <text x={cx} y={H - Math.round(8 * fs(1))} textAnchor="middle" fontSize={fs(12)} fontWeight={700} fill={d === 0 ? NEUTRAL : d > 0 ? GOOD : BAD}>
                     {d === 0 ? '=' : `${d > 0 ? '▲' : '▼'} ${formatNumber(Math.abs(d))}`}
                   </text>
                 </g>
@@ -369,7 +370,7 @@ const TkuDiverging: React.FC<{ units: EvalUnit[] }> = ({ units }) => {
           <p className={subCls}>Selisih botol minggu ini vs minggu lalu, hari yang sama</p>
         </div>
         {list.length > 0 && (
-          <div className="flex items-center gap-1.5 text-[11px] font-bold">
+          <div className="flex items-center gap-1.5 text-xs font-bold">
             <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">▲ {nUp}</span>
             <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300">▼ {nDown}</span>
             <span className="px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">● {nSame}</span>
@@ -385,7 +386,7 @@ const TkuDiverging: React.FC<{ units: EvalUnit[] }> = ({ units }) => {
             const d = u.week.diff;
             const pctW = (Math.abs(d) / maxAbs) * 100;
             return (
-              <div key={u.key} className="grid grid-cols-[84px_1fr_60px] sm:grid-cols-[110px_1fr_70px] items-center gap-2 text-[11px]">
+              <div key={u.key} className="grid grid-cols-[84px_1fr_60px] sm:grid-cols-[110px_1fr_70px] items-center gap-2 text-xs">
                 <span className="font-semibold text-neutral-800 dark:text-neutral-200 truncate" title={u.name}>{u.name}</span>
                 <div className="relative h-5 grid grid-cols-2">
                   <div className="relative flex justify-end">
@@ -417,8 +418,8 @@ export const EvalWeeklyVisual: React.FC<Props> = ({ ev, units, head, isTku, year
     <section className="space-y-3">
       <div className="flex items-center gap-2">
         <BarChart3 className="w-3.5 h-3.5 text-neutral-400" />
-        <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">Ringkasan visual</span>
-        <span className="text-[10px] text-neutral-400">* = minggu berjalan (sementara)</span>
+        <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">Ringkasan visual</span>
+        <span className="text-xs text-neutral-400">* = minggu berjalan (sementara)</span>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">

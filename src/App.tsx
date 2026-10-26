@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { AppState, TkuItem, DailySalesRecord, VariantCode, ArchiveRecord, ArchiveRow, SupabaseConfig, SisaStockRecord } from './types';
+import { AppState, TkuItem, DailySalesRecord, VariantCode, ArchiveRecord, ArchiveRow, SupabaseConfig, SisaStockRecord, WeeklyNote } from './types';
+import { withNoteByKey, withReplyByKey } from './services/weeklyNotes';
 import {
   loadAppState,
   saveAppState,
@@ -52,6 +53,7 @@ import { LoginView } from './views/LoginView';
 import { DashboardView } from './views/DashboardView';
 import { PenjualanHarianView } from './views/PenjualanHarianView';
 import { EvaluasiView } from './views/EvaluasiView';
+import { KendalaSolusiView } from './views/KendalaSolusiView';
 import { BreakdownRealisasiView } from './views/BreakdownRealisasiView';
 import { TargetView } from './views/TargetView';
 import { ProfilTkuView } from './views/ProfilTkuView';
@@ -78,7 +80,7 @@ export default function App() {
   // Layar < 1024px (tablet / HP): menu samping dimulai TERTUTUP supaya area isi tidak sempit (bisa dibuka lewat tombol menu).
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth < 1024);
   // Sub-menu aktif untuk akun operator TKU: Ringkasan di depan, menu kedua Input Penjualan
-  const [tkuSubMenu, setTkuSubMenu] = useState<'ringkasan' | 'input' | 'breakdown' | 'realisasi' | 'stok'>('ringkasan');
+  const [tkuSubMenu, setTkuSubMenu] = useState<'ringkasan' | 'input' | 'breakdown' | 'realisasi' | 'stok' | 'kendala'>('ringkasan');
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -560,6 +562,15 @@ export default function App() {
     setState(prev => ({ ...prev, currentMenu: menu }));
     setDrawerOpen(false); // di mode HP, memilih menu langsung menutup drawer
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Catatan mingguan: TKU menulis catatan, admin menulis tanggapan (disimpan di peta terpisah agar tidak saling menimpa).
+  // Kunci catatan: periode:tkuId:minggu (catatan pertama) atau periode:tkuId:minggu:urutan (catatan tambahan).
+  const handleSaveWeeklyNote = (key: string, note: WeeklyNote) => {
+    setState(prev => withNoteByKey(prev, key, note));
+  };
+  const handleSaveWeeklyReply = (key: string, text: string) => {
+    setState(prev => withReplyByKey(prev, key, text));
   };
 
   const handleUpdateRayon = (rayon: number) => {
@@ -1549,7 +1560,16 @@ export default function App() {
           )}
           {confirmDialog}
           {state.role === 't' ? (
-            tkuSubMenu === 'stok' ? (
+            tkuSubMenu === 'kendala' ? (
+            <KendalaSolusiView
+              state={state}
+              mode="tku"
+              onSaveNote={handleSaveWeeklyNote}
+              onSaveReply={handleSaveWeeklyReply}
+              onUpdateRayon={handleUpdateRayon}
+              showToast={showToast}
+            />
+            ) : tkuSubMenu === 'stok' ? (
             <SisaStockView
               state={state}
               mode="tku"
@@ -1608,6 +1628,16 @@ export default function App() {
                   onUpdateActiveDay={handleUpdateActiveDay}
                   onUpdatePembagiKhususTku={handleUpdatePembagiKhususTku}
                   onNavigateMenu={(menu) => setState(prev => ({ ...prev, currentMenu: menu }))}
+                />
+              )}
+              {state.currentMenu === 'Kendala & Solusi' && (
+                <KendalaSolusiView
+                  state={state}
+                  mode="admin"
+                  onSaveNote={handleSaveWeeklyNote}
+                  onSaveReply={handleSaveWeeklyReply}
+                  onUpdateRayon={handleUpdateRayon}
+                  showToast={showToast}
                 />
               )}
               {state.currentMenu === 'Sisa Stock' && (
