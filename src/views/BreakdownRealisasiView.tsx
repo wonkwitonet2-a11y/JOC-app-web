@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, Calendar, ChevronDown, Download } from 'lucide-react';
+import { ArrowDown, ArrowLeftRight, ArrowUp, Calendar, ChevronDown, Download } from 'lucide-react';
 import { AppState, VariantCode, DailySalesRecord } from '../types';
 import {
   formatNumber,
@@ -91,7 +91,10 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
   const [tab, setTab] = useState<DataTab>('breakdown');
   const [viewMode, setViewMode] = useState<ViewMode>('bulanan');
   const [showKondisiTku, setShowKondisiTku] = useState<boolean>(true);
+  // Tombol panah: tampilkan rencana asli pada tanggal yang sudah tertutup realisasi (hanya lihat)
+  const [showOrigPlan, setShowOrigPlan] = useState<boolean>(false);
   const isReal = tab === 'realisasi';
+  const showPlanPast = !isReal && showOrigPlan;
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
 
   const selectedRayon = state.selectedRayon; // 0: Cabang, 1: Rayon 1, 2: Rayon 2
@@ -479,6 +482,23 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
               {monthName}{isReal ? ` • s/d Tgl ${updateDay}` : ''}
             </p>
           </div>
+          <div className="shrink-0 flex items-center gap-2">
+          {!isReal && (
+            <button
+              type="button"
+              onClick={() => setShowOrigPlan(v => !v)}
+              aria-pressed={showOrigPlan}
+              title={showOrigPlan ? 'Kembali menampilkan realisasi' : 'Lihat rencana asli pada tanggal yang sudah tertutup realisasi'}
+              className={`inline-flex items-center justify-center gap-1.5 h-9 px-2.5 sm:px-3.5 text-xs font-semibold rounded-xl border transition-colors ${
+                showOrigPlan
+                  ? 'bg-sky-50 dark:bg-sky-950/40 border-sky-300 dark:border-sky-700 text-sky-700 dark:text-sky-300'
+                  : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-800'
+              }`}
+            >
+              <ArrowLeftRight className="w-4 h-4" />
+              <span>{showOrigPlan ? 'Realisasi' : 'Rencana Asli'}</span>
+            </button>
+          )}
           <button
             onClick={handleExportCsv}
             className="shrink-0 inline-flex items-center justify-center gap-1.5 h-9 px-2.5 sm:px-3.5 text-xs font-semibold rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-200 transition-colors"
@@ -488,6 +508,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
             <Download className="w-4 h-4" />
             <span className="hidden sm:inline">Ekspor</span>
           </button>
+          </div>
         </div>
 
         {/* Baris 2: kontrol. HP = 2 toggle sebaris + dropdown; tablet/desktop = semua satu baris */}
@@ -588,6 +609,12 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
         ))}
       </div>
 
+      {showPlanPast && (
+        <p className="px-1 text-xs text-sky-700 dark:text-sky-300">
+          Mode rencana asli: angka per tanggal yang sudah tertutup realisasi menampilkan rencana awalnya (hanya lihat). Akumulasi, Rata-rata, dan Selisih tetap memakai realisasi.
+        </p>
+      )}
+
       {/* Tabel */}
       <div className={`bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 border-t-4 ${isReal ? 'border-t-emerald-500' : 'border-t-sky-500'} shadow-sm overflow-hidden`}>
         <div className="overflow-x-auto">
@@ -615,7 +642,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                       <div className="flex items-center justify-center gap-1">
                         <span>{DAY_NAMES[w]} {d}</span>
                         {!isReal && isRealDate(d) && (
-                          <span className="text-xs px-1 py-px rounded bg-emerald-600 text-white font-semibold leading-none">Real</span>
+                          <span className={`text-xs px-1 py-px rounded text-white font-semibold leading-none ${showPlanPast ? 'bg-sky-600' : 'bg-emerald-600'}`}>{showPlanPast ? 'Rencana' : 'Real'}</span>
                         )}
                       </div>
                     </th>
@@ -665,15 +692,19 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                     {shownDays.map(d =>
                       VCODES.map((v, vi) => {
                         const future = isReal && d > updateDay;
-                        const val = a.daily[d][vi];
+                        // Mode rencana asli: tanggal yang sudah tertutup realisasi menampilkan rencana aslinya
+                        const planShown = showPlanPast && isRealDate(d);
+                        const val = planShown ? r.idxs.reduce((acc, ti) => acc + getPlan(ti, d)[vi], 0) : a.daily[d][vi];
                         // Hari libur (semua TKU tanpa transaksi): tampil '-' tanpa tanda warna
-                        const isHolidayEmpty = !future && val === 0 && isHoliday(d);
+                        const isHolidayEmpty = !future && val === 0 && (planShown ? dow(d) === 0 : isHoliday(d));
                         // Warna angka per tanggal vs hari yang sama minggu lalu (baris TKU, tampilan mingguan)
-                        const dayTone: Tone = showWeekCmp && r.kind === 'tku' && !future && !isHolidayEmpty ? toneOf(dayDiff(a, d)) : 'none';
+                        const dayTone: Tone = showWeekCmp && r.kind === 'tku' && !future && !isHolidayEmpty && !planShown ? toneOf(dayDiff(a, d)) : 'none';
                         // Tab Breakdown: tanggal yang belum datang = rencana target -> biru
                         const isPlanDay = !isReal && !isRealDate(d);
                         const valTone = future || isHolidayEmpty
                           ? 'text-neutral-300 dark:text-neutral-600'
+                          : planShown
+                            ? `${hue(r.kind, 'text-sky-700 dark:text-sky-300', 'text-sky-300')} italic`
                           : dayTone !== 'none'
                             ? dayToneClass(dayTone)
                             : isPlanDay

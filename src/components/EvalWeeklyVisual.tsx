@@ -386,8 +386,8 @@ const TkuDiverging: React.FC<{ units: EvalUnit[] }> = ({ units }) => {
             const d = u.week.diff;
             const pctW = (Math.abs(d) / maxAbs) * 100;
             return (
-              <div key={u.key} className="grid grid-cols-[84px_1fr_60px] sm:grid-cols-[110px_1fr_70px] items-center gap-2 text-xs">
-                <span className="font-semibold text-neutral-800 dark:text-neutral-200 truncate" title={u.name}>{u.name}</span>
+              <div key={u.key} className="grid grid-cols-[minmax(5.75rem,32%)_minmax(0,1fr)_4.25rem] sm:grid-cols-[9rem_minmax(0,1fr)_5rem] lg:grid-cols-[12rem_minmax(0,1fr)_5.5rem] items-center gap-x-2 gap-y-0.5 text-xs min-h-[1.75rem]">
+                <span className="font-semibold leading-tight break-words text-neutral-800 dark:text-neutral-200" title={u.name}>{u.name}</span>
                 <div className="relative h-5 grid grid-cols-2">
                   <div className="relative flex justify-end">
                     {d < 0 && <div className="h-full rounded-l-md" style={{ width: `${pctW}%`, background: BAD }} />}

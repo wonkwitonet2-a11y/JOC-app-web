@@ -38,6 +38,7 @@ import {
   SESSION_EXPIRED_FLAG_KEY,
   SEED_PERIOD,
   buildArchiveFromState,
+  getArchiveGateStatus,
   saveSisaStockBackup,
   loadSisaStockBackup
 } from './services/storage';
@@ -1104,18 +1105,20 @@ export default function App() {
   const handleSwitchPeriod = async (newKey: string) => {
     const curKey = getPeriodInfo(state).key;
     if (!newKey || newKey === curKey) return;
-    markPeriodManualSwitch(newKey); // pilihan sengaja admin: tidak ditarik balik oleh sinkron bulan kerja
-    const now = new Date();
-    const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-    // Bulan lama yang sudah lewat otomatis diarsipkan (atau arsip parsialnya disempurnakan).
-    let base: AppState = state;
-    if (curKey < nowKey) {
-      const existing = base.archives[curKey];
-      if (!existing || existing.d < getDaysInMonthOfKey(curKey)) {
-        base = { ...base, archives: { ...base.archives, [curKey]: buildArchiveFromState(base) } };
-      }
+    // TIDAK ADA arsip otomatis. Arsip hanya disimpan manual lewat tombol "Simpan Bulan Ini" (menu Arsip).
+    // Pindah bulan dikunci sampai bulan berjalan sudah tersimpan di arsip dan sama dengan data terbaru.
+    const gate = getArchiveGateStatus(state);
+    if (gate === 'belum' || gate === 'berubah') {
+      showToast(
+        gate === 'belum'
+          ? `Belum bisa pindah bulan. Simpan dulu ${getPeriodInfo(state).label} lewat menu Arsip > Simpan Bulan Ini.`
+          : `Belum bisa pindah bulan. Data ${getPeriodInfo(state).label} berubah sejak diarsipkan. Simpan Bulan Ini lagi di menu Arsip.`,
+        'error'
+      );
+      return;
     }
+    markPeriodManualSwitch(newKey); // pilihan sengaja admin: tidak ditarik balik oleh sinkron bulan kerja
+    const base: AppState = state;
 
     const next = switchWorkingPeriod(base, newKey);
     setState(next);
@@ -1537,7 +1540,7 @@ export default function App() {
                       const toKey = getCalendarPeriodKey();
                       askConfirm({
                         title: `Pindah ke ${periodLabelOf(toKey)}?`,
-                        message: `Bulan kerja pindah dari ${getPeriodInfo(state).label} ke ${periodLabelOf(toKey)}.\nData ${getPeriodInfo(state).label} tersimpan utuh (diarsipkan otomatis), tidak ada yang dihapus. Semua HP yang tersambung akan ikut pindah setelah sinkron.`,
+                        message: `Bulan kerja pindah dari ${getPeriodInfo(state).label} ke ${periodLabelOf(toKey)}.\nData ${getPeriodInfo(state).label} tersimpan utuh, tidak ada yang dihapus. Pindah hanya bisa kalau bulan ini sudah disimpan di menu Arsip (tidak ada arsip otomatis). Semua HP yang tersambung akan ikut pindah setelah sinkron.`,
                         tone: 'warning',
                         confirmLabel: `Ya, pindah ke ${periodLabelOf(toKey)}`,
                         onConfirm: () => handleSwitchPeriod(toKey)
@@ -1698,6 +1701,7 @@ export default function App() {
                   onClearPjdHjd={handleClearPjdHjd}
                   onManualSync={() => refreshFromCloud(true)}
                   onSwitchPeriod={handleSwitchPeriod}
+                  onGoToArsip={() => handleSelectMenu('Arsip')}
                   onBackupNow={handleBackupNow}
                   isSyncing={isSyncing}
                   syncStatus={syncStatus}

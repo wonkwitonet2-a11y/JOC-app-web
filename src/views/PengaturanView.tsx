@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { AppState } from '../types';
 import { buildInviteLink } from '../services/supabaseInvite';
+import { getArchiveGateStatus } from '../services/storage';
 import {
   testSupabaseConnection,
   getPeriodInfo,
@@ -45,6 +46,7 @@ interface PengaturanViewProps {
   onClearPjdHjd?: () => void;
   onManualSync?: () => void;
   onSwitchPeriod?: (periodKey: string) => void | Promise<void>;
+  onGoToArsip?: () => void;
   onBackupNow?: () => Promise<boolean>;
   isSyncing?: boolean;
   syncStatus?: 'idle' | 'syncing' | 'synced' | 'error';
@@ -63,6 +65,7 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
   onClearPjdHjd,
   onManualSync,
   onSwitchPeriod,
+  onGoToArsip,
   onBackupNow,
   isSyncing = false,
   syncStatus = 'idle'
@@ -104,14 +107,31 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
   // karena confirm() diblokir diam-diam di pratinjau/iframe sehingga tombol terasa "tidak bereaksi".
   const [switchConfirmMsg, setSwitchConfirmMsg] = useState<string | null>(null);
 
+  // Pindah bulan dikunci: bulan berjalan harus sudah disimpan manual di menu Arsip.
+  const [switchBlockMsg, setSwitchBlockMsg] = useState<string | null>(null);
+
   const handleConfirmSwitch = () => {
     if (!onSwitchPeriod || pickedPeriod === activePeriodKey) return;
     const from = periodLabelOf(activePeriodKey);
     const to = periodLabelOf(pickedPeriod);
+    const gate = getArchiveGateStatus(state);
+    if (gate === 'belum' || gate === 'berubah') {
+      setSwitchConfirmMsg(null);
+      setSwitchBlockMsg(
+        gate === 'belum'
+          ? `Belum bisa pindah ke ${to}. Bulan berjalan (${from}) harus disimpan dulu ke arsip. Buka menu Arsip, cek datanya, lalu tekan "Simpan Bulan Ini".`
+          : `Belum bisa pindah ke ${to}. Data ${from} sudah berubah sejak terakhir diarsipkan. Buka menu Arsip, cek datanya, lalu tekan "Simpan Bulan Ini" lagi.`
+      );
+      return;
+    }
+    setSwitchBlockMsg(null);
     const isKnown = (state.monthStore && state.monthStore[pickedPeriod]) || summarizePeriod(state, pickedPeriod).days > 0;
+    const pastikan = gate === 'tersimpan'
+      ? `Pastikan arsip ${from} sudah benar dan tersimpan (cek menu Arsip). `
+      : '';
     const msg = isKnown
-      ? `Pindah dari ${from} ke ${to}? Data ${from} disimpan dulu (perangkat + Supabase), lalu data ${to} dibuka kembali seperti terakhir disimpan.`
-      : `Pindah dari ${from} ke ${to}? Data ${from} disimpan dulu (perangkat + Supabase). ${to} dibuka KOSONG: penjualan, BB, absen, JWP, dan input harian mulai dari 0. Target harian dibawa dari bulan sebelumnya dan bisa diubah di menu Target. Pindah ini berlaku untuk semua perangkat yang tersambung.`;
+      ? `${pastikan}Pindah dari ${from} ke ${to}? Data ${from} tetap tersimpan utuh (perangkat + Supabase), lalu data ${to} dibuka kembali seperti terakhir disimpan.`
+      : `${pastikan}Pindah dari ${from} ke ${to}? Data ${from} tetap tersimpan utuh (perangkat + Supabase). ${to} dibuka KOSONG: penjualan (realisasi), BB, absen, JWP, dan input harian mulai dari 0. Target dan breakdown juga mulai 0 dan diisi manual; bulan lalu & tahun lalu ditarik lewat tombol "Tarik Dari Arsip" di menu Target. Pindah ini berlaku untuk semua perangkat yang tersambung.`;
     setSwitchConfirmMsg(msg);
   };
 
@@ -266,7 +286,7 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
             <select
               value={pickedPeriod}
-              onChange={(e) => { setPickedPeriod(e.target.value); setSwitchConfirmMsg(null); }}
+              onChange={(e) => { setPickedPeriod(e.target.value); setSwitchConfirmMsg(null); setSwitchBlockMsg(null); }}
               className="w-full sm:w-72 px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm font-semibold"
             >
               {periodOptions.map(k => {
@@ -293,6 +313,27 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
               </button>
             )}
           </div>
+          {switchBlockMsg && pickedPeriod !== activePeriodKey && (
+            <div className="p-4 rounded-2xl border border-red-300 dark:border-red-900/60 bg-red-50 dark:bg-red-950/30 space-y-3" role="alert">
+              <p className="text-xs font-semibold text-red-800 dark:text-red-200 leading-relaxed">{switchBlockMsg}</p>
+              <div className="flex gap-2">
+                {onGoToArsip && (
+                  <button
+                    onClick={onGoToArsip}
+                    className="flex-1 px-4 py-2.5 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-700 text-white transition-colors"
+                  >
+                    Buka menu Arsip
+                  </button>
+                )}
+                <button
+                  onClick={() => setSwitchBlockMsg(null)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold border border-neutral-300 dark:border-neutral-600 hover:bg-white dark:hover:bg-neutral-800 transition-colors"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
+          )}
           {switchConfirmMsg && pickedPeriod !== activePeriodKey && (
             <div className="p-4 rounded-2xl border border-brand-200 dark:border-brand-900/50 bg-brand-50 dark:bg-brand-950/20 space-y-3">
               <p className="text-xs font-semibold text-neutral-800 dark:text-neutral-200 leading-relaxed">{switchConfirmMsg}</p>

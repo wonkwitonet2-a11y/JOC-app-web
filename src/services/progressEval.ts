@@ -61,6 +61,12 @@ export interface WeekCompare {
   vPrev: number[]; // idem, minggu lalu
   l250Cur: number | null; // rata-rata YL < 250 per hari yang dibandingkan (null = belum tercatat)
   l250Prev: number | null;
+  /** Rencana breakdown (btl) pada hari-hari minggu berjalan yang punya rencana & sudah ada hari jual; 0 = tidak ada pembanding */
+  planCur: number;
+  /** Realisasi (btl) pada hari-hari yang sama dengan planCur */
+  planReal: number;
+  /** Jumlah hari yang ikut dibandingkan dengan breakdown */
+  planDays: number;
 }
 
 export interface EvalUnit {
@@ -217,6 +223,22 @@ export function buildProgressEval(state: AppState, weeks: WeekDef[]): ProgressEv
   const forStreak = (trend: (number | null)[]) =>
     trend.map((v, wi) => (weekCols[wi].current && updateDay < weekCols[wi].end ? null : v));
 
+  // Rencana breakdown satu TKU pada tanggal d (total 4 varian). Aturan sama dengan menu Breakdown:
+  // Minggu = 0; pakai rencana per varian bila ada, lalu total breakdown, lalu target harian TKU.
+  const planOf = (i: number, d: number): number => {
+    if (dow(d) === 0) return 0;
+    const bv = state.breakdownPerVariant;
+    if (bv && bv.YO && bv.YO[i]) {
+      return (['YO', 'OM', 'OS', 'YT'] as const).reduce((s, c) => s + (bv[c]?.[i]?.[d - 1] || 0), 0);
+    }
+    const tot = state.breakdown?.[i]?.[d - 1];
+    if (tot !== undefined) return tot;
+    return state.tkus[i]?.targetHarian || 0;
+  };
+  // Hari yang dibandingkan dengan breakdown: minggu berjalan, s/d tanggal update, hanya hari jual cabang
+  const planDaysList: number[] = [];
+  for (let d = cw.start; d <= Math.min(cw.end, updateDay); d++) if (hasData(d)) planDaysList.push(d);
+
   const units: EvalUnit[] = activeIdx.map(i => {
     const t = state.tkus[i];
     const accNow = (t.penjualanAkm || []).reduce((a, b) => a + (b || 0), 0);
@@ -251,6 +273,10 @@ export function buildProgressEval(state: AppState, weeks: WeekDef[]): ProgressEv
       return cnt > 0 ? sum / cnt : null;
     };
 
+    const planDaysTku = planDaysList.filter(d => planOf(i, d) > 0);
+    const planCur = planDaysTku.reduce((s, d) => s + planOf(i, d), 0);
+    const planReal = planDaysTku.reduce((s, d) => s + soldOf(recOf(i, d)), 0);
+
     const hasPrevDay = updateDay - 7 >= 1;
     let last7 = 0;
     for (let d = Math.max(1, updateDay - 6); d <= updateDay; d++) last7 += soldOf(recOf(i, d));
@@ -284,7 +310,10 @@ export function buildProgressEval(state: AppState, weeks: WeekDef[]): ProgressEv
       vCur,
       vPrev,
       l250Cur: avgL250(cmpDays),
-      l250Prev: avgL250(cmpDays.map(d => d - 7))
+      l250Prev: avgL250(cmpDays.map(d => d - 7)),
+      planCur,
+      planReal,
+      planDays: planDaysTku.length
     };
 
     const weekSums: number[] = [];
@@ -374,7 +403,10 @@ export function buildProgressEval(state: AppState, weeks: WeekDef[]): ProgressEv
         vCur: [0, 1, 2, 3].map(v => wk.reduce((a, w) => a + (w.vCur[v] || 0), 0)),
         vPrev: [0, 1, 2, 3].map(v => wk.reduce((a, w) => a + (w.vPrev[v] || 0), 0)),
         l250Cur: sumNullable(wk.map(w => w.l250Cur)),
-        l250Prev: sumNullable(wk.map(w => w.l250Prev))
+        l250Prev: sumNullable(wk.map(w => w.l250Prev)),
+        planCur: sum(w => w.planCur),
+        planReal: sum(w => w.planReal),
+        planDays: wk.reduce((m, w) => Math.max(m, w.planDays), 0)
       },
       trend,
       weekSums,

@@ -69,7 +69,7 @@ export const EvaluasiPanel: React.FC<EvaluasiPanelProps> = ({ state, weeks, mode
   const ev: ProgressEval = useMemo(
     () => buildProgressEval(state, weeks),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.tkus, state.pjd, state.todayInputs, state.activePeriod, state.activeDate, state.pembagiManual, state.currentDayNum, weeks]
+    [state.tkus, state.pjd, state.todayInputs, state.breakdown, state.breakdownPerVariant, state.activePeriod, state.activeDate, state.pembagiManual, state.currentDayNum, weeks]
   );
   const [busy, setBusy] = useState(false);
 

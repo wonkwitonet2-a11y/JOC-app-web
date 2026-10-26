@@ -1095,6 +1095,11 @@ const toIndexRecord = <T,>(arr: T[]): Record<number, T> => {
 
 const clone = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
+// Bulan baru: target & rencana harian (breakdown) mulai 0. Admin mengisi manual,
+// pembanding bulan lalu/tahun lalu ditarik lewat tombol "Tarik Dari Arsip" di menu Target.
+// Ubah ke true kalau Target Harian ingin dibawa dari bulan sebelumnya.
+const CARRY_TARGET_HARIAN_TO_NEW_MONTH = false;
+
 // Rencana harian bawaan untuk satu bulan: hari Minggu = 0, hari lain = target harian.
 // (Sebelumnya tanggal Minggu di-hard-code untuk September saja.)
 export function buildDefaultBreakdown(
@@ -1200,7 +1205,7 @@ export function buildBlankSnapshot(state: AppState, key: string): MonthSnapshot 
     const yl = t.jumlahYl || 10;
     const ar = t.jumlahArea || 10;
     tkuMonthly[i] = {
-      targetHarian: t.targetHarian,
+      targetHarian: CARRY_TARGET_HARIAN_TO_NEW_MONTH ? t.targetHarian : 0,
       penjualanAkm: [0, 0, 0, 0],
       jumlahArea: t.jumlahArea,
       jumlahYl: t.jumlahYl,
@@ -1213,13 +1218,16 @@ export function buildBlankSnapshot(state: AppState, key: string): MonthSnapshot 
       l300: 0,
       bbAkm: [0, 0, 0, 0]
     };
-    targetBulanLalu[i] = avgFrom(prevArc, t.nama);
-    targetTahunLalu[i] = avgFrom(lyArc, t.nama);
-    codes.forEach((c, vi) => {
+    // Pembanding mulai 0 (tidak otomatis dari arsip). Isi lewat tombol "Tarik Dari Arsip".
+    targetBulanLalu[i] = 0;
+    targetTahunLalu[i] = 0;
+    codes.forEach((c) => {
       targetPerVariant[c][i] = {
-        tg: state.targetPerVariant?.[c]?.[i]?.tg ?? Math.floor((t.targetHarian || 0) * VARIANT_SHARE[c]),
-        bl: avgVarFrom(prevArc, t.nama, vi),
-        ty: avgVarFrom(lyArc, t.nama, vi)
+        tg: CARRY_TARGET_HARIAN_TO_NEW_MONTH
+          ? (state.targetPerVariant?.[c]?.[i]?.tg ?? Math.floor((t.targetHarian || 0) * VARIANT_SHARE[c]))
+          : 0,
+        bl: 0,
+        ty: 0
       };
     });
     todayInputs[i] = {
@@ -1234,12 +1242,15 @@ export function buildBlankSnapshot(state: AppState, key: string): MonthSnapshot 
     };
   });
 
-  const bd = buildDefaultBreakdown(
-    state.tkus.map(t => ({ ...t, targetHarian: t.targetHarian })),
-    year,
-    monthIndex,
-    targetPerVariant
-  );
+  // Breakdown bulan baru KOSONG (0 semua), diisi manual oleh admin.
+  const bd: { breakdown: Record<number, number[]>; breakdownPerVariant: AppState['breakdownPerVariant'] } = {
+    breakdown: {},
+    breakdownPerVariant: { YO: {}, OM: {}, OS: {}, YT: {} }
+  };
+  state.tkus.forEach((_, i) => {
+    bd.breakdown[i] = Array(31).fill(0);
+    codes.forEach(c => { (bd.breakdownPerVariant as any)[c][i] = Array(31).fill(0); });
+  });
 
   return {
     periode: key,
@@ -1291,6 +1302,29 @@ function applyMonthSnapshot(state: AppState, snap: MonthSnapshot): AppState {
     todayInputs,
     bbHarian: clone(snap.bbHarian || {})
   };
+}
+
+// Status arsip bulan kerja aktif, dipakai untuk mengunci pindah bulan.
+//  - 'kosong'  : bulan ini belum ada penjualan sama sekali -> boleh pindah tanpa arsip
+//  - 'tersimpan': arsip ada dan sama dengan data kerja terbaru
+//  - 'belum'   : belum pernah disimpan ke arsip
+//  - 'berubah' : sudah pernah diarsipkan, tetapi data kerja berubah sesudahnya
+export type ArchiveGateStatus = 'kosong' | 'tersimpan' | 'belum' | 'berubah';
+
+export function getArchiveGateStatus(state: AppState): ArchiveGateStatus {
+  const key = getPeriodInfo(state).key;
+  const fresh = buildArchiveFromState(state);
+  const totalNow = fresh.rows.reduce((a, r) => a + (r.total || 0), 0);
+  const arc = state.archives?.[key];
+  if (totalNow === 0) return arc ? 'tersimpan' : 'kosong';
+  if (!arc) return 'belum';
+  const sig = (r: ArchiveRow) => JSON.stringify([
+    r.nama, r.varian, r.targetHarian, r.bulanLalu, r.tahunLalu, r.akmBb, r.akmJwp,
+    r.absenYl, r.frekuensiAbsen, r.jumlahYl, r.jumlahArea, r.l250, r.l300
+  ]);
+  const a = new Map(arc.rows.map(r => [r.nama, sig(r)] as const));
+  const same = fresh.rows.length === arc.rows.length && fresh.d === arc.d && fresh.rows.every(r => a.get(r.nama) === sig(r));
+  return same ? 'tersimpan' : 'berubah';
 }
 
 // Pindah bulan kerja. Urutan yang menjamin data tidak hilang:

@@ -9,7 +9,15 @@ import { AppState } from '../types';
 export type NoteTone = 'good' | 'bad' | 'warn' | 'info';
 export interface EvalNote { tone: NoteTone; text: string }
 
-const fmtSigned = (x: number) => `${x > 0 ? '+' : x < 0 ? '−' : ''}${formatNumber(Math.abs(x))}`;
+// Batas % BB per minggu: ≤ 5% wajar, > 5% s/d < 10% warning, ≥ 10% tinggi (alarm)
+const BB_WAJAR = 0.05;
+const BB_TINGGI = 0.10;
+
+// Batas realisasi vs breakdown (rencana) per minggu: ≥ 95% wajar, 90% s/d < 95% warning, < 90% merah
+const PLAN_MERAH = 0.90;
+const PLAN_WARN = 0.95;
+
+const fmtSigned =(x: number) => `${x > 0 ? '+' : x < 0 ? '−' : ''}${formatNumber(Math.abs(x))}`;
 const joinNames = (u: EvalUnit[]) => u.map(x => x.name).join(', ');
 
 export function buildNotes(ev: ProgressEval, units: EvalUnit[], total: EvalUnit): EvalNote[] {
@@ -51,8 +59,69 @@ export function buildNotes(ev: ProgressEval, units: EvalUnit[], total: EvalUnit)
   const absenCause = fallers.filter(absenUp);
   if (bbCause.length > 0) notes.push({ tone: 'warn', text: `Penjualan turun bersamaan dengan % BB naik: ${joinNames(bbCause)}. Cek kualitas / sisa stok di TKU tersebut.` });
   if (absenCause.length > 0) notes.push({ tone: 'warn', text: `Penjualan turun bersamaan dengan absen bertambah: ${joinNames(absenCause)}.` });
-  const bbOnlyUp = units.filter(u => bbUp(u) && !bbCause.includes(u));
+  // 3b. BB naik tetapi penjualan juga naik vs minggu lalu (keterangan sendiri)
+  const bbUpSalesUp = withCmp.filter(u => bbUp(u) && u.week.diff > 0);
+  if (bbUpSalesUp.length > 0) {
+    const pc = (x: number | null) => formatPercent(x);
+    notes.push({
+      tone: 'info',
+      text: `BB naik, penjualan naik vs minggu lalu: ${bbUpSalesUp.map(u => `${u.name} (BB ${pc(u.week.bbPctPrev)} → ${pc(u.week.bbPctCur)}, penjualan ${fmtSigned(u.week.diff)} btl)`).join(', ')}.`
+    });
+  }
+  // BB naik lainnya (penjualan sama / belum ada pembanding)
+  const bbOnlyUp = units.filter(u => bbUp(u) && !bbCause.includes(u) && !bbUpSalesUp.includes(u));
   if (bbOnlyUp.length > 0) notes.push({ tone: 'info', text: `% BB naik minggu ini: ${joinNames(bbOnlyUp)}.` });
+
+  // 3c. BB tertinggi minggu ini (per minggu). ≤5% wajar (abu-abu), >5% s/d <10% warning, ≥10% tinggi/alarm.
+  // Penilaian memakai angka seperti yang tampil di layar (dipotong 1 desimal), supaya warna & angka selalu cocok.
+  const shown = (x: number) => Math.floor(x * 1000 + 1e-9) / 1000;
+  const bbList = units
+    .filter(u => u.week.bbPctCur !== null)
+    .map(u => ({ u, v: u.week.bbPctCur as number, s: shown(u.week.bbPctCur as number) }))
+    .sort((a, b) => b.v - a.v);
+  if (bbList.length > 0) {
+    const high = bbList.filter(x => x.s >= BB_TINGGI);
+    const fmtList = (l: typeof bbList) => l.map(x => `${x.u.name} (${formatPercent(x.v)})`).join(', ');
+    if (high.length > 0) {
+      notes.push({ tone: 'bad', text: `ALARM BB tinggi (≥ 10%) minggu ini: ${fmtList(high)}.` });
+    } else {
+      const top = bbList[0];
+      const warn = top.s > BB_WAJAR;
+      const label = units.length > 1 ? 'BB tertinggi minggu ini' : 'BB minggu ini';
+      notes.push({
+        tone: warn ? 'warn' : 'info',
+        text: `${label}: ${fmtList([top])}${warn ? ' — warning (di atas 5%)' : ' — wajar (maks. 5%)'}.`
+      });
+    }
+  }
+
+  // 3d. Realisasi vs breakdown (rencana PIC TKU) minggu ini, dihitung per minggu bukan per hari.
+  // Ada TKU di bawah 90% -> sebut semuanya (paling jauh di bawah rencana dulu).
+  // Tidak ada -> cukup satu TKU yang terendah, warna mengikuti persentasenya.
+  // Penilaian memakai angka yang tampil di layar (dipotong 1 desimal) supaya warna & angka cocok.
+  const planList = units
+    .filter(u => u.week.planCur > 0)
+    .map(u => {
+      const v = u.week.planReal / u.week.planCur;
+      return { u, v, s: shown(v) };
+    })
+    .sort((a, b) => a.v - b.v);
+  if (planList.length > 0) {
+    const fmtPlan = (l: typeof planList) =>
+      l.map(x => `${x.u.name} (realisasi ${formatNumber(x.u.week.planReal)} dari rencana ${formatNumber(x.u.week.planCur)} btl, ${formatPercent(x.v)})`).join(', ');
+    const low = planList.filter(x => x.s < PLAN_MERAH);
+    if (low.length > 0) {
+      notes.push({ tone: 'bad', text: `Di bawah breakdown (< 90%) minggu ini: ${fmtPlan(low)}.` });
+    } else {
+      const bottom = planList[0];
+      const label = planList.length > 1 ? 'Realisasi terendah vs breakdown minggu ini' : 'Realisasi vs breakdown minggu ini';
+      const warn = bottom.s < PLAN_WARN;
+      notes.push({
+        tone: warn ? 'warn' : 'info',
+        text: `${label}: ${fmtPlan([bottom])}${warn ? ' — warning (di bawah 95%)' : ' — sesuai rencana'}.`
+      });
+    }
+  }
 
   // 4. Tren antar-minggu
   const streakers = units.filter(u => u.streak >= 2);
@@ -244,6 +313,7 @@ const COLORS = {
   bg: '#ffffff',
   ink: '#171717',
   muted: '#737373',
+  dot: '#a3a3a3', // titik catatan netral (abu-abu), sama dengan di layar
   line: '#e5e5e5',
   head: '#f5f5f5',
   good: '#047857',
@@ -361,7 +431,7 @@ export function renderDocToCanvas(doc: ExportDoc): HTMLCanvasElement {
     } else {
       b.items.forEach(it => {
         const lines = wrap(it.text, 17, inner - 24);
-        ctx.fillStyle = toneColor(it.tone === 'info' ? undefined : it.tone);
+        ctx.fillStyle = it.tone === 'info' ? COLORS.dot : toneColor(it.tone);
         ctx.beginPath();
         ctx.arc(PAD + 8, y + 12, 5, 0, Math.PI * 2);
         ctx.fill();
@@ -413,7 +483,7 @@ export function docToHtml(doc: ExportDoc): string {
       return `<h2>${esc(b.title)}</h2><table class="kv">${b.rows.map(r => `<tr><td class="k">${esc(r.k)}</td><td class="${cls(r.v.tone)}">${esc(r.v.t)}</td></tr>`).join('')}</table>`;
     }
     if (b.type === 'list') {
-      return `<h2>${esc(b.title)}</h2><ul>${b.items.map(i => `<li class="${cls(i.tone === 'info' ? undefined : i.tone)}"><span>${esc(i.text)}</span></li>`).join('')}</ul>`;
+      return `<h2>${esc(b.title)}</h2><ul>${b.items.map(i => `<li class="${i.tone === 'info' ? 'n' : cls(i.tone)}"><span>${esc(i.text)}</span></li>`).join('')}</ul>`;
     }
     return `<h2>${esc(b.title)}</h2><table class="t"><thead><tr>${b.head.map((hd, i) => `<th class="${i === 0 ? 'l' : 'r'}">${esc(hd)}</th>`).join('')}</tr></thead><tbody>${b.rows
       .map((r, ri) => `<tr class="${b.boldLast && ri === b.rows.length - 1 ? 'tot' : ''}">${r.map((c, i) => `<td class="${i === 0 ? 'l' : 'r'} ${cls(c.tone)}">${esc(c.t)}</td>`).join('')}</tr>`)
@@ -427,7 +497,7 @@ h2{font-size:14px;margin:16px 0 6px;break-after:avoid}
 table{border-collapse:collapse;width:100%}th,td{padding:5px 8px;border-bottom:1px solid #e5e5e5}th{background:#f5f5f5;color:#737373;font-size:11px}
 .l{text-align:left}.r{text-align:right;font-variant-numeric:tabular-nums}.kv td.k{color:#737373;width:220px}.kv td{font-weight:600}
 .tot td{font-weight:700;background:#fafafa}.g{color:#047857;font-weight:700}.b{color:#b91c1c;font-weight:700}.w{color:#b45309;font-weight:700}
-ul{margin:0;padding-left:18px}li{margin:3px 0}li.g,li.b,li.w{font-weight:500}li.g::marker{color:#047857}li.b::marker{color:#b91c1c}li.w::marker{color:#b45309}
+ul{margin:0;padding-left:18px}li{margin:3px 0}li.g,li.b,li.w{font-weight:500}li.g::marker{color:#047857}li.b::marker{color:#b91c1c}li.w::marker{color:#b45309}li.n::marker{color:#a3a3a3}
 tr{break-inside:avoid}
 </style></head><body><h1>${esc(doc.title)}</h1><p class="sub">${esc(doc.subtitle)}</p>${body}</body></html>`;
 }

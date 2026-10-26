@@ -19,7 +19,10 @@ import {
   Clock,
   MapPin,
   Phone,
-  Copy
+  Copy,
+  ArrowLeftRight,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import { AppState, VARIANTS, VariantCode, DailySalesRecord } from '../types';
 import { TrendChart } from '../components/TrendChart';
@@ -187,6 +190,88 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
 
   // Breakdown Sub-Menu States
   const [selectedBreakdownPeriod, setSelectedBreakdownPeriod] = useState<'M1' | 'M2' | 'M3' | 'M4' | 'M5' | 'ALL'>('M1');
+  // Tombol panah: tampilkan rencana breakdown ASLI pada tanggal yang sudah tertutup realisasi (hanya lihat, tidak bisa diedit)
+  const [showOrigPlan, setShowOrigPlan] = useState<boolean>(false);
+  // Mode Edit Rencana: membuka kunci tanggal yang sudah lewat supaya rencana breakdown-nya bisa dikoreksi / dihapus
+  const [editPastPlan, setEditPastPlan] = useState<boolean>(false);
+  const [clearBeforeDay, setClearBeforeDay] = useState<number>(27);
+  const [clearAllTku, setClearAllTku] = useState<boolean>(false);
+  // Seleksi rentang sel breakdown ala spreadsheet (seret mouse / Shift+klik / Shift+panah)
+  const [selA, setSelA] = useState<{ d: number; v: number } | null>(null);
+  const [selB, setSelB] = useState<{ d: number; v: number } | null>(null);
+  const bdDragging = useRef(false);
+  // Mode Pilih Sel (untuk HP / layar sentuh): ketuk sel awal, lalu ketuk sel akhir
+  const [bdSelMode, setBdSelMode] = useState<boolean>(false);
+  const bdClipRef = useRef<string>('');
+  const bdWrapRef = useRef<HTMLDivElement | null>(null);
+  const bdJustDraggedRef = useRef<number>(0);
+  useEffect(() => {
+    const up = () => { bdDragging.current = false; };
+    window.addEventListener('mouseup', up);
+    return () => window.removeEventListener('mouseup', up);
+  }, []);
+
+  // Mode Pilih Sel di HP: tekan-tahan sebentar pada sel lalu geser jari untuk memilih rentang sel
+  // (lewati banyak sel sekaligus). Geser cepat sebelum tahan = scroll biasa. Ketuk-ketuk tetap bisa.
+  useEffect(() => {
+    const el = bdWrapRef.current;
+    if (!bdSelMode || !el) return;
+    let timer: number | null = null;
+    let armed = false;
+    let sx = 0, sy = 0;
+    const cellAt = (x: number, y: number) => {
+      const t = document.elementFromPoint(x, y) as HTMLElement | null;
+      const td = t?.closest('td[data-bd-d]') as HTMLElement | null;
+      if (!td) return null;
+      const d = parseInt(td.dataset.bdD || '0', 10);
+      const v = parseInt(td.dataset.bdV || '0', 10);
+      return d ? { d, v } : null;
+    };
+    const cancel = () => { if (timer !== null) { window.clearTimeout(timer); timer = null; } };
+    const onStart = (e: TouchEvent) => {
+      cancel(); armed = false;
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      sx = t.clientX; sy = t.clientY;
+      const c = cellAt(sx, sy);
+      if (!c) return;
+      timer = window.setTimeout(() => {
+        armed = true;
+        setSelA(c); setSelB(c);
+        if (navigator.vibrate) { try { navigator.vibrate(15); } catch { /* abaikan */ } }
+      }, 280);
+    };
+    const onMove = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!t) return;
+      if (!armed) {
+        if (Math.abs(t.clientX - sx) > 8 || Math.abs(t.clientY - sy) > 8) cancel();
+        return;
+      }
+      e.preventDefault(); // saat mode geser aktif, halaman tidak ikut ter-scroll
+      // gulir otomatis bila jari dekat tepi atas/bawah layar
+      if (t.clientY > window.innerHeight - 70) window.scrollBy(0, 14);
+      else if (t.clientY < 70) window.scrollBy(0, -14);
+      const c = cellAt(t.clientX, t.clientY);
+      if (c) setSelB(prev => (prev && prev.d === c.d && prev.v === c.v ? prev : c));
+    };
+    const onEnd = () => {
+      cancel();
+      if (armed) bdJustDraggedRef.current = Date.now();
+      armed = false;
+    };
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('touchend', onEnd);
+    el.addEventListener('touchcancel', onEnd);
+    return () => {
+      cancel();
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
+      el.removeEventListener('touchcancel', onEnd);
+    };
+  }, [bdSelMode]);
 
   // Realisasi Sub-Menu States (M1 s/d M5 & Satu Bulan)
   const [selectedRealisasiPeriod, setSelectedRealisasiPeriod] = useState<'M1' | 'M2' | 'M3' | 'M4' | 'M5' | 'ALL'>('ALL');
@@ -428,6 +513,24 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     }
   };
 
+  // Rencana breakdown ASLI satu tanggal (tanpa digantikan realisasi). Hanya untuk dilihat.
+  const getOriginalPlanForDay = (d: number, variant: VariantCode): number => {
+    if (new Date(PY, PM0, d).getDay() === 0) return 0; // Minggu libur: rencana 0
+    const dayIdx = d - 1;
+    const arr = state.breakdownPerVariant?.[variant]?.[tkuIdx];
+    if (arr && arr[dayIdx] !== undefined) return arr[dayIdx];
+    const tot = state.breakdown?.[tkuIdx]?.[dayIdx];
+    if (tot !== undefined) return Math.round(tot * ({ YO: 0.76, OM: 0.09, OS: 0.11, YT: 0.04 } as Record<VariantCode, number>)[variant]);
+    return state.targetPerVariant[variant]?.[tkuIdx]?.tg || Math.round(tku.targetHarian * 0.25);
+  };
+  const getOriginalPlanAllVariants = (d: number) => {
+    const yo = getOriginalPlanForDay(d, 'YO');
+    const om = getOriginalPlanForDay(d, 'OM');
+    const os = getOriginalPlanForDay(d, 'OS');
+    const yt = getOriginalPlanForDay(d, 'YT');
+    return { yo, om, os, yt, total: yo + om + os + yt };
+  };
+
   // Helper: Retrieve daily BB and PDM
   const getDailyOpsForDay = (d: number) => {
     const dStr = `${period.key}-${String(d).padStart(2, '0')}`;
@@ -464,6 +567,160 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     onUpdateBreakdownDay(tkuIdx, variant, dayIdx, val);
   };
 
+  // Hapus (jadikan 0) rencana breakdown tanggal 1 s/d (beforeDay - 1). Realisasi/penjualan riil TIDAK disentuh.
+  const handleClearPlanBefore = (beforeDay: number, allTku: boolean) => {
+    const last = Math.min(Math.max(1, Math.floor(beforeDay)) - 1, DIM);
+    if (last < 1) {
+      showToast('Tidak ada tanggal yang dihapus.', 'info');
+      return;
+    }
+    const updates: { variant: VariantCode; dayIdx: number; val: number }[] = [];
+    for (let d = 1; d <= last; d++) {
+      VAR_CODES.forEach(v => updates.push({ variant: v, dayIdx: d - 1, val: 0 }));
+    }
+    const targets = allTku ? state.tkus.map((_, i) => i) : [tkuIdx];
+    askConfirm({
+      title: 'Hapus rencana breakdown?',
+      message: `Rencana breakdown tgl 1 s/d ${last} untuk ${allTku ? `semua TKU (${targets.length})` : tku.nama} akan dijadikan 0. Data penjualan/realisasi tidak berubah.`,
+      confirmLabel: 'Ya, Hapus',
+      tone: 'danger',
+      onConfirm: () => {
+        targets.forEach(i => {
+          if (onBatchUpdateBreakdown) onBatchUpdateBreakdown(i, updates);
+          else updates.forEach(u => onUpdateBreakdownDay(i, u.variant, u.dayIdx, u.val));
+        });
+        showToast(`Rencana breakdown tgl 1–${last} berhasil dihapus.`, 'success');
+      }
+    });
+  };
+
+  // ---- Seleksi, salin, tempel, hapus rentang sel (seperti spreadsheet) ----
+  const getBdRect = () => {
+    if (!selA || !selB) return null;
+    return {
+      d1: Math.min(selA.d, selB.d), d2: Math.max(selA.d, selB.d),
+      v1: Math.min(selA.v, selB.v), v2: Math.max(selA.v, selB.v)
+    };
+  };
+  const isBdMulti = () => {
+    const r = getBdRect();
+    return !!r && (r.d1 !== r.d2 || r.v1 !== r.v2);
+  };
+  // Sel terkunci = tanggal tertutup realisasi (kecuali sedang Mode Edit Rencana; hari Minggu tetap terkunci)
+  const isCellLocked = (d: number) => {
+    const closed = hasActualSavedSalesForDay(d) || isPastDayLocked(d);
+    const isSunday = new Date(PY, PM0, d).getDay() === 0;
+    return closed && !(editPastPlan && !isSunday);
+  };
+  const applyBdUpdates = (updates: { variant: VariantCode; dayIdx: number; val: number }[]) => {
+    if (updates.length === 0) return;
+    if (onBatchUpdateBreakdown) onBatchUpdateBreakdown(tkuIdx, updates);
+    else updates.forEach(u => onUpdateBreakdownDay(tkuIdx, u.variant, u.dayIdx, u.val));
+  };
+  const clearBdSelection = (): number => {
+    const r = getBdRect();
+    if (!r) return 0;
+    const updates: { variant: VariantCode; dayIdx: number; val: number }[] = [];
+    for (let d = r.d1; d <= r.d2; d++) {
+      if (isCellLocked(d)) continue;
+      for (let vi = r.v1; vi <= r.v2; vi++) updates.push({ variant: VAR_CODES[vi], dayIdx: d - 1, val: 0 });
+    }
+    applyBdUpdates(updates);
+    return updates.length;
+  };
+  const buildBdText = (): string => {
+    const r = getBdRect();
+    if (!r) return '';
+    const lines: string[] = [];
+    for (let d = r.d1; d <= r.d2; d++) {
+      const cells: string[] = [];
+      for (let vi = r.v1; vi <= r.v2; vi++) {
+        const el = document.getElementById(`bd-input-${d}-${VAR_CODES[vi]}`) as HTMLInputElement | null;
+        cells.push(el?.value || '0');
+      }
+      lines.push(cells.join('\t'));
+    }
+    return lines.join('\n');
+  };
+  const writeClipboard = async (text: string) => {
+    bdClipRef.current = text;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch { /* buffer internal tetap tersedia */ }
+    }
+  };
+  const handleBtnCopy = async () => {
+    if (!getBdRect()) { showToast('Pilih sel dulu.', 'info'); return; }
+    await writeClipboard(buildBdText());
+    showToast('Sel breakdown disalin.', 'success');
+  };
+  const handleBtnCut = async () => {
+    if (!getBdRect()) { showToast('Pilih sel dulu.', 'info'); return; }
+    await writeClipboard(buildBdText());
+    const n = clearBdSelection();
+    showToast(n > 0 ? 'Sel breakdown dipotong.' : 'Sel terkunci tidak bisa dipotong.', n > 0 ? 'success' : 'info');
+  };
+  const handleBtnPaste = async () => {
+    const r = getBdRect();
+    if (!r) { showToast('Pilih sel tujuan dulu.', 'info'); return; }
+    let text = '';
+    try { text = await navigator.clipboard.readText(); } catch { text = ''; }
+    if (!text) text = bdClipRef.current;
+    if (!text) {
+      // Browser HP sering memblokir pembacaan clipboard otomatis: minta tempel manual lewat kotak isian
+      const manual = window.prompt('Clipboard tidak bisa dibaca otomatis. Tekan-tahan di kotak ini lalu pilih Tempel:', '');
+      if (!manual) { showToast('Clipboard kosong. Salin dulu sel yang ingin ditempel.', 'info'); return; }
+      text = manual;
+    }
+    pasteText(text, r.d1, VAR_CODES[r.v1]);
+  };
+  const handleBtnClear = () => {
+    if (!getBdRect()) { showToast('Pilih sel dulu.', 'info'); return; }
+    const n = clearBdSelection();
+    showToast(n > 0 ? `${n} sel dikosongkan.` : 'Sel terkunci tidak bisa dihapus.', n > 0 ? 'success' : 'info');
+  };
+  // Mode Pilih Sel: ketuk 1 = sel awal, ketuk 2 = sel akhir (rentang). Ketuk lagi = mulai pilihan baru.
+  const handleTableTapSelect = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!bdSelMode) return;
+    if (Date.now() - bdJustDraggedRef.current < 500) { e.preventDefault(); return; }
+    const td = (e.target as HTMLElement).closest('td[data-bd-d]') as HTMLElement | null;
+    if (!td) return;
+    e.preventDefault();
+    const d = parseInt(td.dataset.bdD || '0', 10);
+    const v = parseInt(td.dataset.bdV || '0', 10);
+    if (!d) return;
+    if (selA && selB && selA.d === selB.d && selA.v === selB.v && !(selA.d === d && selA.v === v)) {
+      setSelB({ d, v });
+    } else {
+      setSelA({ d, v });
+      setSelB({ d, v });
+    }
+  };
+
+  const handleCellCopy = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    if (!isBdMulti()) return; // satu sel: salin biasa
+    e.preventDefault();
+    e.clipboardData.setData('text/plain', buildBdText());
+    showToast('Sel breakdown disalin. Tempel di sel mana pun atau di Excel/Sheets.', 'success');
+  };
+  const handleCellCut = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    if (!isBdMulti()) return;
+    e.preventDefault();
+    e.clipboardData.setData('text/plain', buildBdText());
+    const n = clearBdSelection();
+    showToast(n > 0 ? 'Sel breakdown dipotong.' : 'Sel terkunci tidak bisa dipotong.', n > 0 ? 'success' : 'info');
+  };
+
   const handleCellPaste = (
     e: React.ClipboardEvent<HTMLInputElement>,
     startDay: number,
@@ -471,52 +728,63 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   ) => {
     e.preventDefault();
     const clipData = e.clipboardData.getData('text/plain') || e.clipboardData.getData('text');
+    pasteText(clipData, startDay, startVariant);
+  };
+
+  const pasteText = (clipData: string, startDay: number, startVariant: VariantCode) => {
     if (!clipData) return;
 
-    // Split rows by newline (supporting Windows \r\n, Mac \r, Linux \n)
-    const rawRows = clipData.split(/\r\n|\n|\r/).filter(row => row.trim().length > 0);
-    if (rawRows.length === 0) return;
+    const rawRows = clipData.split(/\r\n|\n|\r/);
+    while (rawRows.length > 1 && rawRows[rawRows.length - 1].trim() === '') rawRows.pop(); // baris kosong di akhir (khas Excel)
+    if (rawRows.length === 0 || (rawRows.length === 1 && rawRows[0].trim() === '')) return;
 
-    const startVarIdx = VAR_CODES.indexOf(startVariant);
-    if (startVarIdx === -1) return;
-
-    const batchUpdates: { variant: VariantCode; dayIdx: number; val: number }[] = [];
-
-    rawRows.forEach((rowStr, rowOffset) => {
-      const targetDay = startDay + rowOffset;
-      if (targetDay > DIM) return; // maksimal sebanyak hari di bulan kerja
-
-      // Split cells in row by tab (Excel/Sheets standard), or comma/semicolon
+    const grid = rawRows.map(rowStr => {
       let cells = rowStr.split('\t');
-      if (cells.length === 1 && (rowStr.includes(';') || rowStr.includes(','))) {
-        cells = rowStr.split(/[;,]/);
-      }
-
-      cells.forEach((cellStr, colOffset) => {
-        const targetVarIdx = startVarIdx + colOffset;
-        if (targetVarIdx >= VAR_CODES.length) return; // only 4 variants (YO, OM, OS, YT)
-
-        const vCode = VAR_CODES[targetVarIdx];
-        const cleaned = cellStr.trim().replace(/[^\d]/g, '');
-        const val = cleaned === '' ? 0 : parseInt(cleaned, 10);
-
-        batchUpdates.push({
-          variant: vCode,
-          dayIdx: targetDay - 1,
-          val: isNaN(val) ? 0 : Math.max(0, val)
-        });
+      if (cells.length === 1 && (rowStr.includes(';') || rowStr.includes(','))) cells = rowStr.split(/[;,]/);
+      return cells.map(c => {
+        const cleaned = c.trim().replace(/[^\d]/g, '');
+        const n = cleaned === '' ? 0 : parseInt(cleaned, 10);
+        return isNaN(n) ? 0 : Math.max(0, n);
       });
     });
 
+    const r = getBdRect();
+    const multi = isBdMulti();
+    const startVarIdx = VAR_CODES.indexOf(startVariant);
+    if (startVarIdx === -1) return;
+    const s0 = multi && r ? { d: r.d1, v: r.v1 } : { d: startDay, v: startVarIdx };
+
+    const batchUpdates: { variant: VariantCode; dayIdx: number; val: number }[] = [];
+    let lockedSkipped = 0;
+    const put = (day: number, vi: number, val: number) => {
+      if (day < 1 || day > DIM || vi < 0 || vi >= VAR_CODES.length) return;
+      if (isCellLocked(day)) { lockedSkipped++; return; }
+      batchUpdates.push({ variant: VAR_CODES[vi], dayIdx: day - 1, val });
+    };
+
+    let endD = s0.d, endV = s0.v;
+    if (multi && r && grid.length === 1 && grid[0].length === 1) {
+      // Satu nilai ditempel ke rentang terpilih: isi semua sel terpilih (seperti spreadsheet)
+      for (let d = r.d1; d <= r.d2; d++) for (let vi = r.v1; vi <= r.v2; vi++) put(d, vi, grid[0][0]);
+      endD = r.d2; endV = r.v2;
+    } else {
+      grid.forEach((row, ro) => row.forEach((val, co) => {
+        put(s0.d + ro, s0.v + co, val);
+        endD = Math.max(endD, Math.min(DIM, s0.d + ro));
+        endV = Math.max(endV, Math.min(VAR_CODES.length - 1, s0.v + co));
+      }));
+    }
+
     if (batchUpdates.length > 0) {
-      if (onBatchUpdateBreakdown) {
-        onBatchUpdateBreakdown(tkuIdx, batchUpdates);
-      } else {
-        batchUpdates.forEach(u => {
-          onUpdateBreakdownDay(tkuIdx, u.variant, u.dayIdx, u.val);
-        });
-      }
-      showToast(`Berhasil menempel (paste) ${batchUpdates.length} sel target rencana!`, 'success');
+      applyBdUpdates(batchUpdates);
+      setSelA({ d: s0.d, v: s0.v });
+      setSelB({ d: endD, v: endV });
+      showToast(
+        `Berhasil menempel ${batchUpdates.length} sel rencana${lockedSkipped ? ` (${lockedSkipped} sel terkunci dilewati)` : ''}!`,
+        'success'
+      );
+    } else if (lockedSkipped > 0) {
+      showToast('Sel tujuan terkunci. Aktifkan Edit Rencana untuk tanggal yang sudah lewat.', 'info');
     }
   };
 
@@ -527,6 +795,24 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   ) => {
     const varIdx = VAR_CODES.indexOf(currentVariant);
     let nextId = '';
+
+    // Shift + panah: perluas seleksi
+    if (e.shiftKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      const b = selB || { d: currentDay, v: varIdx };
+      const nd = Math.min(DIM, Math.max(1, b.d + (e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0)));
+      const nv = Math.min(VAR_CODES.length - 1, Math.max(0, b.v + (e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0)));
+      if (!selA) setSelA({ d: currentDay, v: varIdx });
+      setSelB({ d: nd, v: nv });
+      return;
+    }
+    // Delete / Backspace pada rentang: kosongkan sel terpilih
+    if ((e.key === 'Delete' || e.key === 'Backspace') && isBdMulti()) {
+      e.preventDefault();
+      const n = clearBdSelection();
+      if (n === 0) showToast('Sel terkunci tidak bisa dihapus.', 'info');
+      return;
+    }
 
     if (e.key === 'ArrowDown' || e.key === 'Enter') {
       e.preventDefault();
@@ -2295,7 +2581,14 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
               sumTotal += p.total;
 
               const isReal = hasActualSavedSalesForDay(d);
-              const isDaySaved = isReal || isPastDayLocked(d);
+              const isDayClosed = isReal || isPastDayLocked(d);
+              // Mode Edit Rencana: tanggal lama tampil sebagai RENCANA asli & bisa diedit (kecuali hari Minggu)
+              const editingPast = editPastPlan && isDayClosed && !isSun;
+              const isDaySaved = isDayClosed && !editingPast;
+              // Mode lihat rencana asli: hanya untuk tanggal yang sudah tertutup realisasi, tetap terkunci
+              const viewPlan = (showOrigPlan && isDayClosed && !editingPast) || editingPast;
+              const shown = viewPlan ? getOriginalPlanAllVariants(d) : p;
+              const BAND_PLAN = 'bg-sky-100 dark:bg-sky-500/25';
 
               // Bandingkan dengan PENCAPAIAN (realisasi) minggu lalu di hari yang sama (tanggal d-7).
               // Bila tanggal d-7 belum punya realisasi, pembandingnya RENCANA BREAKDOWN tanggal d-7 itu sendiri,
@@ -2329,44 +2622,62 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                     <span className={`font-bold ${isToday ? 'text-brand-600 dark:text-brand-400' : 'text-neutral-900 dark:text-neutral-100'}`}>Tgl {d}</span>
                     <span className={`block text-xs leading-none ${isSun ? 'text-amber-600 font-medium' : 'text-neutral-400'}`}>{dayShort}{isSun ? ' · libur' : ''}</span>
                   </td>
-                  {VARIANTS.map(v => (
+                  {VARIANTS.map((v, vi) => {
+                    const bdR = getBdRect();
+                    const isSelCell = !!bdR && (isBdMulti() || bdSelMode) && d >= bdR.d1 && d <= bdR.d2 && vi >= bdR.v1 && vi <= bdR.v2;
+                    return (
                     <td
                       key={v.code}
-                      className={`py-1 px-0.5 text-center ${isReal ? BAND_GREEN : ''}`}
-                      title={isReal ? `Realisasi tersimpan • Tgl ${d}` : undefined}
+                      data-bd-d={d}
+                      data-bd-v={vi}
+                      onMouseEnter={() => { if (bdDragging.current) setSelB({ d, v: vi }); }}
+                      className={`py-1 px-0.5 text-center ${isSelCell ? 'bg-indigo-200 dark:bg-indigo-500/40 ring-1 ring-inset ring-indigo-400' : viewPlan ? BAND_PLAN : isReal ? BAND_GREEN : ''}`}
+                      title={viewPlan ? `Rencana asli • Tgl ${d}` : isReal ? `Realisasi tersimpan • Tgl ${d}` : undefined}
                     >
                       <input
                         id={`bd-input-${d}-${v.code}`}
                         type="text"
                         inputMode="numeric"
-                        value={p[v.code.toLowerCase() as 'yo' | 'om' | 'os' | 'yt'] || ''}
+                        value={shown[v.code.toLowerCase() as 'yo' | 'om' | 'os' | 'yt'] || ''}
                         placeholder="0"
-                        disabled={isDaySaved}
-                        readOnly={isDaySaved}
+                        readOnly={isDaySaved || bdSelMode}
+                        onMouseDown={(e) => {
+                          if (bdSelMode) return;
+                          if (e.shiftKey && selA) { e.preventDefault(); setSelB({ d, v: vi }); return; }
+                          bdDragging.current = true;
+                          setSelA({ d, v: vi });
+                          setSelB({ d, v: vi });
+                        }}
+                        onCopy={handleCellCopy}
+                        onCut={handleCellCut}
                         onChange={(e) => {
-                          if (isDaySaved) return;
+                          if (isDaySaved || bdSelMode) return;
                           const raw = e.target.value.replace(/[^\d]/g, '');
                           const num = raw === '' ? 0 : parseInt(raw, 10);
                           handleCellChange(d, v.code, isNaN(num) ? 0 : num);
                         }}
-                        onFocus={(e) => !isDaySaved && e.target.select()}
-                        onPaste={(e) => !isDaySaved && handleCellPaste(e, d, v.code)}
-                        onKeyDown={(e) => !isDaySaved && handleCellKeyDown(e, d, v.code)}
-                        className={`w-full max-w-[4.5rem] px-1 py-1 text-center font-mono font-bold text-xs rounded-md border ${isReal ? 'bg-transparent border-transparent text-neutral-900 dark:text-neutral-50' : 'bg-white dark:bg-neutral-800/80 border-neutral-200 dark:border-neutral-700'} ${
+                        onFocus={(e) => {
+                          if (!isDaySaved) e.target.select();
+                          if (!bdDragging.current && !bdSelMode) { setSelA({ d, v: vi }); setSelB({ d, v: vi }); }
+                        }}
+                        onPaste={(e) => handleCellPaste(e, d, v.code)}
+                        onKeyDown={(e) => handleCellKeyDown(e, d, v.code)}
+                        className={`w-full max-w-[4.5rem] px-1 py-1 text-center font-mono font-bold text-xs rounded-md border ${editingPast ? 'bg-white dark:bg-neutral-800/80 border-sky-300 dark:border-sky-700 text-sky-800 dark:text-sky-200' : viewPlan ? 'italic bg-transparent border-transparent text-sky-800 dark:text-sky-200' : isReal ? 'bg-transparent border-transparent text-neutral-900 dark:text-neutral-50' : 'bg-white dark:bg-neutral-800/80 border-neutral-200 dark:border-neutral-700'} ${
                           isDaySaved
                             ? 'cursor-default'
                             : 'hover:border-brand-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none'
                         }`}
                         style={isReal ? undefined : { color: v.color }}
-                        title={isDaySaved ? `Tgl ${d} • Realisasi ${v.code}` : `Tgl ${d} • Rencana ${v.code} (${v.name})`}
+                        title={editingPast ? `Tgl ${d} • Edit rencana ${v.code} (${v.name})` : viewPlan ? `Tgl ${d} • Rencana asli ${v.code} (tidak bisa diedit)` : isDaySaved ? `Tgl ${d} • Realisasi ${v.code}` : `Tgl ${d} • Rencana ${v.code} (${v.name})`}
                       />
                     </td>
-                  ))}
+                    );
+                  })}
                   <td
-                    className={`py-1.5 px-2.5 text-right font-mono font-bold text-neutral-900 dark:text-neutral-50 ${totalBand} ${TOTAL_FRAME}`}
-                    title={totalTip}
+                    className={`py-1.5 px-2.5 text-right font-mono font-bold text-neutral-900 dark:text-neutral-50 ${viewPlan ? `${BAND_PLAN} italic` : totalBand} ${TOTAL_FRAME}`}
+                    title={editingPast ? 'Rencana (sedang diedit)' : viewPlan ? 'Rencana asli (tidak bisa diedit)' : totalTip}
                   >
-                    {formatNumber(p.total)}
+                    {formatNumber(shown.total)}
                   </td>
                 </tr>
               );
@@ -2469,19 +2780,132 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                 {/* Tabel breakdown: Tgl, varian, total (tgl 1 s/d akhir bulan) */}
                 <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs overflow-hidden">
                   <div className="px-3 py-2.5 border-b border-neutral-100 dark:border-neutral-800 space-y-1">
-                    <h3 className="text-sm font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
-                      <Target className="w-4 h-4 text-brand-600" />
-                      Breakdown {period.label}
-                    </h3>
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-sm font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+                        <Target className="w-4 h-4 text-brand-600" />
+                        Breakdown {period.label}
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => { if (showOrigPlan) setEditPastPlan(false); setShowOrigPlan(v => !v); }}
+                        aria-pressed={showOrigPlan}
+                        title={showOrigPlan ? 'Kembali menampilkan realisasi' : 'Lihat rencana asli pada tanggal yang sudah tertutup realisasi'}
+                        className={`shrink-0 inline-flex items-center gap-1.5 h-8 px-2.5 text-xs font-semibold rounded-lg border transition-colors ${
+                          showOrigPlan
+                            ? 'bg-sky-50 dark:bg-sky-950/40 border-sky-300 dark:border-sky-700 text-sky-700 dark:text-sky-300'
+                            : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-800'
+                        }`}
+                      >
+                        <ArrowLeftRight className="w-3.5 h-3.5" />
+                        {showOrigPlan ? 'Lihat Realisasi' : 'Lihat Rencana Asli'}
+                      </button>
+                      {showOrigPlan && (
+                      <button
+                        type="button"
+                        onClick={() => setEditPastPlan(v => !v)}
+                        aria-pressed={editPastPlan}
+                        title="Buka kunci tanggal yang sudah lewat untuk mengedit / menghapus rencana breakdown"
+                        className={`shrink-0 inline-flex items-center gap-1.5 h-8 px-2.5 text-xs font-semibold rounded-lg border transition-colors ${
+                          editPastPlan
+                            ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'
+                            : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-800'
+                        }`}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        {editPastPlan ? 'Selesai Edit' : 'Edit Rencana'}
+                      </button>
+                      )}
+                    </div>
+                    {showOrigPlan && editPastPlan && (
+                      <div className="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/20 p-2.5 space-y-2">
+                        <p className="text-xs text-amber-800 dark:text-amber-200 leading-snug">
+                          Mode edit: tanggal lama menampilkan <b>rencana</b> (kotak biru) dan bisa diubah langsung. Realisasi penjualan tidak berubah.
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <label className="inline-flex items-center gap-1.5 text-neutral-700 dark:text-neutral-200">
+                            Hapus sebelum tgl
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              min={1}
+                              max={DIM + 1}
+                              value={clearBeforeDay}
+                              onChange={(e) => setClearBeforeDay(parseInt(e.target.value, 10) || 1)}
+                              className="w-14 px-1.5 py-1 text-center font-mono font-bold rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800"
+                            />
+                          </label>
+                          <label className="inline-flex items-center gap-1.5 text-neutral-700 dark:text-neutral-200">
+                            <input type="checkbox" checked={clearAllTku} onChange={(e) => setClearAllTku(e.target.checked)} />
+                            Semua TKU
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => handleClearPlanBefore(clearBeforeDay, clearAllTku)}
+                            className="inline-flex items-center gap-1.5 h-8 px-2.5 font-semibold rounded-lg border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Hapus Rencana
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-snug">
                       <span className="inline-block w-3 h-3 rounded-sm align-[-2px] mr-1 bg-emerald-300 dark:bg-emerald-500/50" />kolom varian hijau = realisasi tersimpan.
                       {' '}Kolom Total vs pencapaian minggu lalu (hari sama):{' '}
                       <span className="inline-block w-3 h-3 rounded-sm align-[-2px] mx-0.5 bg-red-300 dark:bg-red-500/50" />kurang,{' '}
                       <span className="inline-block w-3 h-3 rounded-sm align-[-2px] mx-0.5 bg-emerald-300 dark:bg-emerald-500/50" />lebih,{' '}
                       <span className="inline-block w-3 h-3 rounded-sm align-[-2px] mx-0.5 bg-neutral-400 dark:bg-neutral-500/60" />sama.
+                      {' '}Komputer: seret / Shift+klik lalu Ctrl+C/X/V atau Delete. HP: tekan Pilih Sel, lalu ketuk sel awal dan sel akhir (atau tekan-tahan sel dan geser jari melewati banyak sel), kemudian pakai tombol Salin / Tempel.
+                      {showOrigPlan && (
+                        <>
+                          {' '}<span className="inline-block w-3 h-3 rounded-sm align-[-2px] mx-0.5 bg-sky-300 dark:bg-sky-500/50" />biru miring = rencana asli (hanya lihat). Total, akumulasi, dan rata-rata di bawah tetap memakai realisasi.
+                        </>
+                      )}
                     </p>
                   </div>
-                  <div className="overflow-x-auto">
+                  <div className="px-3 py-2 border-b border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center gap-1.5 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => { setSelA(null); setSelB(null); setBdSelMode(v => !v); }}
+                      aria-pressed={bdSelMode}
+                      title="Untuk HP: ketuk sel awal lalu sel akhir untuk memilih rentang"
+                      className={`inline-flex items-center gap-1.5 h-8 px-2.5 font-semibold rounded-lg border transition-colors ${
+                        bdSelMode
+                          ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300'
+                          : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-800'
+                      }`}
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      {bdSelMode ? 'Selesai Pilih' : 'Pilih Sel'}
+                    </button>
+                    {(bdSelMode || isBdMulti()) && (
+                      <>
+                        <button type="button" onClick={handleBtnCopy} className="inline-flex items-center gap-1 h-8 px-2.5 font-semibold rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-700 dark:text-neutral-200">
+                          <Copy className="w-3.5 h-3.5" />Salin
+                        </button>
+                        <button type="button" onClick={handleBtnCut} className="h-8 px-2.5 font-semibold rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-700 dark:text-neutral-200">
+                          Potong
+                        </button>
+                        <button type="button" onClick={handleBtnPaste} className="h-8 px-2.5 font-semibold rounded-lg border border-brand-300 dark:border-brand-700 bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300">
+                          Tempel
+                        </button>
+                        <button type="button" onClick={handleBtnClear} className="inline-flex items-center gap-1 h-8 px-2.5 font-semibold rounded-lg border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300">
+                          <Trash2 className="w-3.5 h-3.5" />Hapus
+                        </button>
+                        {(() => {
+                          const r = getBdRect();
+                          return r ? (
+                            <span className="text-neutral-500 dark:text-neutral-400">
+                              {(r.d2 - r.d1 + 1) * (r.v2 - r.v1 + 1)} sel (tgl {r.d1}{r.d2 !== r.d1 ? `–${r.d2}` : ''})
+                            </span>
+                          ) : (
+                            <span className="text-neutral-500 dark:text-neutral-400">Ketuk sel awal, atau tekan-tahan lalu geser</span>
+                          );
+                        })()}
+                      </>
+                    )}
+                  </div>
+                  <div ref={bdWrapRef} className={`overflow-x-auto ${bdSelMode ? 'select-none' : ''}`} onClickCapture={handleTableTapSelect}>
                     <table className="w-full text-xs text-left border-collapse">
                       <thead className="bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 font-semibold">
                         <tr className="border-b border-neutral-200 dark:border-neutral-700">
