@@ -22,10 +22,10 @@ import {
 } from '../services/storage';
 import { TrendChart } from '../components/TrendChart';
 import { PeringkatTkuTable } from '../components/PeringkatTkuTable';
-import { hitungPeringkat, hitungSkorTku, PeringkatInput, BOBOT, TOTAL_HASIL, TOTAL_KONDISI } from '../services/peringkat';
+import { hitungPeringkat, hitungSkorTku, PeringkatInput, BOBOT, TOTAL_HASIL, TOTAL_KONDISI, fmtBobot } from '../services/peringkat';
 
 const fmtPoin = (n: number | null | undefined) =>
-  n === null || n === undefined || !isFinite(n) ? '—' : n.toFixed(1).replace('.', ',');
+  n === null || n === undefined || !isFinite(n) ? '—' : n.toFixed(2).replace('.', ',');
 
 interface DashboardViewProps {
   state: AppState;
@@ -361,7 +361,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const buildPeringkatInput = (r: {
     t: { id: number | string; nama: string; rayon?: number };
     avg: number; tg: number; ty: number; bl: number; pctBb: number;
-    abs: number; yl: number; frk: number; area: number; pctL250: number; s_yl: number; l300: number;
+    yl: number; frk: number; area: number; pctL250: number; s_yl: number; l300: number;
   }): PeringkatInput => ({
     id: r.t.id,
     nama: r.t.nama,
@@ -371,7 +371,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     tahunLalu: r.ty,
     bulanLalu: r.bl,
     persenBb: r.pctBb * 100,
-    absen: r.abs,
     totalYl: r.yl,
     frekHariKosong: r.frk,
     tanggal: divider,
@@ -408,7 +407,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const area = t.jumlahArea || 10;
     const yl = t.jumlahYl || 10;
     const cover = area > 0 ? (yl / area) : 1;
-    const abs = inp?.absen !== undefined ? inp.absen : (t.absenYl !== undefined ? t.absenYl : 0);
     const frk = inp?.frek !== undefined ? inp.frek : (t.frekuensiAbsen !== undefined ? t.frekuensiAbsen : 0);
     const jwp = t.akmJwp || 0;
     const s_yl = jwp > 0 ? Math.floor(akm / jwp) : (t.sYl || 0);
@@ -429,7 +427,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const pctBb = (akm + tkuAkmBb) > 0 ? (tkuAkmBb / (akm + tkuAkmBb)) : 0;
 
     const pctL250 = yl > 0 ? (inp?.l250 ?? t.l250 ?? 0) / yl : 0;
-    const skor = hitungSkorTku(buildPeringkatInput({ t, avg, tg, ty, bl, pctBb, abs, yl, frk, area, pctL250, s_yl, l300: inp?.l300 ?? t.l300 ?? 0 }));
+    const skor = hitungSkorTku(buildPeringkatInput({ t, avg, tg, ty, bl, pctBb, yl, frk, area, pctL250, s_yl, l300: inp?.l300 ?? t.l300 ?? 0 }));
 
     return {
       t,
@@ -452,7 +450,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       area,
       yl,
       cover,
-      abs,
       frk,
       jwp,
       s_yl,
@@ -465,8 +462,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     if (rankingCriteria === 'target') return b.pctTg - a.pctTg;
     if (rankingCriteria === 'bulanLalu') return b.pctBl - a.pctBl;
     if (rankingCriteria === 'tahunLalu') return b.pctTy - a.pctTy;
-    // Gabungan = total poin penjualan (LY 28 + Target 26 + LM 11, termasuk bonus >100%)
-    return b.skor.skorHasil - a.skor.skorHasil || b.skor.total - a.skor.total;
+    // Gabungan = total poin penjualan (LY 35 + Target 24,5 + LM 10,5, skala 70:30, proporsional 0–120%).
+    // Bila poin sama, rata-rata persen asli (desimal) yang lebih tinggi di atas.
+    const r2 = (v: number) => Math.round(v * 100) / 100;
+    return (
+      r2(b.skor.skorHasil) - r2(a.skor.skorHasil) ||
+      r2(b.skor.rataPersenJual) - r2(a.skor.rataPersenJual) ||
+      b.skor.total - a.skor.total
+    );
   });
 
   const getActivePct = (row: typeof rankedTkus[0]) => {
@@ -954,7 +957,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <th className="py-2.5 px-3 text-right font-semibold border-l border-neutral-200 dark:border-neutral-700">vs Target</th>
                 <th className="py-2.5 px-3 text-right font-semibold">vs LM</th>
                 <th className="py-2.5 px-3 text-right font-semibold">vs LY</th>
-                <th className="py-2.5 px-3 text-right font-semibold">Poin Penjualan<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">maks {TOTAL_HASIL}+ poin</div></th>
+                <th className="py-2.5 px-3 text-right font-semibold">Poin Penjualan<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">maks {fmtBobot(TOTAL_HASIL)}+ poin</div></th>
                 <th className="py-2.5 px-3 font-semibold w-28 text-left">Diagram Capaian</th>
               </tr>
             </thead>
@@ -1136,16 +1139,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <th className="py-2.5 px-2 font-semibold">Rayon</th>
                     <th className={`py-2.5 px-3 text-right font-semibold ${bd}`}>Area</th>
                     <th className="py-2.5 px-3 text-right font-semibold">YL</th>
-                    <th className="py-2.5 px-3 text-right font-semibold">% Cover<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">poin maks {BOBOT.area}</div></th>
+                    <th className="py-2.5 px-3 text-right font-semibold">% Cover<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">poin maks {fmtBobot(BOBOT.area)}</div></th>
                     <th className={`py-2.5 px-3 text-right font-semibold text-sky-600 dark:text-sky-400 ${bd}`}>JWP</th>
-                    <th className="py-2.5 px-3 text-right font-semibold">s/YL<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">poin maks {BOBOT.syl}</div></th>
-                    <th className={`py-2.5 px-3 text-right font-semibold ${bd}`}>Absen<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">poin maks {BOBOT.absen}</div></th>
-                    <th className="py-2.5 px-3 text-right font-semibold">Frek (EWP)<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">poin maks {BOBOT.ewp}</div></th>
+                    <th className="py-2.5 px-3 text-right font-semibold">s/YL<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">poin maks {fmtBobot(BOBOT.syl)}</div></th>
+                    <th className={`py-2.5 px-3 text-right font-semibold ${bd}`}>Frek (EWP)<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">poin maks {fmtBobot(BOBOT.ewp)}</div></th>
                     <th className={`py-2.5 px-3 text-right font-semibold text-red-600 dark:text-red-400 ${bd}`}>&lt;250</th>
-                    <th className="py-2.5 px-3 text-right font-semibold text-red-600 dark:text-red-400">%&lt;250<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">poin maks {BOBOT.yl250}</div></th>
-                    <th className={`py-2.5 px-3 text-right font-semibold text-amber-600 dark:text-amber-400 ${bd}`}>&lt;300<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">poin maks {BOBOT.yl300}</div></th>
+                    <th className="py-2.5 px-3 text-right font-semibold text-red-600 dark:text-red-400">%&lt;250<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">poin maks {fmtBobot(BOBOT.yl250)}</div></th>
+                    <th className={`py-2.5 px-3 text-right font-semibold text-amber-600 dark:text-amber-400 ${bd}`}>&lt;300<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">poin maks {fmtBobot(BOBOT.yl300)}</div></th>
                     <th className="py-2.5 px-3 text-right font-semibold text-amber-600 dark:text-amber-400">%&lt;300</th>
-                    <th className={`py-2.5 px-3 text-right font-semibold text-brand-600 dark:text-brand-400 ${bd}`}>Skor Kondisi<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">maks {TOTAL_KONDISI} poin</div></th>
+                    <th className={`py-2.5 px-3 text-right font-semibold text-brand-600 dark:text-brand-400 ${bd}`}>Skor Kondisi<div className="whitespace-nowrap text-xs font-normal text-neutral-700 dark:text-neutral-300">maks {fmtBobot(TOTAL_KONDISI)} poin</div></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono text-xs sm:text-sm">
@@ -1159,8 +1161,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <td className={`py-3 px-3 text-right font-bold ${row.cover >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>{formatPercent(row.cover)}<div className="whitespace-nowrap text-xs text-neutral-700 dark:text-neutral-300 font-normal">{fmtPoin(row.skor.kategori.area.poin)} poin</div></td>
                       <td className={`py-3 px-3 text-right text-sky-600 dark:text-sky-400 ${bd}`}>{formatNumber(row.jwp)}</td>
                       <td className="py-3 px-3 text-right font-bold text-brand-600 dark:text-brand-400">{row.s_yl > 0 ? formatNumber(row.s_yl) : '—'}<div className="whitespace-nowrap text-xs text-neutral-700 dark:text-neutral-300 font-normal">{fmtPoin(row.skor.kategori.syl.poin)} poin</div></td>
-                      <td className={`py-3 px-3 text-right ${bd}`}>{row.abs > 0 ? <span className="font-bold text-red-600 dark:text-red-400">{row.abs}</span> : <span className="text-neutral-600 dark:text-neutral-300">0</span>}<div className="whitespace-nowrap text-xs text-neutral-700 dark:text-neutral-300 font-normal">{fmtPoin(row.skor.kategori.absen.poin)} poin</div></td>
-                      <td className="py-3 px-3 text-right">{row.frk > 0 ? <span className="font-bold text-red-600 dark:text-red-400">{row.frk}</span> : <span className="text-neutral-600 dark:text-neutral-300">0</span>}<div className="whitespace-nowrap text-xs text-neutral-700 dark:text-neutral-300 font-normal">{row.skor.kategori.ewp.nilai !== null ? `${row.skor.kategori.ewp.nilai.toFixed(2).replace('.', ',')}% · ` : ''}{fmtPoin(row.skor.kategori.ewp.poin)} poin</div></td>
+                      <td className={`py-3 px-3 text-right ${bd}`}>{row.frk > 0 ? <span className="font-bold text-red-600 dark:text-red-400">{row.frk}</span> : <span className="text-neutral-600 dark:text-neutral-300">0</span>}<div className="whitespace-nowrap text-xs text-neutral-700 dark:text-neutral-300 font-normal">{row.skor.kategori.ewp.nilai !== null ? `${row.skor.kategori.ewp.nilai.toFixed(2).replace('.', ',')}% · ` : ''}{fmtPoin(row.skor.kategori.ewp.poin)} poin</div></td>
                       <td className={`py-3 px-3 text-right text-red-600 dark:text-red-400 ${bd}`}>{row.l250}</td>
                       <td className="py-3 px-3 text-right font-semibold text-red-600 dark:text-red-400">{formatPercent(row.pctL250)}<div className="whitespace-nowrap text-xs text-neutral-700 dark:text-neutral-300 font-normal">{fmtPoin(row.skor.kategori.yl250.poin)} poin</div></td>
                       <td className={`py-3 px-3 text-right text-amber-600 dark:text-amber-400 ${bd}`}>{row.l300}<div className="whitespace-nowrap text-xs text-neutral-700 dark:text-neutral-300 font-normal">{fmtPoin(row.skor.kategori.yl300.poin)} poin</div></td>
@@ -1179,8 +1180,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <td className="py-3 px-3 text-right">{formatPercent(tArea > 0 ? tYl / tArea : 0)}</td>
                     <td className={`py-3 px-3 text-right text-sky-600 dark:text-sky-400 ${bd}`}>{formatNumber(tJwp)}</td>
                     <td className="py-3 px-3 text-right text-brand-600 dark:text-brand-400">{tJwp > 0 ? formatNumber(Math.floor(tAkm / tJwp)) : '—'}</td>
-                    <td className={`py-3 px-3 text-right ${bd}`}>{sum(r => r.abs)}</td>
-                    <td className="py-3 px-3 text-right">{sum(r => r.frk)}</td>
+                    <td className={`py-3 px-3 text-right ${bd}`}>{sum(r => r.frk)}</td>
                     <td className={`py-3 px-3 text-right text-red-600 dark:text-red-400 ${bd}`}>{tL250}</td>
                     <td className="py-3 px-3 text-right text-red-600 dark:text-red-400">{formatPercent(tYl > 0 ? tL250 / tYl : 0)}</td>
                     <td className={`py-3 px-3 text-right text-amber-600 dark:text-amber-400 ${bd}`}>{tL300}</td>

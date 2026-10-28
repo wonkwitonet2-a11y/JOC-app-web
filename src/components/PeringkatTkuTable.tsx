@@ -2,6 +2,7 @@ import React from 'react';
 import { Award } from 'lucide-react';
 import {
   BOBOT,
+  fmtBobot,
   TOTAL_BOBOT,
   TOTAL_HASIL,
   TOTAL_KONDISI,
@@ -16,7 +17,7 @@ interface Props {
 }
 
 const fmt1 = (n: number | null | undefined) =>
-  n === null || n === undefined || !isFinite(n) ? '—' : n.toFixed(1).replace('.', ',');
+  n === null || n === undefined || !isFinite(n) ? '—' : n.toFixed(2).replace('.', ',');
 const fmt2 = (n: number) => n.toFixed(2).replace('.', ',');
 const fmtPct = (n: number | null | undefined) =>
   n === null || n === undefined || !isFinite(n) ? '—' : `${n.toFixed(1).replace('.', ',')}%`;
@@ -46,7 +47,6 @@ const KONDISI: { k: KategoriKey; label: string; unit: string }[] = [
   { k: 'area', label: 'YL/Area', unit: '%' },
   { k: 'ewp', label: 'Frek (EWP)', unit: '%' },
   { k: 'yl250', label: '%YL<250', unit: '%' },
-  { k: 'absen', label: 'Absen', unit: '%' },
   { k: 'bb', label: '% BB', unit: '%' },
   { k: 'yl300', label: 'YL<300', unit: '' },
 ];
@@ -81,7 +81,7 @@ export const PeringkatTkuTable: React.FC<Props> = ({ data, tanggalUpdate }) => {
           {sementara ? `Sementara (tgl ${tanggalUpdate})` : `Resmi (tgl ${tanggalUpdate})`}
         </span>
         <span className="text-neutral-700 dark:text-neutral-300 font-medium">
-          Penjualan ({TOTAL_HASIL}) = LY ({BOBOT.yoy}) + Target ({BOBOT.target}) + LM ({BOBOT.mom}). Kondisi ({TOTAL_KONDISI}) = S/YL ({BOBOT.syl}), YL/Area ({BOBOT.area}), Frekuensi ({BOBOT.ewp}), %YL&lt;250 ({BOBOT.yl250}), Absen ({BOBOT.absen}), BB ({BOBOT.bb}), YL&lt;300 ({BOBOT.yl300}). Maks {TOTAL_BOBOT} + bonus.
+          Penjualan ({fmtBobot(TOTAL_HASIL)}) = LY ({fmtBobot(BOBOT.yoy)}) + Target ({fmtBobot(BOBOT.target)}) + LM ({fmtBobot(BOBOT.mom)}). Kondisi ({fmtBobot(TOTAL_KONDISI)}) = S/YL ({fmtBobot(BOBOT.syl)}), YL/Area ({fmtBobot(BOBOT.area)}), Frekuensi ({fmtBobot(BOBOT.ewp)}), %YL&lt;250 ({fmtBobot(BOBOT.yl250)}), BB ({fmtBobot(BOBOT.bb)}), YL&lt;300 ({fmtBobot(BOBOT.yl300)}). Maks {TOTAL_BOBOT} + bonus penjualan (sampai 120%).
         </span>
       </div>
 
@@ -94,11 +94,11 @@ export const PeringkatTkuTable: React.FC<Props> = ({ data, tanggalUpdate }) => {
               <th className="py-2.5 px-3 text-right font-semibold">Total</th>
               <th className="py-2.5 px-3 text-right font-semibold border-l border-neutral-200 dark:border-neutral-700">
                 Skor Penjualan
-                <div className="text-xs font-normal text-neutral-700 dark:text-neutral-300 whitespace-nowrap mt-0.5">maks {TOTAL_HASIL}+ poin</div>
+                <div className="text-xs font-normal text-neutral-700 dark:text-neutral-300 whitespace-nowrap mt-0.5">maks {fmtBobot(TOTAL_HASIL)}+ poin</div>
               </th>
               <th className="py-2.5 px-3 text-right font-semibold">
                 Skor Kondisi
-                <div className="text-xs font-normal text-neutral-700 dark:text-neutral-300 whitespace-nowrap mt-0.5">maks {TOTAL_KONDISI} poin</div>
+                <div className="text-xs font-normal text-neutral-700 dark:text-neutral-300 whitespace-nowrap mt-0.5">maks {fmtBobot(TOTAL_KONDISI)} poin</div>
               </th>
               {HASIL.map((h, i) => (
                 <th
@@ -108,7 +108,7 @@ export const PeringkatTkuTable: React.FC<Props> = ({ data, tanggalUpdate }) => {
                   }`}
                 >
                   {h.label}
-                  <div className="text-xs font-normal text-neutral-700 dark:text-neutral-300 whitespace-nowrap mt-0.5">maks {BOBOT[h.k]}+ poin</div>
+                  <div className="text-xs font-normal text-neutral-700 dark:text-neutral-300 whitespace-nowrap mt-0.5">maks {fmtBobot(BOBOT[h.k])}+ poin</div>
                 </th>
               ))}
               {KONDISI.map((h, i) => (
@@ -119,7 +119,7 @@ export const PeringkatTkuTable: React.FC<Props> = ({ data, tanggalUpdate }) => {
                   }`}
                 >
                   {h.label}
-                  <div className="text-xs font-normal text-neutral-700 dark:text-neutral-300 whitespace-nowrap mt-0.5">maks {BOBOT[h.k]} poin</div>
+                  <div className="text-xs font-normal text-neutral-700 dark:text-neutral-300 whitespace-nowrap mt-0.5">maks {fmtBobot(BOBOT[h.k])} poin</div>
                 </th>
               ))}
             </tr>
@@ -170,14 +170,13 @@ export const PeringkatTkuTable: React.FC<Props> = ({ data, tanggalUpdate }) => {
       <details className="text-xs text-neutral-700 dark:text-neutral-300 rounded-xl border border-neutral-200 dark:border-neutral-800 p-3 bg-neutral-50/50 dark:bg-neutral-800/30">
         <summary className="cursor-pointer font-bold text-neutral-800 dark:text-neutral-200">Keterangan poin per kategori</summary>
         <ul className="mt-2 space-y-2 leading-relaxed">
-          <li><b>vs LY ({BOBOT.yoy} poin), Target ({BOBOT.target} poin), vs LM ({BOBOT.mom} poin):</b> 100% ke atas = poin penuh + bonus sebanding persen (berhenti di 120%); 95% = 85%; 90% = 75%; 85% = 60%; 80% = 50%; di bawah 80% = 0. Saat total sama, rata-rata persen penjualan yang lebih tinggi di atas.</li>
-          <li><b>S/YL ({BOBOT.syl} poin):</b> di bawah 250 = 0; 250 = 1/3; 280 = 1/2; 300 = 70%; 330 = 85%; 350 ke atas = penuh.</li>
-          <li><b>YL/Area ({BOBOT.area} poin):</b> 100% = penuh; 90% = 2/3; 80% = 1/3; di bawah 80% = 0.</li>
-          <li><b>Frek/EWP ({BOBOT.ewp} poin):</b> 100% = penuh; 99,75 = 13/15; 99,5 = 12/15; 99,25 = 11/15; 99 = 10/15; lalu turun 1/15 tiap 1% sampai 90 = 1/15; di bawah 90 = 0.</li>
-          <li><b>%YL&lt;250 ({BOBOT.yl250} poin):</b> 0% = penuh, turun merata sampai 30% = 0 (komisi Ceko hangus jika lebih dari 30%).</li>
-          <li><b>Absen ({BOBOT.absen} poin):</b> 0% = penuh; sampai 10% = 70%; sampai 20% = 50%; di atas 20% = 0.</li>
-          <li><b>BB ({BOBOT.bb} poin):</b> 0% = penuh; sampai 5% = 2/3; sampai 10% = 1/3; di atas 10% = 0.</li>
-          <li><b>YL&lt;300 ({BOBOT.yl300} poin):</b> tidak ada YL di bawah 300 = penuh; ada satu saja = 0.</li>
+          <li><b>vs LY ({fmtBobot(BOBOT.yoy)} poin), Target ({fmtBobot(BOBOT.target)} poin), vs LM ({fmtBobot(BOBOT.mom)} poin):</b> proporsional dari 0% sampai 120% tanpa tangga: poin = capaian × bobot (0% = 0; 100% = poin penuh; 120% = 1,2 × poin penuh). Di atas 120% poin tidak bertambah lagi; bila poin sama, yang persen aslinya lebih tinggi di atas.</li>
+          <li><b>S/YL ({fmtBobot(BOBOT.syl)} poin):</b> angka desimal dibuang. Di bawah 250 = 0; 250–279 = 1/3; 280–299 = 1/2; 300–329 = 70%; 330–349 = 85%; 350 ke atas = penuh.</li>
+          <li><b>YL/Area ({fmtBobot(BOBOT.area)} poin):</b> naik merata dari 80% (1/3 poin) sampai 100% (penuh); 100% ke atas = penuh; di bawah 80% = 0.</li>
+          <li><b>Frek/EWP ({fmtBobot(BOBOT.ewp)} poin):</b> 100% = penuh; 99,75 = 13/15; 99,5 = 12/15; 99,25 = 11/15; 99 = 10/15; lalu turun 1/15 tiap 1% sampai 90 = 1/15; di bawah 90 = 0.</li>
+          <li><b>%YL&lt;250 ({fmtBobot(BOBOT.yl250)} poin):</b> 0% = penuh, turun merata sampai 30% = 0; 30% ke atas = 0.</li>
+          <li><b>BB ({fmtBobot(BOBOT.bb)} poin):</b> 0% (istimewa) = penuh; di atas 0 sampai 5% (wajar) = 3/4; di atas 5 sampai 10% (warning) = 1/4; di atas 10% (tidak wajar) = 0.</li>
+          <li><b>YL&lt;300 ({fmtBobot(BOBOT.yl300)} poin):</b> tidak ada YL di bawah 300 = penuh; ada satu saja = 0.</li>
         </ul>
       </details>
 

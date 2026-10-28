@@ -1,54 +1,67 @@
 /**
  * Peringkat TKU — total poin penuh 100 (belum termasuk bonus di atas 100%).
  *
- * Penjualan = 65 poin:  vs Tahun Lalu 28 (utama), vs Target 26, vs Bulan Lalu 11 (terendah).
- * Kondisi   = 35 poin (urut dari pengaruh ke penjualan): S/YL 8, Jumlah YL vs Area 7, Frekuensi (EWP) 7,
- *                      %YL<250 4 (syarat YL mandiri 250), Absen 4, BB 3, YL<300 2 (syarat hitungan komisi).
+ * Skala 70:30 — bobot dasar 65:35 dikalikan skala (bukan dibulatkan manual):
+ *   Penjualan = 70 poin = bobot dasar x 70/65:  vs Tahun Lalu 35 (50%), vs Target 24,5 (35%), vs Bulan Lalu 10,5 (15%).
+ *   Kondisi   = 30 poin = bobot dasar x 30/35:  S/YL 7,71, YL/Area 6,86, Frekuensi (EWP) 6,
+ *                      %YL<250 4,29, BB 3,43, YL<300 1,71.
+ * Ganti TOTAL_PENJUALAN/TOTAL_KONDISI_SKALA di bawah untuk skala lain (mis. 65/35 = kembali ke semula).
  *
- * Tangga nilai (persentase dari poin penuh indikator) mengikuti aturan perusahaan:
- * - Penjualan: >=100% = poin penuh + bonus proporsional (persen/100 x bobot), bonus berhenti di 120% (BATAS_BONUS),
- *   95% = 85%, 90% = 75%, 85% = 60%, 80% = 50%, <80% = 0. Di antara anak tangga dibulatkan ke bawah.
- * - YL vs Area: 100% = 100%, 90% = 2/3, 80% = 1/3, <80% = 0.
- * - BB: 0% = 100%, s/d 5% = 2/3, s/d 10% = 1/3, >10% = 0.
- * - Absen: 0% = 100%, s/d 10% = 70%, s/d 20% = 50%, >20% = 0.
- * - EWP: 100% = 100%, 99,75 = 13/15 dst (lihat tabel di skorEwp), <90 = 0.
- * - %YL<250: 0% = 100%, turun linear sampai 30% = 0; 30% ke atas tidak dapat poin.
- * - YL<300: tidak ada YL di bawah 300 = poin penuh (2), ada satu saja = 0.
- * - S/YL: bertahap mengikuti pengali kompensasi YL: <250 = 0, 250 = 1/3, 280 = 1/2, 300 = 0,7, 330 = 0,85, 350+ = 100%.
- * Absen & Frekuensi di aplikasi = angka update terbaru (bukan dijumlah harian).
+ * Rumus per indikator:
+ * - Penjualan: PROPORSIONAL dari 0% sampai 120% (tanpa tangga). Poin = capaian% / 100 x bobot, jadi 0% = 0,
+ *   100% = poin penuh, 120% = 1,2 x bobot. Di atas 120% poin berhenti bertambah (BATAS_BONUS); bila poin sama
+ *   (mis. sama-sama sudah lewat 120%), persen asli (desimal) yang lebih tinggi di atas.
+ * - S/YL (desimal dibuang): <250 = 0, 250-279 = 1/3, 280-299 = 1/2, 300-329 = 0,7, 330-349 = 0,85, 350+ = penuh.
+ * - YL/Area (coverage): proporsional naik merata dari 80% (1/3 poin) sampai 100% (penuh); <80% = 0.
+ * - EWP: 100% = penuh, 99,75 = 13/15 dst (lihat tabel di skorEwp), <90 = 0.
+ * - %YL<250: 0% = penuh, turun merata sampai 30% = 0; 30% ke atas = 0.
+ * - BB (dipotong 1 desimal): 0% = penuh, di atas 0 s/d 5% = 3/4, di atas 5 s/d 10% = 1/4, >10% = 0.
+ * - YL<300: tidak ada YL di bawah 300 = poin penuh, ada satu saja = 0.
+ * Frekuensi di aplikasi = angka update terbaru (bukan dijumlah harian).
  *
  * Basis kosong/nol (mis. data tahun lalu belum ada): indikator itu dikeluarkan.
- * - Kondisi: sisa poin dinormalisasi proporsional (tetap 35).
- * - Penjualan (tetap 65): bobot indikator yang kosong dibagikan ke indikator lain sebanding kuadrat bobotnya,
+ * - Kondisi: sisa poin dinormalisasi proporsional (tetap sesuai total kondisi).
+ * - Penjualan (tetap sesuai total penjualan): bobot indikator yang kosong dibagikan ke indikator lain sebanding kuadrat bobotnya,
  *   sehingga yang bobotnya besar (Target/Tahun Lalu) menerima lebih banyak dan Bulan Lalu tidak membengkak.
  * Urutan saat total sama: rata-rata persen penjualan (dibobot, tanpa batas bonus) yang lebih tinggi menang.
  */
 
+/** Skala total: Penjualan + Kondisi harus 100 */
+const TOTAL_PENJUALAN = 70;
+const TOTAL_KONDISI_SKALA = 30;
+/** Bobot dasar (skema 65:35) — dipakai sebagai acuan proporsi, tidak dipakai langsung */
+const DASAR_HASIL = 65;
+const DASAR_KONDISI = 35;
+const hasil = (b: number) => (b * TOTAL_PENJUALAN) / DASAR_HASIL;
+const kondisi = (b: number) => (b * TOTAL_KONDISI_SKALA) / DASAR_KONDISI;
+
 export const BOBOT = {
-  yoy: 28,
-  target: 26,
-  mom: 11,
-  syl: 8,
-  area: 7,
-  ewp: 7,
-  yl250: 4,
-  absen: 4,
-  bb: 3,
-  yl300: 2,
+  yoy: hasil(32.5), // 50% dari penjualan
+  target: hasil(22.75), // 35% dari penjualan
+  mom: hasil(9.75), // 15% dari penjualan
+  syl: kondisi(9),
+  area: kondisi(8),
+  ewp: kondisi(7),
+  yl250: kondisi(5),
+  bb: kondisi(4),
+  yl300: kondisi(2),
 } as const;
 
-/** Bonus penjualan berhenti di capaian ini (%). Di atasnya poin tidak bertambah. */
+/** Tampilkan bobot/poin maksimum: maks 2 desimal, tanpa nol di belakang, koma desimal (mis. 7,71 / 24,5 / 30) */
+export const fmtBobot = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',');
+
+/** Poin penjualan naik proporsional sampai capaian ini (%). Di atasnya poin tidak bertambah. */
 export const BATAS_BONUS = 120;
 
 export type KategoriKey = keyof typeof BOBOT;
 
 /** Kelompok untuk tampilan: hasil penjualan vs kondisi TKU */
 export const KELOMPOK_HASIL: KategoriKey[] = ['yoy', 'target', 'mom'];
-export const KELOMPOK_KONDISI: KategoriKey[] = ['syl', 'area', 'ewp', 'yl250', 'absen', 'bb', 'yl300'];
+export const KELOMPOK_KONDISI: KategoriKey[] = ['syl', 'area', 'ewp', 'yl250', 'bb', 'yl300'];
 
-const sumBobot = (g: KategoriKey[]) => g.reduce((t, k) => t + BOBOT[k], 0);
-export const TOTAL_HASIL = sumBobot(KELOMPOK_HASIL); // 65
-export const TOTAL_KONDISI = sumBobot(KELOMPOK_KONDISI); // 35
+const sumBobot = (g: KategoriKey[]) => Math.round(g.reduce((t, k) => t + BOBOT[k], 0) * 1e6) / 1e6;
+export const TOTAL_HASIL = sumBobot(KELOMPOK_HASIL); // 70
+export const TOTAL_KONDISI = sumBobot(KELOMPOK_KONDISI); // 30
 export const TOTAL_BOBOT = TOTAL_HASIL + TOTAL_KONDISI; // 100
 
 /** Ranking dianggap sementara bila tanggal update <= nilai ini */
@@ -74,8 +87,6 @@ export interface PeringkatInput {
   jumlahYl300?: number;
   /** S/YL = rata-rata penjualan per YL (botol) */
   sYl?: number;
-  /** Jumlah YL absen (angka update terbaru) */
-  absen: number;
   totalYl: number;
   /** Frekuensi hari kosong (angka update terbaru, akumulasi) */
   frekHariKosong: number;
@@ -131,42 +142,35 @@ function tangga(v: number, rows: [number, number][]): number {
 
 /**
  * Penjualan (vs LY / Target / LM). Nilai = pencapaian (%).
- * >=100% : poin penuh + bonus proporsional (persen/100 x bobot).
+ * Proporsional langsung: poin = capaian / 100 x bobot, mulai 0% sampai BATAS_BONUS (120%). Tanpa tangga.
+ * Di atas 120% poin tidak bertambah; pembeda diserahkan ke persen asli (rataPersenJual) saat pengurutan.
  */
 function skorPenjualan(aktual: number, basis: number, bobot: number): Skor {
   if (!fin(aktual) || !fin(basis) || basis <= 0) return { poin: null, nilai: null };
   const persen = (aktual / basis) * 100;
-  const v = trunc2(persen);
-  if (v >= 100) return { poin: (Math.min(persen, BATAS_BONUS) / 100) * bobot, nilai: persen };
-  const rasio = tangga(v, [
-    [95, 0.85],
-    [90, 0.75],
-    [85, 0.6],
-    [80, 0.5],
-  ]);
-  return { poin: rasio * bobot, nilai: persen };
+  const dipakai = Math.min(Math.max(0, persen), BATAS_BONUS);
+  return { poin: (dipakai / 100) * bobot, nilai: persen };
 }
 
-/** YL vs Area: 100% = penuh, 90% = 2/3, 80% = 1/3, <80% = 0 */
+/** YL vs Area: naik merata dari 80% (1/3 poin) sampai 100% (penuh); di bawah 80% = 0 */
 function skorArea(ylAktual: number, standarArea: number): Skor {
   if (!fin(ylAktual) || !fin(standarArea) || standarArea <= 0) return { poin: null, nilai: null };
   const persen = (ylAktual / standarArea) * 100;
-  const rasio = tangga(trunc2(persen), [
-    [100, 1],
-    [90, 10 / 15],
-    [80, 5 / 15],
-  ]);
+  const v = trunc2(persen);
+  let rasio = 0;
+  if (v >= 100) rasio = 1;
+  else if (v >= 80) rasio = 1 / 3 + ((v - 80) / 20) * (2 / 3);
   return { poin: rasio * BOBOT.area, nilai: persen };
 }
 
-/** BB: 0 = penuh, s/d 5% = 2/3, >5 s/d 10% = 1/3, >10% = 0 */
+/** BB: 0% = penuh, di atas 0 s/d 5% = 3/4, di atas 5 s/d 10% = 1/4, di atas 10% = 0 */
 function skorBb(persenBb: number): Skor {
   if (!fin(persenBb)) return { poin: null, nilai: null };
   const v = trunc1(Math.max(0, persenBb));
   let rasio = 0;
   if (v <= 0) rasio = 1;
-  else if (v <= 5) rasio = 10 / 15;
-  else if (v <= 10) rasio = 5 / 15;
+  else if (v <= 5) rasio = 0.75;
+  else if (v <= 10) rasio = 0.25;
   return { poin: rasio * BOBOT.bb, nilai: v };
 }
 
@@ -185,7 +189,7 @@ function skorYl300(jumlah: number | undefined): Skor {
   return { poin: v <= 0 ? BOBOT.yl300 : 0, nilai: v };
 }
 
-/** S/YL bertahap (pengali kompensasi YL): <250 = 0, 250 = 1/3, 280 = 1/2, 300 = 0,7, 330 = 0,85, 350+ = penuh. Tanpa data = dikeluarkan. */
+/** S/YL bertahap: <250 = 0, 250 = 1/3, 280 = 1/2, 300 = 0,7, 330 = 0,85, 350+ = penuh. Tanpa data = dikeluarkan. */
 function skorSyl(syl: number | undefined): Skor {
   if (!fin(syl) || syl <= 0) return { poin: null, nilai: null };
   const rasio = tangga(Math.floor(syl), [
@@ -196,17 +200,6 @@ function skorSyl(syl: number | undefined): Skor {
     [250, 1 / 3],
   ]);
   return { poin: rasio * BOBOT.syl, nilai: syl };
-}
-
-/** Absen (% dari jumlah YL): 0 = penuh, s/d 10% = 70%, s/d 20% = 50%, >20% = 0 */
-function skorAbsen(absen: number, totalYl: number): Skor {
-  if (!fin(absen) || !fin(totalYl) || totalYl <= 0) return { poin: null, nilai: null };
-  const persen = round2((Math.max(0, absen) / totalYl) * 100);
-  let rasio = 0;
-  if (persen <= 0) rasio = 1;
-  else if (persen <= 10) rasio = 0.7;
-  else if (persen <= 20) rasio = 0.5;
-  return { poin: rasio * BOBOT.absen, nilai: persen };
 }
 
 /** Frekuensi (EWP %): 100 = penuh, 99,75 = 13/15, 99,5 = 12/15, 99,25 = 11/15, 99 = 10/15, lalu turun 1/15 per 1% sampai 90 = 1/15, <90 = 0 */
@@ -243,7 +236,6 @@ export function hitungSkorTku(d: PeringkatInput): Omit<PeringkatRow, 'rank'> {
     area: skorArea(d.ylAktual, d.standarArea),
     ewp: skorEwp(d.totalYl, d.tanggal, d.frekHariKosong),
     bb: skorBb(d.persenBb),
-    absen: skorAbsen(d.absen, d.totalYl),
     yl250: skorYl250(d.persenYl250),
     syl: skorSyl(d.sYl),
     yl300: skorYl300(d.jumlahYl300),
@@ -251,12 +243,12 @@ export function hitungSkorTku(d: PeringkatInput): Omit<PeringkatRow, 'rank'> {
 
   const keys = Object.keys(BOBOT) as KategoriKey[];
   const dikeluarkan = keys.filter((k) => mentah[k].poin === null);
-  // Kondisi: normalisasi proporsional (tetap 35).
+  // Kondisi: normalisasi proporsional (tetap sesuai total kondisi).
   const faktorKondisi = (() => {
     const berlaku = KELOMPOK_KONDISI.reduce((t, k) => (mentah[k].poin === null ? t : t + BOBOT[k]), 0);
     return berlaku > 0 ? TOTAL_KONDISI / berlaku : 0;
   })();
-  // Penjualan (tetap 65): bobot yang kosong dibagi ke indikator lain sebanding kuadrat bobotnya.
+  // Penjualan (tetap sesuai total penjualan): bobot yang kosong dibagi ke indikator lain sebanding kuadrat bobotnya.
   const hasilBerlaku = KELOMPOK_HASIL.filter((k) => mentah[k].poin !== null);
   const bobotKosong = TOTAL_HASIL - hasilBerlaku.reduce((t, k) => t + BOBOT[k], 0);
   const sumKuadrat = hasilBerlaku.reduce((t, k) => t + BOBOT[k] ** 2, 0);
