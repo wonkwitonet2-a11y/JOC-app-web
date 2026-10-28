@@ -410,8 +410,8 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
       )}
 
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm relative">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-4 p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm relative">
+        <div className="flex items-center gap-3 min-w-0">
           <span className="p-2.5 rounded-xl bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400">
             <Archive className="w-5 h-5" />
           </span>
@@ -425,7 +425,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 max-w-full">
           {/* Tombol Utama: Simpan Bulan Ini */}
           <button
             onClick={() => {
@@ -856,8 +856,8 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
 
           {/* Table Container with Tab Navigation */}
           <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm overflow-hidden p-5 space-y-4">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b border-neutral-100 dark:border-neutral-800 pb-3">
-              <div>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b border-neutral-100 dark:border-neutral-800 pb-3 min-w-0">
+              <div className="shrink-0">
                 <h2 className="text-base font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
                   <BarChart3 className="w-4 h-4 text-brand-600" />
                   <span>Detail Arsip: {activeArchive.namaBulan}</span>
@@ -865,7 +865,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
               </div>
 
               {/* Tab Selector */}
-              <div className="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-800 p-1 rounded-xl text-xs font-semibold overflow-x-auto">
+              <div className="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-800 p-1 rounded-xl text-xs font-semibold overflow-x-auto max-w-full min-w-0">
                 <button
                   onClick={() => setActiveTab('item_sales')}
                   className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${

@@ -529,9 +529,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 max-w-full min-w-0">
           {/* Rayon Selector */}
-          <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 shadow-sm shrink-0">
+          <div className="inline-flex max-w-full overflow-x-auto p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 shadow-sm">
             {[
               { id: 0, label: 'Cabang' },
               { id: 1, label: 'Rayon 1' },
@@ -540,7 +540,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <button
                 key={r.id}
                 onClick={() => onUpdateRayon(r.id)}
-                className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
                   selectedRayon === r.id
                     ? 'bg-brand-600 text-white shadow-sm shadow-brand-600/20'
                     : 'text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
@@ -677,7 +677,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <span className="text-xs font-bold uppercase tracking-wide text-neutral-700 dark:text-neutral-300 block mb-3">
             2. Kondisi Operasional (Absensi, JWP, S/YL, PDM, YL &lt; 250, YL &lt; 300)
           </span>
-          <div className="grid grid-cols-2 @xl:grid-cols-4 @6xl:grid-cols-8 gap-3 font-mono items-stretch">
+          <div className="grid grid-cols-2 @2xl:grid-cols-4 @6xl:grid-cols-8 gap-3 font-mono items-stretch">
             {/* 2.1 Jumlah YL */}
             <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200/60 dark:border-neutral-800 flex flex-col justify-between min-w-0 h-full overflow-hidden">
               <span className="text-xs leading-tight font-sans text-neutral-700 dark:text-neutral-300 font-semibold block mb-1 break-words">Jumlah YL{vacantArea > 0 ? ` (${vacantArea} ksg)` : ''}</span>

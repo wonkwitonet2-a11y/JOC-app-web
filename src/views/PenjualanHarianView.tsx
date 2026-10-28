@@ -318,8 +318,8 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
   return (
     <div className="space-y-5">
       {/* 1. Header Ringkas & Pemilih Tanggal Kalender Tunggal */}
-      <div className="p-4 sm:p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
+      <div className="p-4 sm:p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
             <Calendar className="w-5 h-5 text-brand-600 shrink-0" />
             <span>Rekap Penjualan Harian</span>
@@ -327,7 +327,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
         </div>
 
         {/* Controls: Date Picker Kalender & Ekspor CSV Saja */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5 max-w-full">
           <input
             type="date"
             min={`${period.key}-01`}
@@ -337,7 +337,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
               const dayPart = Number(e.target.value.slice(8));
               if (dayPart >= 1 && dayPart <= MD) setSelectedDay(dayPart);
             }}
-            className="px-3 py-1.5 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-xs font-mono font-bold text-neutral-900 dark:text-white shadow-2xs focus:ring-2 focus:ring-brand-500 focus:outline-none cursor-pointer"
+            className="min-w-[8.5rem] px-3 py-1.5 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-xs font-mono font-bold text-neutral-900 dark:text-white shadow-2xs focus:ring-2 focus:ring-brand-500 focus:outline-none cursor-pointer"
           />
 
           <button
@@ -346,7 +346,7 @@ export const PenjualanHarianView: React.FC<PenjualanHarianViewProps> = ({
             title="Unduh Tabel Format CSV"
           >
             <Download className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Ekspor CSV</span>
+            <span>Ekspor CSV</span>
           </button>
         </div>
       </div>

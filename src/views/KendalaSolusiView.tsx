@@ -1,4 +1,5 @@
 import React from 'react';
+import { StickyNote } from 'lucide-react';
 import { AppState, WeeklyNote } from '../types';
 import { CatatanMingguanCard } from '../components/CatatanMingguanCard';
 import { CatatanMingguanPanel } from '../components/CatatanMingguanPanel';
@@ -18,14 +19,28 @@ const RAYON_TABS = [
   { id: 2, label: 'Rayon 2' }
 ];
 
+const PageHeader: React.FC<{ subtitle: string }> = ({ subtitle }) => (
+  <div className="p-4 sm:p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs">
+    <div className="flex items-center gap-3 min-w-0">
+      <span className="p-2.5 rounded-xl bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 shrink-0">
+        <StickyNote className="w-5 h-5" />
+      </span>
+      <div className="min-w-0">
+        <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
+          Kendala &amp; Solusi
+        </h1>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">{subtitle}</p>
+      </div>
+    </div>
+  </div>
+);
+
 // Menu "Kendala & Solusi": TKU menulis alasan/kendala + solusi tiap minggu, admin membaca dan menanggapi.
 export const KendalaSolusiView: React.FC<Props> = ({ state, mode, onSaveNote, onSaveReply, onUpdateRayon, showToast }) => {
   if (mode === 'tku') {
     return (
       <div className="space-y-4 animate-in fade-in duration-200">
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          Tulis kendala yang terjadi minggu ini dan rencana solusinya. Admin membaca catatan ini saat evaluasi.
-        </p>
+        <PageHeader subtitle="Tulis kendala minggu ini dan rencana solusinya. Admin membaca catatan ini saat evaluasi." />
         <CatatanMingguanCard
           state={state}
           tkuIdx={state.activeTkuId}
@@ -38,7 +53,8 @@ export const KendalaSolusiView: React.FC<Props> = ({ state, mode, onSaveNote, on
 
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
-      <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl">
+      <PageHeader subtitle="Baca kendala & solusi dari TKU, lalu beri tanggapan per rayon." />
+      <div className="inline-flex max-w-full overflow-x-auto p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl">
         {RAYON_TABS.map(r => (
           <button
             key={r.id}
