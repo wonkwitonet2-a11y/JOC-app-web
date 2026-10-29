@@ -1412,7 +1412,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
               subtitle="Rata botol per YL per hari kerja"
               months={chartMonths}
               integer
-              series={[{ name: 's/YL', color: '#f59e0b', values: branchMonths.map(m => m.syl), labels: true }]}
+              series={[{ name: 's/YL', color: '#f59e0b', values: branchMonths.map(m => m.syl), labels: true, allLabels: true }]}
             />
             <ArsipLineChart
               title="3. YL Absen"
@@ -1420,7 +1420,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
               months={chartMonths}
               zeroBased
               integer
-              series={[{ name: 'Absen', color: '#ef4444', values: branchMonths.map(m => m.absen), labels: true }]}
+              series={[{ name: 'Absen', color: '#ef4444', values: branchMonths.map(m => m.absen), labels: true, allLabels: true }]}
             />
             <ArsipLineChart
               title="4. Jumlah YL"
@@ -1428,7 +1428,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
               months={chartMonths}
               zeroBased
               integer
-              series={[{ name: 'Jml YL', color: '#10b981', values: branchMonths.map(m => m.jmlYl), labels: true }]}
+              series={[{ name: 'Jml YL', color: '#10b981', values: branchMonths.map(m => m.jmlYl), labels: true, allLabels: true }]}
             />
             <ArsipLineChart
               title="5. YL < 250"
@@ -1436,7 +1436,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
               months={chartMonths}
               zeroBased
               integer
-              series={[{ name: 'YL < 250', color: '#e11d48', values: branchMonths.map(m => m.l250), labels: true }]}
+              series={[{ name: 'YL < 250', color: '#e11d48', values: branchMonths.map(m => m.l250), labels: true, allLabels: true }]}
             />
             <ArsipLineChart
               title="6. Performa Varian"

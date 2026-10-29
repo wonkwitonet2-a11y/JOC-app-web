@@ -137,6 +137,97 @@ const tkusById = (a: any): Record<string, any> => {
   return o;
 };
 
+// Penggabungan record harian TKU yang anti-kehilangan data (lossless):
+// 1. Data tidak boleh dihapus secara otomatis hanya karena satu perangkat lokal belum menyalinnya.
+// 2. Data penjualan riil (> 0) tidak boleh ditimpa oleh angka 0 yang belum diisi.
+// 3. Update data operasional (absen, jwp, l250, l300) tetap dapat digabungkan tanpa menghilangkan data penjualan.
+function mergeDailyRecord(
+  b: any,
+  l: any,
+  r: any,
+  nb: boolean,
+  cx: MergeStats
+): any {
+  cx.leaves++;
+  if (!l && !r) return undefined;
+  if (!l) return r;
+  if (!r) return l;
+  if (deepEq(l, r)) return l;
+
+  const lHasSales = Boolean(l.sold > 0 || (Array.isArray(l.v) && l.v.some((x: number) => x > 0)));
+  const rHasSales = Boolean(r.sold > 0 || (Array.isArray(r.v) && r.v.some((x: number) => x > 0)));
+
+  // Jika remote punya penjualan riil tapi lokal bernilai 0:
+  // JANGAN timpa penjualan remote dengan 0! Ambil penjualan remote, lalu terapkan pembaruan ops dari lokal jika ada.
+  if (rHasSales && !lHasSales) {
+    return {
+      ...r,
+      ...l,
+      v: r.v,
+      b: r.b,
+      sold: r.sold,
+      bb: r.bb,
+      pdmV: r.pdmV ?? l.pdmV,
+      pdm: r.pdm ?? l.pdm,
+      absen: l.absen ?? r.absen,
+      frek: l.frek ?? r.frek,
+      l250: l.l250 ?? r.l250,
+      l300: l.l300 ?? r.l300,
+      jwpManual: (l.jwpManual && l.jwpManual > 0) ? l.jwpManual : (r.jwpManual ?? l.jwpManual),
+      yl: l.yl ?? r.yl,
+      ar: l.ar ?? r.ar,
+    };
+  }
+
+  // Jika lokal punya penjualan riil tapi remote bernilai 0:
+  if (lHasSales && !rHasSales) {
+    return {
+      ...r,
+      ...l,
+      v: l.v,
+      b: l.b,
+      sold: l.sold,
+      bb: l.bb,
+      pdmV: l.pdmV ?? r.pdmV,
+      pdm: l.pdm ?? r.pdm,
+      absen: l.absen ?? r.absen,
+      frek: l.frek ?? r.frek,
+      l250: l.l250 ?? r.l250,
+      l300: l.l300 ?? r.l300,
+      jwpManual: (l.jwpManual && l.jwpManual > 0) ? l.jwpManual : (r.jwpManual ?? l.jwpManual),
+      yl: l.yl ?? r.yl,
+      ar: l.ar ?? r.ar,
+    };
+  }
+
+  // Jika dua-duanya punya penjualan atau dua-duanya 0:
+  if (nb) return l; // lokal diutamakan
+  const lChanged = !deepEq(l, b);
+  const rChanged = !deepEq(r, b);
+  if (!lChanged) return r;
+  if (!rChanged) return l;
+
+  // Bentrok (keduanya mengubah): gabungkan field, utamakan lokal tapi jangan hilangkan nilai yang tidak undefined
+  cx.conflicts++;
+  return {
+    ...r,
+    ...l,
+    v: l.v ?? r.v,
+    b: l.b ?? r.b,
+    sold: l.sold ?? r.sold,
+    bb: l.bb ?? r.bb,
+    pdmV: l.pdmV ?? r.pdmV,
+    pdm: l.pdm ?? r.pdm,
+    yl: l.yl ?? r.yl,
+    ar: l.ar ?? r.ar,
+    absen: l.absen ?? r.absen,
+    frek: l.frek ?? r.frek,
+    l250: l.l250 ?? r.l250,
+    l300: l.l300 ?? r.l300,
+    jwpManual: (l.jwpManual && l.jwpManual > 0) ? l.jwpManual : (r.jwpManual ?? l.jwpManual),
+  };
+}
+
 function runMerge(base: Syncable | null, local: Syncable, remote: Syncable, nb: boolean): { merged: Syncable; stats: MergeStats } {
   const stats: MergeStats = { conflicts: 0, localDeletes: 0, leaves: 0 };
   const out: Syncable = {};
@@ -160,6 +251,77 @@ function runMerge(base: Syncable | null, local: Syncable, remote: Syncable, nb: 
       out.tkus = order.map(id => merged[id]);
       return;
     }
+
+    if (key === 'pjd') {
+      const lp = (local.pjd || {}) as Record<string, any>;
+      const rp = (remote.pjd || {}) as Record<string, any>;
+      const bp = (!nb && base && base.pjd ? base.pjd : {}) as Record<string, any>;
+      const allDates = new Set<string>([...Object.keys(lp), ...Object.keys(rp)]);
+      const mergedPjd: Record<string, Record<string, any>> = {};
+
+      allDates.forEach(date => {
+        const lDay = lp[date] || {};
+        const rDay = rp[date] || {};
+        const bDay = bp[date] || {};
+        const allTkuKeys = new Set<string>([...Object.keys(lDay), ...Object.keys(rDay)]);
+        const mergedDay: Record<string, any> = {};
+
+        allTkuKeys.forEach(tkuKey => {
+          const mRec = mergeDailyRecord(bDay[tkuKey], lDay[tkuKey], rDay[tkuKey], nb, stats);
+          if (mRec !== undefined) mergedDay[tkuKey] = mRec;
+        });
+        if (Object.keys(mergedDay).length > 0) {
+          mergedPjd[date] = mergedDay;
+        }
+      });
+      out.pjd = mergedPjd;
+      return;
+    }
+
+    if (key === 'todayInputs') {
+      const lt = (local.todayInputs || {}) as Record<string, any>;
+      const rt = (remote.todayInputs || {}) as Record<string, any>;
+      const bt = (!nb && base && base.todayInputs ? base.todayInputs : {}) as Record<string, any>;
+      const allTkuKeys = new Set<string>([...Object.keys(lt), ...Object.keys(rt)]);
+      const mergedInputs: Record<string, any> = Array.isArray(lt) || Array.isArray(rt) ? [] : {};
+
+      allTkuKeys.forEach(tkuKey => {
+        const mRec = mergeDailyRecord(bt[tkuKey], lt[tkuKey], rt[tkuKey], nb, stats);
+        if (mRec !== undefined) mergedInputs[tkuKey] = mRec;
+      });
+      out.todayInputs = mergedInputs;
+      return;
+    }
+
+    if (key === 'sisaStock') {
+      const ls = (local.sisaStock || {}) as Record<string, any>;
+      const rs = (remote.sisaStock || {}) as Record<string, any>;
+      const bs = (!nb && base && base.sisaStock ? base.sisaStock : {}) as Record<string, any>;
+      const allKeys = new Set<string>([...Object.keys(ls), ...Object.keys(rs)]);
+      const mergedStock: Record<string, any> = {};
+
+      allKeys.forEach(k => {
+        const lRec = ls[k];
+        const rRec = rs[k];
+        const bRec = bs[k];
+        stats.leaves++;
+        if (!lRec && !rRec) return;
+        if (!lRec) { mergedStock[k] = rRec; return; }
+        if (!rRec) { mergedStock[k] = lRec; return; }
+        if (deepEq(lRec, rRec)) { mergedStock[k] = lRec; return; }
+        const lChanged = !deepEq(lRec, bRec);
+        const rChanged = !deepEq(rRec, bRec);
+        if (!lChanged) { mergedStock[k] = rRec; return; }
+        if (!rChanged) { mergedStock[k] = lRec; return; }
+        stats.conflicts++;
+        const lTime = lRec.updatedAt || 0;
+        const rTime = rRec.updatedAt || 0;
+        mergedStock[k] = rTime > lTime ? rRec : lRec;
+      });
+      out.sisaStock = mergedStock;
+      return;
+    }
+
     const v = m3(base ? base[key] : undefined, local[key], remote[key], DEPTH[key], nb, stats);
     if (v !== undefined) out[key] = v;
   });

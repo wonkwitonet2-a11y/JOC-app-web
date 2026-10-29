@@ -269,7 +269,24 @@ export default function App() {
       setState(prev => {
         const act = computeActiveDate(prev.activePeriod);
         if (act.date !== prev.activeDate || act.day !== prev.currentDayNum) {
-          const activePjd = prev.pjd?.[act.date] || {};
+          // Amankan data hari kemarin yang belum sempat tersimpan ke pjd
+          const prevDate = prev.activeDate;
+          const prevPjdMap = { ...(prev.pjd?.[prevDate] || {}) };
+          let pjdUpdated = false;
+
+          if (prev.todayInputs) {
+            Object.entries(prev.todayInputs).forEach(([idxStr, rec]) => {
+              const idx = Number(idxStr);
+              const hasContent = rec && (rec.sold > 0 || (Array.isArray(rec.v) && rec.v.some(x => x > 0)) || rec.absen || rec.jwpManual);
+              if (hasContent && !prevPjdMap[idx]) {
+                prevPjdMap[idx] = { ...rec };
+                pjdUpdated = true;
+              }
+            });
+          }
+
+          const nextPjd = pjdUpdated ? { ...prev.pjd, [prevDate]: prevPjdMap } : prev.pjd;
+          const activePjd = nextPjd?.[act.date] || {};
           const cleanInputs: Record<number, DailySalesRecord> = {};
           prev.tkus.forEach((_, idx) => {
             if (activePjd[idx]) {
@@ -292,7 +309,8 @@ export default function App() {
             activeDate: act.date,
             currentDayNum: act.day,
             pembagiHari: act.day,
-            todayInputs: cleanInputs
+            todayInputs: cleanInputs,
+            pjd: nextPjd
           });
         }
         return prev;
@@ -847,6 +865,8 @@ export default function App() {
         pjd: nextPjd
       });
     });
+    if (supabasePushTimer.current) clearTimeout(supabasePushTimer.current);
+    supabasePushTimer.current = setTimeout(() => { void pushNow(); }, 50);
   };
 
   // Revisi data harian (dari sub-menu Realisasi akun TKU): ganti catatan pada tanggal tertentu,
@@ -862,15 +882,18 @@ export default function App() {
         todayInputs: nextInputs
       });
     });
+    if (supabasePushTimer.current) clearTimeout(supabasePushTimer.current);
+    supabasePushTimer.current = setTimeout(() => { void pushNow(); }, 50);
   };
 
-  const handleSaveTkuInput = (tkuIdx: number, record: DailySalesRecord) => {
+  const handleSaveTkuInput = (tkuIdx: number, record: DailySalesRecord, targetDate?: string) => {
     setState(prev => {
-      const nextInputs = { ...prev.todayInputs, [tkuIdx]: record };
+      const saveDate = targetDate || prev.activeDate;
+      const nextInputs = saveDate === prev.activeDate ? { ...prev.todayInputs, [tkuIdx]: record } : prev.todayInputs;
       const nextPjd = {
         ...prev.pjd,
-        [prev.activeDate]: {
-          ...(prev.pjd[prev.activeDate] || {}),
+        [saveDate]: {
+          ...(prev.pjd[saveDate] || {}),
           [tkuIdx]: record
         }
       };
@@ -881,6 +904,8 @@ export default function App() {
         pjd: nextPjd
       });
     });
+    if (supabasePushTimer.current) clearTimeout(supabasePushTimer.current);
+    supabasePushTimer.current = setTimeout(() => { void pushNow(); }, 50);
   };
 
   // Sisa stock: simpan = MENIMPA rekaman TKU tsb, aman tersimpan ke vault lokal & langsung dorong ke Supabase

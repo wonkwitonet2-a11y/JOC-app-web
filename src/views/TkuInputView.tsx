@@ -52,7 +52,7 @@ interface TkuInputViewProps {
   state: AppState;
   activeSubMenu?: TkuSubMenu;
   onSelectSubMenu?: (sub: TkuSubMenu) => void;
-  onSaveTkuInput: (tkuIdx: number, data: DailySalesRecord) => void;
+  onSaveTkuInput: (tkuIdx: number, data: DailySalesRecord, targetDate?: string) => void;
   onReviseDailyData: (date: string, tkuIdx: number, data: DailySalesRecord) => void;
   onUpdateBreakdownDay: (tkuIdx: number, variant: 'ALL' | VariantCode, dayIdx: number, val: number) => void;
   onBatchUpdateBreakdown?: (tkuIdx: number, updates: { variant: VariantCode | 'ALL'; dayIdx: number; val: number }[]) => void;
@@ -140,12 +140,12 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   // Tanggal input: default = tanggal update (hari ini), bisa dipilih mundur untuk mengisi tanggal yang terlewat
   const [inputDate, setInputDate] = useState<string>(state.activeDate);
   useEffect(() => {
-    setInputDate(state.activeDate);
+    // Sinkronkan hanya jika activeDate bertambah dan inputDate belum diatur manual
+    if (!inputDate || inputDate > state.activeDate) {
+      setInputDate(state.activeDate);
+    }
   }, [state.activeDate]);
-  useEffect(() => {
-    // Keluar dari menu Input: kembalikan ke tanggal update supaya menu lain tidak ikut membaca tanggal lama
-    if (activeSubMenu !== 'input') setInputDate(state.activeDate);
-  }, [activeSubMenu]);
+  // Catatan: inputDate tidak di-reset saat ganti sub-menu agar operator yang sedang mengisi backdate tidak kehilangan konteks tanggalnya.
   const isBackdate = inputDate !== state.activeDate;
   const inputDay = Number(inputDate.slice(8, 10)) || day;
   const minInputDate = `${period.key}-01`;
@@ -419,6 +419,14 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       frek
     });
 
+    // Simpan salinan permanen ke localStorage (lokal ledger anti-hilang)
+    try {
+      localStorage.setItem(`yk_local_backup_pjd_${inputDate}_${tkuIdx}`, JSON.stringify({
+        record,
+        savedAt: Date.now()
+      }));
+    } catch (_) {}
+
     if (isBackdate) {
       if (inputDate < minInputDate || inputDate > maxInputDate) {
         showToast('Tanggal di luar rentang bulan kerja / melewati tanggal update.', 'error');
@@ -429,7 +437,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       return;
     }
 
-    onSaveTkuInput(tkuIdx, record);
+    onSaveTkuInput(tkuIdx, record, inputDate);
 
     if (totalSoldToday >= tkuTarget) {
       try {
@@ -1376,11 +1384,35 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       return;
     }
     const saved = state.pjd[inputDate]?.[tkuIdx] || (inputDate === state.activeDate ? state.todayInputs[tkuIdx] : undefined);
+    const formHasSales = salesV.some(x => x > 0);
+    const currentSold = salesV.reduce((a, b) => a + b, 0);
+    const currentBb = bbV.reduce((a, b) => a + b, 0);
+    const currentPdm = pdmV.reduce((a, b) => a + b, 0);
+
     const base: DailySalesRecord = saved || {
-      v: [0, 0, 0, 0], b: [0, 0, 0, 0], sold: 0, bb: 0, pdmV: [0, 0, 0, 0], pdm: 0
+      v: formHasSales ? salesV : [0, 0, 0, 0],
+      b: bbV.some(x => x > 0) ? bbV : [0, 0, 0, 0],
+      sold: formHasSales ? currentSold : 0,
+      bb: bbV.some(x => x > 0) ? currentBb : 0,
+      pdmV: pdmV.some(x => x > 0) ? pdmV : [0, 0, 0, 0],
+      pdm: pdmV.some(x => x > 0) ? currentPdm : 0
     };
+
+    const effectiveV = (saved?.sold || 0) > 0 ? saved!.v : (formHasSales ? salesV : base.v);
+    const effectiveSold = (saved?.sold || 0) > 0 ? saved!.sold : (formHasSales ? currentSold : base.sold);
+    const effectiveB = (saved?.bb || 0) > 0 ? saved!.b : (bbV.some(x => x > 0) ? bbV : base.b);
+    const effectiveBb = (saved?.bb || 0) > 0 ? saved!.bb : (bbV.some(x => x > 0) ? currentBb : base.bb);
+    const effectivePdmV = (saved?.pdm || 0) > 0 ? (saved!.pdmV || base.pdmV) : (pdmV.some(x => x > 0) ? pdmV : base.pdmV);
+    const effectivePdm = (saved?.pdm || 0) > 0 ? saved!.pdm : (pdmV.some(x => x > 0) ? currentPdm : base.pdm);
+
     const rec: DailySalesRecord = {
       ...base,
+      v: effectiveV,
+      sold: effectiveSold,
+      b: effectiveB,
+      bb: effectiveBb,
+      pdmV: effectivePdmV,
+      pdm: effectivePdm,
       yl: cYl,
       ar: cAr,
       l250,
@@ -1389,11 +1421,19 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       frek,
       jwpManual: Math.max(0, Number(jwpCustom) || 0),
     };
-    saveTkuInputDraft(inputDate, tkuIdx, salesV, bbV, pdmV, { yl: cYl, ar: cAr, l250, l300, jwpCustom, absen, frek });
+    saveTkuInputDraft(inputDate, tkuIdx, effectiveV, effectiveB, effectivePdmV || [0, 0, 0, 0], { yl: cYl, ar: cAr, l250, l300, jwpCustom, absen, frek });
+
+    try {
+      localStorage.setItem(`yk_local_backup_pjd_${inputDate}_${tkuIdx}`, JSON.stringify({
+        record: rec,
+        savedAt: Date.now()
+      }));
+    } catch (_) {}
+
     if (isBackdate) {
       onReviseDailyData(inputDate, tkuIdx, rec);
     } else {
-      onSaveTkuInput(tkuIdx, rec);
+      onSaveTkuInput(tkuIdx, rec, inputDate);
     }
     setOpsDirty(false);
     showToast(`Kondisi ${tku.nama} tanggal ${formatDateIndo(inputDate)} berhasil disimpan!`, 'success');

@@ -6,7 +6,8 @@ export interface ChartSeries {
   color: string;
   values: (number | null)[]; // satu nilai per bulan (null = tidak ada data)
   dashed?: boolean;
-  labels?: boolean; // tampilkan angka di atas titik
+  labels?: boolean; // tampilkan angka di atas titik (otomatis hanya jika bulan <= 7 atau titik terpilih)
+  allLabels?: boolean; // tampilkan angka di SETIAP titik, berapa pun jumlah bulannya
 }
 
 interface LineChartProps {
@@ -226,7 +227,7 @@ export const ArsipLineChart: React.FC<LineChartProps> = ({
                   v === null || !isFinite(v) ? null : (
                     <g key={i}>
                       <circle cx={x(i)} cy={y(v)} r={i === sel ? 4.5 : 3} fill={s.color} className="stroke-white dark:stroke-neutral-900" strokeWidth={1.5} />
-                      {s.labels && (n <= 7 || i === sel) && (
+                      {s.labels && (s.allLabels || n <= 7 || i === sel) && (
                         <text
                           x={x(i)}
                           y={y(v) - 8}
