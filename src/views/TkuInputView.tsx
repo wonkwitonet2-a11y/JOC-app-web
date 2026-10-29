@@ -46,7 +46,7 @@ import {
 } from '../services/storage';
 import { useConfirm } from '../components/ConfirmDialog';
 import { REAL_TKU_DAILY_SALES } from '../data/realSalesSeptember2026';
-import { saveTkuInputDraft, loadTkuInputDraft } from '../services/inputDraft';
+import { saveTkuInputDraft, loadTkuInputDraft, clearTkuInputDraft } from '../services/inputDraft';
 
 interface TkuInputViewProps {
   state: AppState;
@@ -138,13 +138,44 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   const PM0 = period.monthIndex;
 
   // Tanggal input: default = tanggal update (hari ini), bisa dipilih mundur untuk mengisi tanggal yang terlewat
-  const [inputDate, setInputDate] = useState<string>(state.activeDate);
+  const [inputDate, setInputDate] = useState<string>(() => {
+    try {
+      const savedDate = localStorage.getItem('yk_active_input_date');
+      if (savedDate && savedDate >= `${period.key}-01` && savedDate <= state.activeDate) {
+        return savedDate;
+      }
+    } catch (_) {}
+    return state.activeDate;
+  });
   useEffect(() => {
     // Sinkronkan hanya jika activeDate bertambah dan inputDate belum diatur manual
     if (!inputDate || inputDate > state.activeDate) {
       setInputDate(state.activeDate);
     }
   }, [state.activeDate]);
+
+  // Handler perpindahan tanggal input:
+  // Jika ada ketikan yang belum disimpan di tanggal lama, buang drafnya agar saat kembali
+  // form menampilkan data resmi yang tersimpan di database.
+  const handleDateChange = (newDate: string) => {
+    if (!newDate || newDate === inputDate) return;
+    clearTkuInputDraft(inputDate, tkuIdx);
+    setInputDate(newDate);
+    try {
+      localStorage.setItem('yk_active_input_date', newDate);
+    } catch (_) {}
+  };
+
+  // Deteksi perpindahan menu: jika operator keluar dari sub-menu 'input' (misal ke Ringkasan,
+  // Breakdown, atau Realisasi), buang draf uncommitted agar saat kembali ke 'input',
+  // form menampilkan data resmi yang sudah tersimpan di database.
+  const prevSubMenuRef = useRef(activeSubMenu);
+  useEffect(() => {
+    if (prevSubMenuRef.current === 'input' && activeSubMenu !== 'input') {
+      clearTkuInputDraft(inputDate, tkuIdx);
+    }
+    prevSubMenuRef.current = activeSubMenu;
+  }, [activeSubMenu, inputDate, tkuIdx]);
   // Catatan: inputDate tidak di-reset saat ganti sub-menu agar operator yang sedang mengisi backdate tidak kehilangan konteks tanggalnya.
   const isBackdate = inputDate !== state.activeDate;
   const inputDay = Number(inputDate.slice(8, 10)) || day;
@@ -347,7 +378,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       // JWP diisi manual: tampilkan isian tanggal ini, atau nilai JWP TKU saat ini sebagai titik awal
       setJwpCustom(input?.jwpManual ?? tku.akmJwp ?? 0);
     }
-  }, [tkuIdx, state.pjd, state.todayInputs, inputDate, tku, divider]);
+  }, [tkuIdx, state.pjd, state.todayInputs, inputDate, tku, divider, activeSubMenu]);
 
   // Otomatis simpan draft ketikan ke memori perangkat agar aman jika halaman ter-refresh
   const lastAutosaveKeyRef = useRef<string>('');
@@ -2324,14 +2355,14 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                       showToast('Tanggal harus di dalam bulan kerja dan tidak melewati tanggal update.', 'error');
                       return;
                     }
-                    setInputDate(val);
+                    handleDateChange(val);
                   }}
                   className="px-3 py-2 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-sm font-mono font-bold text-neutral-900 dark:text-white focus:ring-2 focus:ring-brand-500 focus:outline-none"
                 />
                 {isBackdate && (
                   <button
                     type="button"
-                    onClick={() => setInputDate(state.activeDate)}
+                    onClick={() => handleDateChange(state.activeDate)}
                     className="px-3 py-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-xs font-semibold text-neutral-700 dark:text-neutral-200 flex items-center gap-1.5 transition-colors"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />

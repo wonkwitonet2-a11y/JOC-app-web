@@ -297,13 +297,15 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
   const totalDaysArchived = allArchives.reduce((sum, arc) => sum + (arc.d || 0), 0);
   const avgBottlesPerDay = totalDaysArchived > 0 ? grandTotalBottles / totalDaysArchived : 0;
 
-  // Best performing month
+  // Best performing month (rata-rata harian bulan tertinggi)
   const bestMonth = useMemo(() => {
-    let best: { namaBulan: string; total: number } | null = null;
+    let best: { namaBulan: string; rata: number; total: number } | null = null;
     for (const arc of allArchives) {
+      const d = arc.d || 30;
+      const rata = arc.rows.reduce((sum, r) => sum + getRowRataHarian(r, d), 0);
       const total = arc.rows.reduce((sum, r) => sum + (r.total || 0), 0);
-      if (!best || total > best.total) {
-        best = { namaBulan: arc.namaBulan, total };
+      if (!best || rata > best.rata) {
+        best = { namaBulan: arc.namaBulan, rata, total };
       }
     }
     return best;
@@ -633,14 +635,14 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
 
         <div className="p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col min-w-0 h-full">
           <div className="flex items-start justify-between gap-2 text-neutral-500 text-xs mb-1">
-            <span>Bulan Tertinggi</span>
+            <span>Rata-rata Bulan Tertinggi</span>
             <Award className="w-4 h-4 text-amber-500 shrink-0" />
           </div>
           <div className="text-sm font-bold text-neutral-900 dark:text-neutral-100 truncate">
             {bestMonth ? bestMonth.namaBulan : '—'}
           </div>
           <div className="text-xs text-neutral-500 mt-0.5 font-mono">
-            {bestMonth ? `${formatNumber(bestMonth.total)} btl` : '—'}
+            {bestMonth ? `${formatDecimal(bestMonth.rata)} btl/hr` : '—'}
           </div>
         </div>
       </div>

@@ -63,6 +63,7 @@ import { INITIAL_ARCHIVES } from './data/initialData';
 import { PengaturanView } from './views/PengaturanView';
 import { TkuInputView } from './views/TkuInputView';
 import { SisaStockView } from './views/SisaStockView';
+import { clearTkuInputDraft } from './services/inputDraft';
 
 export default function App() {
   const [state, setState] = useState<AppState>(() => loadAppState());
@@ -81,7 +82,28 @@ export default function App() {
   // Layar < 1024px (tablet / HP): menu samping dimulai TERTUTUP supaya area isi tidak sempit (bisa dibuka lewat tombol menu).
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth < 1024);
   // Sub-menu aktif untuk akun operator TKU: Ringkasan di depan, menu kedua Input Penjualan
-  const [tkuSubMenu, setTkuSubMenu] = useState<'ringkasan' | 'input' | 'breakdown' | 'realisasi' | 'stok' | 'kendala'>('ringkasan');
+  const [tkuSubMenu, setTkuSubMenu] = useState<'ringkasan' | 'input' | 'breakdown' | 'realisasi' | 'stok' | 'kendala'>(() => {
+    try {
+      const saved = localStorage.getItem('yk_active_tku_submenu');
+      if (saved && ['ringkasan', 'input', 'breakdown', 'realisasi', 'stok', 'kendala'].includes(saved)) {
+        return saved as any;
+      }
+    } catch (_) {}
+    return 'ringkasan';
+  });
+
+  const handleSelectTkuSubMenu = (m: 'ringkasan' | 'input' | 'breakdown' | 'realisasi' | 'stok' | 'kendala') => {
+    if (tkuSubMenu === 'input' && m !== 'input') {
+      const curDraftDate = localStorage.getItem('yk_active_input_date') || state.activeDate;
+      clearTkuInputDraft(curDraftDate, state.activeTkuId);
+    }
+    setTkuSubMenu(m);
+    try {
+      localStorage.setItem('yk_active_tku_submenu', m);
+    } catch (_) {}
+    setDrawerOpen(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -561,6 +583,10 @@ export default function App() {
   };
 
   const handleLogout = (customMsg?: string) => {
+    if (state.role === 't' && tkuSubMenu === 'input') {
+      const curDraftDate = localStorage.getItem('yk_active_input_date') || state.activeDate;
+      clearTkuInputDraft(curDraftDate, state.activeTkuId);
+    }
     clearAppSession();
     setState(prev => ({
       ...prev,
@@ -1477,12 +1503,20 @@ export default function App() {
         syncStatus={syncStatus}
         onManualSync={() => refreshFromCloud(true)}
         onSwitchToTku={(idx) => {
+          if (state.role === 't' && tkuSubMenu === 'input') {
+            const curDraftDate = localStorage.getItem('yk_active_input_date') || state.activeDate;
+            clearTkuInputDraft(curDraftDate, state.activeTkuId);
+          }
           lastActiveRef.current = Date.now();
           saveAppSession('t', idx);
           setState(prev => ({ ...prev, role: 't', activeTkuId: idx }));
           showToast(`Beralih ke akun ${state.tkus[idx]?.nama}`, 'info');
         }}
         onSwitchToAdmin={() => {
+          if (state.role === 't' && tkuSubMenu === 'input') {
+            const curDraftDate = localStorage.getItem('yk_active_input_date') || state.activeDate;
+            clearTkuInputDraft(curDraftDate, state.activeTkuId);
+          }
           lastActiveRef.current = Date.now();
           saveAppSession('a', state.activeTkuId);
           setState(prev => ({ ...prev, role: 'a', currentMenu: 'Dashboard' }));
@@ -1507,9 +1541,7 @@ export default function App() {
             currentMenu={state.role === 't' ? tkuSubMenu : state.currentMenu}
             onSelectMenu={(m) => {
               if (state.role === 't') {
-                setTkuSubMenu(m as any);
-                setDrawerOpen(false);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
+                handleSelectTkuSubMenu(m as any);
               } else {
                 handleSelectMenu(m);
               }
@@ -1523,6 +1555,10 @@ export default function App() {
             collapsed={sidebarCollapsed}
             onCollapse={() => setSidebarCollapsed(true)}
             onSwitchToAdmin={() => {
+              if (state.role === 't' && tkuSubMenu === 'input') {
+                const curDraftDate = localStorage.getItem('yk_active_input_date') || state.activeDate;
+                clearTkuInputDraft(curDraftDate, state.activeTkuId);
+              }
               lastActiveRef.current = Date.now();
               saveAppSession('a', state.activeTkuId);
               setState(prev => ({ ...prev, role: 'a', currentMenu: 'Dashboard' }));
@@ -1609,13 +1645,17 @@ export default function App() {
             <TkuInputView
               state={state}
               activeSubMenu={tkuSubMenu}
-              onSelectSubMenu={setTkuSubMenu}
+              onSelectSubMenu={handleSelectTkuSubMenu}
               onSaveTkuInput={handleSaveTkuInput}
               onReviseDailyData={handleReviseDailyData}
               onUpdateBreakdownDay={handleUpdateBreakdownDay}
               onBatchUpdateBreakdown={handleBatchUpdateBreakdown}
               showToast={showToast}
               onSwitchToAdmin={() => {
+                if (tkuSubMenu === 'input') {
+                  const curDraftDate = localStorage.getItem('yk_active_input_date') || state.activeDate;
+                  clearTkuInputDraft(curDraftDate, state.activeTkuId);
+                }
                 lastActiveRef.current = Date.now();
                 saveAppSession('a', state.activeTkuId);
                 setState(prev => ({ ...prev, role: 'a', currentMenu: 'Dashboard' }));

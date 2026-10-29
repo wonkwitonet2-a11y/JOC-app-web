@@ -77,4 +77,11 @@ export function loadTkuInputDraft(date: string, tkuIdx: number): TkuInputDraft |
     console.warn('Gagal membaca draft input:', err);
   }
   return null;
+}export function clearTkuInputDraft(date: string, tkuIdx: number): void {
+  try {
+    const key = makeKey(date, tkuIdx);
+    localStorage.removeItem(key);
+  } catch (err) {
+    console.warn('Gagal menghapus draft input:', err);
+  }
 }
