@@ -1,8 +1,8 @@
 import React from 'react';
 import { StickyNote } from 'lucide-react';
 import { AppState, WeeklyNote } from '../types';
-import { CatatanMingguanCard } from '../components/CatatanMingguanCard';
-import { CatatanMingguanPanel } from '../components/CatatanMingguanPanel';
+import { KendalaLogCard } from '../components/KendalaLogCard';
+import { KendalaLogPanel } from '../components/KendalaLogPanel';
 
 interface Props {
   state: AppState;
@@ -40,8 +40,8 @@ export const KendalaSolusiView: React.FC<Props> = ({ state, mode, onSaveNote, on
   if (mode === 'tku') {
     return (
       <div className="space-y-4 animate-in fade-in duration-200">
-        <PageHeader subtitle="Tulis kendala minggu ini dan rencana solusinya. Admin membaca catatan ini saat evaluasi." />
-        <CatatanMingguanCard
+        <PageHeader subtitle="Catat masalah kapan saja: topik, area, kenapa, tindakan, dan hasilnya. Admin membaca catatan ini saat evaluasi." />
+        <KendalaLogCard
           state={state}
           tkuIdx={state.activeTkuId}
           onSaveNote={onSaveNote}
@@ -69,7 +69,7 @@ export const KendalaSolusiView: React.FC<Props> = ({ state, mode, onSaveNote, on
           </button>
         ))}
       </div>
-      <CatatanMingguanPanel
+      <KendalaLogPanel
         state={state}
         selectedRayon={state.selectedRayon}
         onSaveReply={onSaveReply}

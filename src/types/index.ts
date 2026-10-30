@@ -134,11 +134,16 @@ export interface SisaStockRecord {
 export type SolusiStatus = 'belum' | 'proses' | 'selesai';
 
 export interface WeeklyNote {
-  a: string; // alasan / kendala
-  s: string; // solusi / tindak lanjut
-  l: string[]; // label penyebab cepat
+  a: string; // alasan / kendala (kolom "Kenapa")
+  s: string; // solusi / tindak lanjut (kolom "Tindakan")
+  l: string[]; // label penyebab cepat (catatan lama; form baru tidak memakainya)
   st: SolusiStatus; // status solusi
   u: string; // ISO time terakhir diubah
+  // Field log Kendala & Solusi (opsional; catatan mingguan lama tidak punya field ini):
+  d?: string; // tanggal kejadian YYYY-MM-DD
+  tp?: string; // topik
+  ar?: string; // area YL, mis. "A04"
+  h?: string; // hasil
 }
 
 export interface WeeklyReply {

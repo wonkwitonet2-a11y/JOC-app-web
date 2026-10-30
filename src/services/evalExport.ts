@@ -270,8 +270,11 @@ export function buildExportDoc(
         const rp = st.weeklyReplies?.[k];
         const parts: string[] = [];
         if (n.l.length > 0) parts.push(`[${n.l.join(', ')}]`);
+        if ((n.tp || '').trim()) parts.push(`Topik: ${n.tp!.trim()}`);
+        if ((n.ar || '').trim()) parts.push(`Area: ${n.ar!.trim()}`);
         if (n.a.trim()) parts.push(`Kendala: ${n.a.trim()}`);
         if (n.s.trim()) parts.push(`Solusi: ${n.s.trim()} (${n.st === 'selesai' ? 'selesai' : n.st === 'proses' ? 'proses' : 'belum'})`);
+        if ((n.h || '').trim()) parts.push(`Hasil: ${n.h!.trim()}`);
         if (rp && rp.t.trim()) parts.push(`Tanggapan admin: ${rp.t.trim()}`);
         items.push({ tone: 'info', text: `${u.name}: ${parts.join(' • ')}` });
       });

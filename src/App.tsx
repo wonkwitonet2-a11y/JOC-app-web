@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AppState, TkuItem, DailySalesRecord, VariantCode, ArchiveRecord, ArchiveRow, SupabaseConfig, SisaStockRecord, WeeklyNote } from './types';
-import { withNoteByKey, withReplyByKey } from './services/weeklyNotes';
+import { withNoteMovedByDate, withReplyByKey } from './services/weeklyNotes';
 import {
   loadAppState,
   saveAppState,
@@ -612,7 +612,7 @@ export default function App() {
   // Catatan mingguan: TKU menulis catatan, admin menulis tanggapan (disimpan di peta terpisah agar tidak saling menimpa).
   // Kunci catatan: periode:tkuId:minggu (catatan pertama) atau periode:tkuId:minggu:urutan (catatan tambahan).
   const handleSaveWeeklyNote = (key: string, note: WeeklyNote) => {
-    setState(prev => withNoteByKey(prev, key, note));
+    setState(prev => withNoteMovedByDate(prev, key, note));
   };
   const handleSaveWeeklyReply = (key: string, text: string) => {
     setState(prev => withReplyByKey(prev, key, text));

@@ -11,7 +11,7 @@ interface Props {
   showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-const ReplyBox: React.FC<{ initial: string; onSave: (t: string) => void }> = ({ initial, onSave }) => {
+export const ReplyBox: React.FC<{ initial: string; onSave: (t: string) => void }> = ({ initial, onSave }) => {
   const [text, setText] = useState(initial);
   const [dirty, setDirty] = useState(false);
   // ikuti perubahan dari perangkat lain selama belum diedit di sini
