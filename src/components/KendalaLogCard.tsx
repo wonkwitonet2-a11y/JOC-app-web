@@ -68,12 +68,11 @@ export const KendalaLogCard: React.FC<Props> = ({ state, tkuIdx, onSaveNote, sho
   });
   const filled = (dr: Draft) => isNoteFilled(toNote(dr, 'belum')) && !!dr.d;
 
-  const save = (keepGroup: boolean) => {
+  const save = () => {
     if (!filled(draft)) return;
     onSaveNote(keyForDate(state, tkuId, draft.d), toNote(draft, 'belum'));
-    showToast(keepGroup ? 'Tersimpan. Lanjut isi YL lain di topik ini.' : 'Masalah ditambahkan ke Riwayat', 'success');
-    // Simpan & tambah YL lain: Tgl dan Topik dipertahankan.
-    setDraft(keepGroup ? { ...blank(), d: draft.d, tp: draft.tp } : blank());
+    showToast('Kendala ditambahkan ke Riwayat', 'success');
+    setDraft(blank());
   };
 
   const startEdit = (e: LogEntry) => {
@@ -152,20 +151,15 @@ export const KendalaLogCard: React.FC<Props> = ({ state, tkuIdx, onSaveNote, sho
             <ClipboardList className="w-4 h-4" />
           </span>
           <span className="min-w-0">
-            <span className="block text-sm font-bold text-neutral-900 dark:text-neutral-100">Tambah Masalah</span>
-            <span className="block text-xs text-neutral-500 dark:text-neutral-400">Isi kapan saja ada masalah. Satu baris untuk satu area YL.</span>
+            <span className="block text-sm font-bold text-neutral-900 dark:text-neutral-100">Kendala</span>
           </span>
         </div>
         <div className="px-3.5 md:px-4 pb-4 pt-3 border-t border-neutral-100 dark:border-neutral-800 space-y-3">
           {form(draft, p => setDraft(d => ({ ...d, ...p })))}
-          <div className="flex flex-col sm:flex-row gap-2">
-            <button type="button" onClick={() => save(false)} disabled={!canAdd}
+          <div className="flex">
+            <button type="button" onClick={save} disabled={!canAdd}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all ${canAdd ? btnOn : btnOff}`}>
               <Plus className="w-4 h-4" />Simpan
-            </button>
-            <button type="button" onClick={() => save(true)} disabled={!canAdd}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border transition-all ${canAdd ? 'border-brand-600 text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-950/40 cursor-pointer' : 'border-neutral-200 dark:border-neutral-800 text-neutral-400 cursor-not-allowed'}`}>
-              <Plus className="w-4 h-4" />Simpan &amp; tambah YL lain
             </button>
           </div>
         </div>
