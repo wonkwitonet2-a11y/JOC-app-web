@@ -154,12 +154,34 @@ function mergeDailyRecord(
   if (!r) return l;
   if (deepEq(l, r)) return l;
 
+  // 1. Cek timestamp perubahan eksplisit jika ada (u = epoch ms)
+  const lTime = Number(l?.u) || 0;
+  const rTime = Number(r?.u) || 0;
+  if (lTime > 0 || rTime > 0) {
+    if (lTime >= rTime) return l;
+    return r;
+  }
+
+  // 2. Jika 3-way merge dengan base (nb = false):
+  if (!nb && b !== undefined) {
+    const lChanged = !deepEq(l, b);
+    const rChanged = !deepEq(r, b);
+    // Hanya lokal yang diubah oleh pengguna (remote tidak berubah sejak sinkron terakhir)
+    if (lChanged && !rChanged) {
+      return l;
+    }
+    // Hanya remote yang diubah di perangkat lain (lokal tidak disentuh)
+    if (!lChanged && rChanged) {
+      return r;
+    }
+  }
+
+  // 3. Fallback jika salah satu adalah placeholder kosong / belum diisi sama sekali
+  // HANYA berlaku jika lokal tidak pernah diubah sengaja (b kosong atau l belum disentuh)
   const lHasSales = Boolean(l.sold > 0 || (Array.isArray(l.v) && l.v.some((x: number) => x > 0)));
   const rHasSales = Boolean(r.sold > 0 || (Array.isArray(r.v) && r.v.some((x: number) => x > 0)));
 
-  // Jika remote punya penjualan riil tapi lokal bernilai 0:
-  // JANGAN timpa penjualan remote dengan 0! Ambil penjualan remote, lalu terapkan pembaruan ops dari lokal jika ada.
-  if (rHasSales && !lHasSales) {
+  if (rHasSales && !lHasSales && (!b || !b.sold)) {
     return {
       ...r,
       ...l,
@@ -179,8 +201,7 @@ function mergeDailyRecord(
     };
   }
 
-  // Jika lokal punya penjualan riil tapi remote bernilai 0:
-  if (lHasSales && !rHasSales) {
+  if (lHasSales && !rHasSales && (!b || !b.sold)) {
     return {
       ...r,
       ...l,
@@ -319,6 +340,35 @@ function runMerge(base: Syncable | null, local: Syncable, remote: Syncable, nb: 
         mergedStock[k] = rTime > lTime ? rRec : lRec;
       });
       out.sisaStock = mergedStock;
+      return;
+    }
+
+    if (key === 'archives') {
+      const la = (local.archives || {}) as Record<string, any>;
+      const ra = (remote.archives || {}) as Record<string, any>;
+      const allKeys = new Set<string>([...Object.keys(la), ...Object.keys(ra)]);
+      const mergedArchives: Record<string, any> = {};
+
+      allKeys.forEach(k => {
+        const lArc = la[k];
+        const rArc = ra[k];
+        stats.leaves++;
+        if (!lArc && !rArc) return;
+        if (!lArc) { mergedArchives[k] = rArc; return; }
+        if (!rArc) { mergedArchives[k] = lArc; return; }
+        if (deepEq(lArc, rArc)) { mergedArchives[k] = lArc; return; }
+        // Keduanya ada: jika salah satu memiliki catatan sedangkan yang lain tidak, ambil yang punya catatan
+        const lHasNotes = Boolean(lArc.catatan?.n && Object.keys(lArc.catatan.n).length > 0);
+        const rHasNotes = Boolean(rArc.catatan?.n && Object.keys(rArc.catatan.n).length > 0);
+        if (lHasNotes && !rHasNotes) { mergedArchives[k] = lArc; return; }
+        if (rHasNotes && !lHasNotes) { mergedArchives[k] = rArc; return; }
+        // Utamakan arsip yang terkunci
+        if (lArc.terkunci && !rArc.terkunci) { mergedArchives[k] = lArc; return; }
+        if (rArc.terkunci && !lArc.terkunci) { mergedArchives[k] = rArc; return; }
+        // Default: lokal diutamakan
+        mergedArchives[k] = lArc;
+      });
+      out.archives = mergedArchives;
       return;
     }
 

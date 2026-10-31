@@ -898,37 +898,61 @@ export default function App() {
   // Revisi data harian (dari sub-menu Realisasi akun TKU): ganti catatan pada tanggal tertentu,
   // lalu sesuaikan akumulasi TKU berdasarkan selisih dari catatan lama supaya angka dasar tidak bergeser.
   const handleReviseDailyData = (date: string, tkuIdx: number, record: DailySalesRecord) => {
-    setState(prev => {
-      const nextPjd = { ...prev.pjd, [date]: { ...(prev.pjd[date] || {}), [tkuIdx]: record } };
-      const nextInputs = date === prev.activeDate ? { ...prev.todayInputs, [tkuIdx]: record } : prev.todayInputs;
+    const recWithTs: DailySalesRecord = { ...record, u: Date.now() };
+    clearTkuInputDraft(date, tkuIdx);
+    try {
+      localStorage.setItem(`yk_local_backup_pjd_${date}_${tkuIdx}`, JSON.stringify({
+        record: recWithTs,
+        savedAt: Date.now()
+      }));
+    } catch (_) {}
 
-      return synchronizeAppState({
+    setState(prev => {
+      const nextPjd = { ...prev.pjd, [date]: { ...(prev.pjd[date] || {}), [tkuIdx]: recWithTs } };
+      const nextInputs = date === prev.activeDate ? { ...prev.todayInputs, [tkuIdx]: recWithTs } : prev.todayInputs;
+
+      const nextState = synchronizeAppState({
         ...prev,
         pjd: nextPjd,
         todayInputs: nextInputs
       });
+      stateRef.current = nextState;
+      saveAppState(nextState);
+      return nextState;
     });
     if (supabasePushTimer.current) clearTimeout(supabasePushTimer.current);
     supabasePushTimer.current = setTimeout(() => { void pushNow(); }, 50);
   };
 
   const handleSaveTkuInput = (tkuIdx: number, record: DailySalesRecord, targetDate?: string) => {
+    const recWithTs: DailySalesRecord = { ...record, u: Date.now() };
+    const curDate = targetDate || state.activeDate;
+    try {
+      localStorage.setItem(`yk_local_backup_pjd_${curDate}_${tkuIdx}`, JSON.stringify({
+        record: recWithTs,
+        savedAt: Date.now()
+      }));
+    } catch (_) {}
+
     setState(prev => {
       const saveDate = targetDate || prev.activeDate;
-      const nextInputs = saveDate === prev.activeDate ? { ...prev.todayInputs, [tkuIdx]: record } : prev.todayInputs;
+      const nextInputs = saveDate === prev.activeDate ? { ...prev.todayInputs, [tkuIdx]: recWithTs } : prev.todayInputs;
       const nextPjd = {
         ...prev.pjd,
         [saveDate]: {
           ...(prev.pjd[saveDate] || {}),
-          [tkuIdx]: record
+          [tkuIdx]: recWithTs
         }
       };
 
-      return synchronizeAppState({
+      const nextState = synchronizeAppState({
         ...prev,
         todayInputs: nextInputs,
         pjd: nextPjd
       });
+      stateRef.current = nextState;
+      saveAppState(nextState);
+      return nextState;
     });
     if (supabasePushTimer.current) clearTimeout(supabasePushTimer.current);
     supabasePushTimer.current = setTimeout(() => { void pushNow(); }, 50);
@@ -1131,6 +1155,12 @@ export default function App() {
       activeArchiveKey: currentKey
     };
 
+    // 1. Amankan ke state ref, vault lokal & localStorage seketika
+    stateRef.current = nextState;
+    saveAppState(nextState);
+    try {
+      localStorage.setItem(`yk_archive_${currentKey}`, JSON.stringify(newArchive));
+    } catch (_) {}
     setState(nextState);
 
     // Langsung simpan ke Supabase jika sudah terhubung

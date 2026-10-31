@@ -340,23 +340,23 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     const draftHasSales = Boolean(draft && Array.isArray(draft.v) && draft.v.some(x => x > 0));
     const inputHasSales = Boolean(input && Array.isArray(input.v) && input.v.some(x => x > 0));
 
-    // Jika draf bernilai 0 (kosong) tetapi data resmi/seed memiliki data penjualan nyata,
-    // MAKA DATA RESMI / SEED HARUS DIUTAMAKAN agar form tidak menjadi kosong!
-    const finalSalesV: [number, number, number, number] = draftHasSales
-      ? draft!.v
-      : (inputHasSales ? input!.v : (draft?.v || [0, 0, 0, 0]));
+    // Jika data tersimpan di pjd/todayInputs sudah ada, data tersimpan tersebut adalah acuan utama
+    const hasSavedInput = Boolean(input && Array.isArray(input.v));
+    const finalSalesV: [number, number, number, number] = hasSavedInput
+      ? input!.v
+      : (draftHasSales ? draft!.v : (inputHasSales ? input!.v : (draft?.v || [0, 0, 0, 0])));
 
     const draftHasBb = Boolean(draft && Array.isArray(draft.b) && draft.b.some(x => x > 0));
     const inputHasBb = Boolean(input && Array.isArray(input.b) && input.b.some(x => x > 0));
-    const finalBbV: [number, number, number, number] = draftHasBb
-      ? draft!.b
-      : (inputHasBb ? input!.b : (draft?.b || [0, 0, 0, 0]));
+    const finalBbV: [number, number, number, number] = hasSavedInput
+      ? input!.b
+      : (draftHasBb ? draft!.b : (inputHasBb ? input!.b : (draft?.b || [0, 0, 0, 0])));
 
     const draftHasPdm = Boolean(draft && Array.isArray(draft.pdmV) && draft.pdmV.some(x => x > 0));
     const inputHasPdm = Boolean(input && ((Array.isArray(input?.pdmV) && input.pdmV.some(x => x > 0)) || Boolean(input?.pdm && input.pdm > 0)));
-    const finalPdmV: [number, number, number, number] = draftHasPdm
-      ? draft!.pdmV
-      : (inputHasPdm ? (input!.pdmV || [input!.pdm || 0, 0, 0, 0]) : (draft?.pdmV || [0, 0, 0, 0]));
+    const finalPdmV: [number, number, number, number] = hasSavedInput
+      ? (input!.pdmV || [input!.pdm || 0, 0, 0, 0])
+      : (draftHasPdm ? draft!.pdmV : (inputHasPdm ? (input!.pdmV || [input!.pdm || 0, 0, 0, 0]) : (draft?.pdmV || [0, 0, 0, 0])));
 
     setSalesV(finalSalesV);
     setBbV(finalBbV);
@@ -1006,7 +1006,15 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       absen: Math.max(0, Number(inlineEditAbsen) || 0),
       frek: Math.max(0, Number(inlineEditFrek) || 0)
     };
-    onReviseDailyData(revDateStr(d), tkuIdx, record);
+    const revDate = revDateStr(d);
+    clearTkuInputDraft(revDate, tkuIdx);
+    try {
+      localStorage.setItem(`yk_local_backup_pjd_${revDate}_${tkuIdx}`, JSON.stringify({
+        record,
+        savedAt: Date.now()
+      }));
+    } catch (_) {}
+    onReviseDailyData(revDate, tkuIdx, record);
     showToast(`Data Tgl ${d} ${period.namaBulanPendek} untuk ${tku.nama} berhasil disimpan`, "success");
     setInlineEditDay(null);
   };
@@ -1172,59 +1180,20 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     const pctBb = (sold + bb) > 0 ? bb / (sold + bb) : 0;
 
     // PDM per TKU di menu Realisasi (per varian dan total):
-    // PDM hari transaksi d adalah pasokan botol untuk hari transaksi berikutnya (Penjualan next + BB next).
-    // Jika hari berikutnya libur/tidak ada transaksi (misal Minggu), maka transaksi hari Senin PDM-nya mundur ke Sabtu.
-    // Jika tanggal d bukan hari transaksi aktif (misal Minggu libur), PDM adalah 0.
-    // Jika tanggal d adalah hari terakhir dengan data (belum ada data transaksi esoknya), menggunakan manual input PDM hari ini.
-    let pdmV: [number, number, number, number] = [0, 0, 0, 0];
-    let pdm = 0;
+    // Diluruskan persis dengan tanggal PDM tsb (misal diinput tgl 30, maka sebaris di tgl 30)
+    let dayPdmV: [number, number, number, number] = [0, 0, 0, 0];
+    let dayPdm = 0;
     if (isPast) {
-      const isSun = new Date(PY, PM0, d).getDay() === 0;
-      const hasTransactionToday = sold > 0 || (!isSun && d <= day);
-
-      if (hasTransactionToday) {
-        // Cari hari transaksi berikutnya yang sudah tercatat
-        let nextD = -1;
-        for (let step = d + 1; step <= Math.min(day, DIM); step++) {
-          const nextIsSun = new Date(PY, PM0, step).getDay() === 0;
-          const nextSold = getActualSalesForDay(step, "ALL");
-          if (nextSold > 0 || (!nextIsSun && step <= day)) {
-            nextD = step;
-            break;
-          }
-        }
-
-        if (nextD > 0) {
-          const nextDStr = `${period.key}-${String(nextD).padStart(2, "0")}`;
-          const nextPjdRec = state.pjd[nextDStr]?.[tkuIdx];
-          const nextTodayRec = nextD === day ? state.todayInputs[tkuIdx] : null;
-          const nextRec = nextPjdRec || nextTodayRec;
-          const nextActual = getDayActualAllVariants(nextD);
-          const nextSalesV: [number, number, number, number] = nextRec?.v ? nextRec.v : [nextActual.yo, nextActual.om, nextActual.os, nextActual.yt];
-          const nextBbV: [number, number, number, number] = nextRec?.b ? nextRec.b : [0, 0, 0, 0];
-          pdmV = [
-            nextSalesV[0] + nextBbV[0],
-            nextSalesV[1] + nextBbV[1],
-            nextSalesV[2] + nextBbV[2],
-            nextSalesV[3] + nextBbV[3]
-          ];
-          pdm = pdmV.reduce((a, b) => a + b, 0);
-        } else {
-          // Hari terakhir (hari ini / belum ada transaksi esoknya): gunakan manual input PDM hari ini
-          if (rec?.pdmV) {
-            pdmV = [...rec.pdmV];
-          } else if (d === day && pdmV) {
-            pdmV = [...pdmV];
-          } else {
-            const manualPdm = rec?.pdm ?? (d === day ? totalPdmToday : 0);
-            pdmV = [manualPdm, 0, 0, 0];
-          }
-          pdm = pdmV.reduce((a, b) => a + b, 0);
-        }
+      if (rec?.pdmV && Array.isArray(rec.pdmV) && rec.pdmV.length === 4) {
+        dayPdmV = [rec.pdmV[0] || 0, rec.pdmV[1] || 0, rec.pdmV[2] || 0, rec.pdmV[3] || 0];
+      } else if (rec?.pdm !== undefined && rec.pdm !== null && rec.pdm > 0) {
+        dayPdmV = [rec.pdm, 0, 0, 0];
+      } else if (d === day && pdmV.some(x => x > 0)) {
+        dayPdmV = [...pdmV];
       } else {
-        pdmV = [0, 0, 0, 0];
-        pdm = 0;
+        dayPdmV = [0, 0, 0, 0];
       }
+      dayPdm = dayPdmV.reduce((a, b) => a + b, 0);
     }
 
     const absen = isPast ? (rec?.absen ?? 0) : 0;
@@ -1254,8 +1223,8 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       bbV,
       bb,
       pctBb,
-      pdmV,
-      pdm,
+      pdmV: dayPdmV,
+      pdm: dayPdm,
       absen,
       frek,
       l250: l250Val,

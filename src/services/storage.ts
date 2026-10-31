@@ -435,11 +435,8 @@ export function applySyncable(state: AppState, s: Syncable): AppState {
     if (k === 'archives') return;
     if (s[k] !== undefined) next[k] = s[k];
   });
-  const statics: Record<string, ArchiveRecord> = {};
-  Object.keys(state.archives || {}).forEach(k => {
-    if (isStaticArchiveKey(k)) statics[k] = state.archives[k];
-  });
-  next.archives = { ...statics, ...(s.archives || {}) };
+  // JANGAN pernah buang arsip yang sudah ada di lokal state: gabungkan arsip lokal dengan hasil sinkronisasi
+  next.archives = { ...(state.archives || {}), ...(s.archives || {}) };
   return synchronizeAppState(next as AppState);
 }
 
@@ -1668,7 +1665,16 @@ export function buildArchiveFromState(state: AppState): ArchiveRecord {
   Object.keys(state.weeklyNotes || {}).forEach(k => {
     if (!k.startsWith(prefix)) return;
     const n = state.weeklyNotes![k];
-    if (!n || !((n.a || '').trim() || (n.s || '').trim() || (n.l || []).length)) return;
+    if (!n) return;
+    const hasContent = Boolean(
+      (n.a || '').trim() ||
+      (n.s || '').trim() ||
+      (n.l && n.l.length > 0) ||
+      (n.tp || '').trim() ||
+      (n.ar || '').trim() ||
+      (n.h || '').trim()
+    );
+    if (!hasContent) return;
     catatanN[k] = { ...n, l: [...(n.l || [])] };
     const r = state.weeklyReplies?.[k];
     if (r) catatanR[k] = { ...r };
@@ -1933,6 +1939,20 @@ export function loadAppState(): AppState {
       if (userStock && Object.keys(userStock).length > 0) {
         saveSisaStockBackup(userStock);
       }
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const lk = localStorage.key(i);
+          if (lk && lk.startsWith('yk_archive_')) {
+            const perKey = lk.replace('yk_archive_', '');
+            if (!merged.archives[perKey]) {
+              const arc = JSON.parse(localStorage.getItem(lk) || '{}');
+              if (arc && arc.periode === perKey) {
+                merged.archives[perKey] = arc;
+              }
+            }
+          }
+        }
+      } catch (_) {}
       merged.role = activeSession ? activeSession.role : null;
       if (activeSession && activeSession.tkuId !== undefined) {
         merged.activeTkuId = activeSession.tkuId;

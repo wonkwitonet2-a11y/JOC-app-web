@@ -55,6 +55,7 @@ export interface DailySalesRecord {
   jwpManual?: number; // JWP kumulatif yang diisi manual oleh TKU (nilai terbaru berlaku)
   absen?: number;
   frek?: number;
+  u?: number; // timestamp ms saat data ini diedit/disimpan
 }
 
 export interface DailyOpsRecord {

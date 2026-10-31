@@ -19,7 +19,8 @@ import {
   RefreshCw,
   Trash2,
   ChevronDown,
-  Settings2
+  Settings2,
+  StickyNote
 } from 'lucide-react';
 import { AppState, ArchiveRecord, ArchiveRow, VARIANTS } from '../types';
 import { ArsipLineChart } from '../components/ArsipYearCharts';
@@ -156,7 +157,7 @@ interface ArsipViewProps {
   onUpdateArchiveAbsen?: (archiveKey: string, patch: Record<number, { absenYl: number; frekuensiAbsen: number; tahunLalu: number }>) => void;
 }
 
-type ArchiveTab = 'item_sales' | 'target_eval' | 'ops_bb' | 'all_columns';
+type ArchiveTab = 'item_sales' | 'target_eval' | 'ops_bb' | 'all_columns' | 'kendala_solusi';
 type HistoricalMetric = 'total' | 'rata' | 'bb' | 'syl' | 'coverage';
 
 export const ArsipView: React.FC<ArsipViewProps> = ({
@@ -180,6 +181,8 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
   const [histMetric, setHistMetric] = useState<HistoricalMetric>('total');
   // Konfirmasi hapus memakai kotak di dalam aplikasi: window.confirm() diblokir diam-diam di APK/iframe.
   const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
+  // Konfirmasi simpan arsip bulan ini
+  const [showConfirmSaveMonth, setShowConfirmSaveMonth] = useState(false);
   // Mode koreksi Absen & Frekuensi (hanya arsip buatan sendiri yang kuncinya dibuka)
   const [editAbsen, setEditAbsen] = useState(false);
   const [absenDraft, setAbsenDraft] = useState<Record<number, { abs: string; frk: string; ty: string }>>({});
@@ -203,6 +206,14 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
 
   const activeKey = state.activeArchiveKey || archiveKeysDesc[0] || '2026-08';
   const activeArchive = state.archives[activeKey];
+  const activeNotesCount = useMemo(() => {
+    const notes = activeArchive?.catatan?.n ?? state.weeklyNotes ?? {};
+    let count = 0;
+    Object.keys(notes).forEach(k => {
+      if (k.startsWith(`${activeKey}:`)) count++;
+    });
+    return count;
+  }, [activeArchive, state.weeklyNotes, activeKey]);
   // Arsip bawaan (Jan–Agu 2026, dst) selalu dipulihkan dari data bawaan saat dimuat, jadi koreksi hanya untuk arsip lain (mis. September 2026)
   const canEditAbsen = Boolean(activeArchive && !activeArchive.terkunci && !INITIAL_ARCHIVES[activeKey] && onUpdateArchiveAbsen);
   useEffect(() => { setEditAbsen(false); }, [activeKey]);
@@ -411,6 +422,44 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
         </div>
       )}
 
+      {/* Modal Konfirmasi Simpan Bulan Ini */}
+      {showConfirmSaveMonth && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowConfirmSaveMonth(false)}>
+          <div className="w-full max-w-sm p-5 space-y-3 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2.5">
+              <span className="p-2 rounded-xl bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400">
+                <Save className="w-4 h-4" />
+              </span>
+              <h3 className="text-base font-bold text-neutral-900 dark:text-neutral-100">
+                Apakah data sudah benar?
+              </h3>
+            </div>
+            <p className="text-xs text-neutral-600 dark:text-neutral-400 leading-relaxed">
+              Data penjualan harian dan histori kendala &amp; solusi bulan <strong className="text-neutral-900 dark:text-neutral-100">{getPeriodInfo(state).label}</strong> akan disimpan secara permanen ke arsip.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowConfirmSaveMonth(false)}
+                className="px-3.5 py-2 text-xs font-semibold rounded-xl border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConfirmSaveMonth(false);
+                  onSaveCurrentMonthArchive();
+                }}
+                className="px-4 py-2 text-xs font-bold rounded-xl bg-brand-600 hover:bg-brand-700 active:scale-[0.99] text-white shadow-sm shadow-brand-600/20 transition-all cursor-pointer"
+              >
+                Iya, Simpan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-4 p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm relative">
         <div className="flex items-center gap-3 min-w-0">
@@ -430,10 +479,8 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
         <div className="flex flex-wrap items-center gap-2 max-w-full">
           {/* Tombol Utama: Simpan Bulan Ini */}
           <button
-            onClick={() => {
-              onSaveCurrentMonthArchive();
-              showToast(`Bulan ${getPeriodInfo(state).label} berhasil diarsipkan!`, 'success');
-            }}
+            type="button"
+            onClick={() => setShowConfirmSaveMonth(true)}
             className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold rounded-xl bg-brand-600 hover:bg-brand-700 active:scale-[0.99] text-white shadow-sm shadow-brand-600/20 transition-all cursor-pointer"
           >
             <Save className="w-4 h-4" />
@@ -546,8 +593,6 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
         </div>
       </div>
 
-      {/* Catatan mingguan TKU untuk bulan arsip yang dipilih */}
-      <ArsipCatatanMingguan state={state} periode={activeKey} arsip={state.archives[activeKey]} />
 
       {/* Supabase Cloud Storage Info & Sync Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col min-w-0 h-full">
@@ -907,6 +952,22 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                   }`}
                 >
                   Semua Kolom
+                </button>
+                <button
+                  onClick={() => setActiveTab('kendala_solusi')}
+                  className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                    activeTab === 'kendala_solusi'
+                      ? 'bg-white dark:bg-neutral-900 text-brand-600 dark:text-brand-400 shadow-xs'
+                      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900'
+                  }`}
+                >
+                  <StickyNote className="w-3.5 h-3.5" />
+                  <span>Kendala &amp; Solusi</span>
+                  {activeNotesCount > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-brand-100 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 font-bold">
+                      {activeNotesCount}
+                    </span>
+                  )}
                 </button>
               </div>
             </div>
@@ -1317,6 +1378,20 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                     </tr>
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {/* TAB 5: Kendala & Solusi Bulan Ini */}
+            {activeTab === 'kendala_solusi' && (
+              <div className="pt-2">
+                <ArsipCatatanMingguan state={state} periode={activeKey} arsip={activeArchive} />
+              </div>
+            )}
+
+            {/* Catatan Kendala & Solusi di Dalam Detail Arsip Bulan Ini */}
+            {activeTab !== 'kendala_solusi' && (
+              <div className="pt-4 border-t border-neutral-100 dark:border-neutral-800">
+                <ArsipCatatanMingguan state={state} periode={activeKey} arsip={activeArchive} />
               </div>
             )}
           </div>
