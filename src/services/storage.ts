@@ -2269,9 +2269,27 @@ export function synchronizeAppState(state: AppState): AppState {
   };
 }
 
+// Pemberitahuan kalau penyimpanan di HP ini gagal (memori penuh / diblokir), supaya tidak gagal diam-diam.
+// Hanya dipanggil saat statusnya BERUBAH (aman -> gagal, atau gagal -> aman lagi).
+let localSaveHandler: ((ok: boolean) => void) | null = null;
+let lastLocalSaveOk = true;
+export function setLocalSaveHandler(fn: ((ok: boolean) => void) | null): void {
+  localSaveHandler = fn;
+  if (fn && !lastLocalSaveOk) setTimeout(() => fn(false), 0);
+}
+function reportLocalSave(ok: boolean): void {
+  if (ok === lastLocalSaveOk) return;
+  lastLocalSaveOk = ok;
+  const fn = localSaveHandler;
+  if (fn) setTimeout(() => fn(ok), 0); // ditunda: fungsi ini bisa dipanggil dari dalam setState
+}
+
 export function saveAppState(state: AppState) {
+  let mainSaved = false;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    mainSaved = true;
+    reportLocalSave(true);
 
     // 1. Cadangan abadi sisa stok ke vault terisolasi (tahan restart/update kode)
     if (state.sisaStock && typeof state.sisaStock === 'object' && Object.keys(state.sisaStock).length > 0) {
@@ -2315,6 +2333,7 @@ export function saveAppState(state: AppState) {
     }
   } catch (err) {
     console.error('Failed to save state to localStorage:', err);
+    if (!mainSaved) reportLocalSave(false);
   }
 }
 

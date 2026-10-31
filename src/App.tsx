@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { AppState, TkuItem, DailySalesRecord, VariantCode, ArchiveRecord, ArchiveRow, SupabaseConfig, SisaStockRecord, WeeklyNote } from './types';
+import { AppState, TkuItem, DailySalesRecord, VariantCode, ArchiveRecord, ArchiveRow, SupabaseConfig, SisaStockRecord, WeeklyNote, MonthSnapshot } from './types';
 import { withNoteMovedByDate, withReplyByKey } from './services/weeklyNotes';
 import {
   loadAppState,
@@ -22,6 +22,11 @@ import {
   saveSupabaseConfigToVault,
   synchronizeAppState,
   switchWorkingPeriod,
+  captureMonthSnapshot,
+  setLocalSaveHandler,
+  buildBlankSnapshot,
+  listSelectablePeriods,
+  summarizePeriod,
   saveMonthBackupToSupabase,
   getDaysInMonthOfKey,
   markPeriodManualSwitch,
@@ -65,8 +70,133 @@ import { TkuInputView } from './views/TkuInputView';
 import { SisaStockView } from './views/SisaStockView';
 import { clearTkuInputDraft } from './services/inputDraft';
 
+// ===== Mode lihat/ubah bulan sebelumnya =====
+// Selama mode ini aktif, semua jalur simpan milik penanganan menu (localStorage & Supabase) dikunci,
+// sehingga data bulan lama yang sedang dilihat tidak pernah tertulis sebagai data bulan kerja.
+// Penyimpanan baru terjadi lewat tombol "Simpan" di pita mode lihat (hanya untuk bulan yang dilihat).
+let VIEW_LOCK = false;
+const gSave = ((...a: any[]) => (VIEW_LOCK ? Promise.resolve(false) : (saveStateToSupabase as any)(...a))) as typeof saveStateToSupabase;
+const gLocal = ((...a: any[]) => { if (!VIEW_LOCK) (saveAppState as any)(...a); }) as typeof saveAppState;
+const gBackup = ((...a: any[]) => (VIEW_LOCK ? Promise.resolve(false) : (saveMonthBackupToSupabase as any)(...a))) as typeof saveMonthBackupToSupabase;
+const gStock = ((...a: any[]) => { if (!VIEW_LOCK) (saveSisaStockBackup as any)(...a); }) as typeof saveSisaStockBackup;
+
+const VIEW_BLOCKED_MENUS = ['Pengaturan', 'Arsip', 'Profil TKU', 'Sisa Stock'];
+// Catatan Kendala & Solusi bisa DILIHAT di mode lihat, tapi tidak bisa diubah (ubah di bulan berjalan).
+const VIEW_READONLY_KEYS = ['weeklyNotes', 'weeklyReplies'];
+// Kolom data bulanan: tidak boleh berubah selama mode lihat (belum menekan Edit).
+const VIEW_DATA_KEYS = ['pjd', 'hjd', 'todayInputs', 'breakdown', 'breakdownPerVariant', 'targetBulanLalu', 'targetTahunLalu', 'targetPerVariant', 'bbHarian'];
+// Kolom tampilan saja (aman dipakai di mode lihat, tidak ikut disimpan).
+const VIEW_UI_KEYS = ['currentMenu', 'selectedRayon', 'activeTkuId', 'theme', 'activeArchiveKey', 'activeDate', 'currentDayNum', 'pembagiHari', 'pembagiHariMode', 'pembagiManual', 'pembagiBreakdown', 'pembagiBreakdownMode', 'pembagiKhususTku', 'pembagiKhususBreakdownTku'];
+
+interface ViewCtx {
+  key: string;      // YYYY-MM bulan yang sedang dilihat
+  editing: boolean;
+  draft: AppState;  // salinan kerja bulan itu (tidak pernah disimpan otomatis)
+  base: AppState;   // keadaan awal saat dibuka, untuk membatalkan & mendeteksi perubahan
+}
+
+// Bahan awal bulan lama yang belum punya "foto bulan": ambil dari ARSIP bulan itu (target, jumlah YL/area, dst.),
+// BUKAN dari bulan berjalan. Tanpa arsip, target dikosongkan agar tidak menampilkan target bulan berjalan.
+const normNamaView = (str: string) => {
+  const t = (str || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  if (t === 'jember' || t === 'jember 1') return 'jember 1';
+  if (t === 'dp jempat 4' || t === 'dp jember 4') return 'dp jember 4';
+  return t;
+};
+const VIEW_VARIANT_SHARE = { YO: 0.76, OM: 0.09, OS: 0.11, YT: 0.04 } as const;
+const buildViewSnapshot = (real: AppState, key: string): MonthSnapshot => {
+  const snap: MonthSnapshot = JSON.parse(JSON.stringify(buildBlankSnapshot(real, key)));
+  const arc = real.archives?.[key];
+  const codes = ['YO', 'OM', 'OS', 'YT'] as const;
+  real.tkus.forEach((t, i) => {
+    const row = arc?.rows?.find(r => normNamaView(r.nama) === normNamaView(t.nama));
+    const m: any = { ...snap.tkuMonthly[i] };
+    if (!row) {
+      m.targetHarian = 0;
+      snap.tkuMonthly[i] = m;
+      codes.forEach(c => { snap.targetPerVariant[c][i] = { ...snap.targetPerVariant[c][i], tg: 0 }; });
+      return;
+    }
+    const fields = ['targetHarian', 'jumlahYl', 'jumlahArea', 'coverageArea', 'absenYl', 'frekuensiAbsen', 'akmJwp', 'sYl', 'l250', 'l300'] as const;
+    fields.forEach(f => { const val = (row as any)[f]; if (typeof val === 'number') m[f] = val; });
+    snap.tkuMonthly[i] = m;
+    if (typeof row.bulanLalu === 'number') snap.targetBulanLalu[i] = row.bulanLalu;
+    if (typeof row.tahunLalu === 'number') snap.targetTahunLalu[i] = row.tahunLalu;
+    const tg = Number(m.targetHarian) || 0;
+    codes.forEach(c => { snap.targetPerVariant[c][i] = { ...snap.targetPerVariant[c][i], tg: Math.floor(tg * VIEW_VARIANT_SHARE[c]) }; });
+  });
+  return snap;
+};
+
+const pickMonthKeys = <T,>(src: Record<string, T> | undefined, key: string): Record<string, T> => {
+  const out: Record<string, T> = {};
+  Object.keys(src || {}).forEach(k => { if (k.startsWith(key + '-')) out[k] = (src as Record<string, T>)[k]; });
+  return out;
+};
+const replaceMonthKeys = <T,>(target: Record<string, T> | undefined, src: Record<string, T> | undefined, key: string): Record<string, T> => {
+  const out: Record<string, T> = {};
+  Object.keys(target || {}).forEach(k => { if (!k.startsWith(key + '-')) out[k] = (target as Record<string, T>)[k]; });
+  Object.keys(src || {}).forEach(k => { if (k.startsWith(key + '-')) out[k] = (src as Record<string, T>)[k]; });
+  return out;
+};
+const pickUiKeys = (st: AppState): Partial<AppState> => {
+  const o: any = {};
+  VIEW_UI_KEYS.forEach(k => { o[k] = (st as any)[k]; });
+  return o;
+};
+const isViewDirty = (v: ViewCtx): boolean => {
+  const strip = (st: AppState) => JSON.stringify({ ...captureMonthSnapshot(st, v.key), savedAt: '' });
+  const m = (st: AppState) => JSON.stringify([pickMonthKeys(st.pjd, v.key), pickMonthKeys(st.hjd, v.key)]);
+  return strip(v.draft) !== strip(v.base) || m(v.draft) !== m(v.base);
+};
+
 export default function App() {
-  const [state, setState] = useState<AppState>(() => loadAppState());
+  // realState = data asli (satu-satunya yang disimpan ke HP & Supabase oleh proses latar).
+  // state     = yang dilihat/diubah menu: data asli, atau salinan bulan lama saat mode lihat aktif.
+  const [realState, setRealState] = useState<AppState>(() => loadAppState());
+  const [view, setView] = useState<ViewCtx | null>(null);
+  // true = penyimpanan di HP ini gagal (memori penuh/diblokir): tampilkan peringatan merah sampai berhasil lagi.
+  const [localSaveFailed, setLocalSaveFailed] = useState(false);
+  useEffect(() => {
+    setLocalSaveHandler(ok => setLocalSaveFailed(!ok));
+    return () => setLocalSaveHandler(null);
+  }, []);
+  const viewRef = useRef<ViewCtx | null>(null);
+  viewRef.current = view;
+  VIEW_LOCK = !!view;
+  const state: AppState = view ? view.draft : realState;
+  const toastRef = useRef<(m: string, t?: 'success' | 'error' | 'info') => void>(() => {});
+
+  // Penghubung perubahan dari menu: ke data asli (normal) atau ke salinan bulan lama (mode lihat).
+  const setState = useCallback((u: AppState | ((p: AppState) => AppState)) => {
+    const v = viewRef.current;
+    if (!v) { setRealState(u as any); return; }
+    const next: AppState = typeof u === 'function' ? (u as (p: AppState) => AppState)(v.draft) : u;
+    if (next === v.draft) return;
+    const changed = (Object.keys(next) as string[]).filter(k => (next as any)[k] !== (v.draft as any)[k]);
+    if (changed.length === 0) return;
+    if (changed.includes('role')) {
+      // Keluar akun / ganti peran: tutup mode lihat (perubahan yang belum disimpan dibuang), terapkan ke data asli.
+      viewRef.current = null; VIEW_LOCK = false; setView(null);
+      setRealState(p => ({ ...p, role: next.role, activeTkuId: next.activeTkuId, currentMenu: next.currentMenu }));
+      return;
+    }
+    if (changed.includes('currentMenu') && VIEW_BLOCKED_MENUS.includes(next.currentMenu)) {
+      toastRef.current('Menu ini tidak tersedia di mode lihat bulan sebelumnya. Keluar dari mode lihat dulu.', 'info');
+      return;
+    }
+    if (changed.some(k => VIEW_READONLY_KEYS.includes(k))) {
+      toastRef.current('Catatan Kendala & Solusi hanya bisa dilihat di mode lihat. Ubah catatan saat berada di bulan berjalan.', 'info');
+      return;
+    }
+    if (!v.editing && changed.some(k => VIEW_DATA_KEYS.includes(k))) {
+      toastRef.current('Mode lihat (hanya baca). Tekan tombol Edit di atas dulu untuk mengubah data.', 'info');
+      return;
+    }
+    const n: ViewCtx = { ...v, draft: next };
+    viewRef.current = n;
+    setView(n);
+  }, []);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const { ask: askConfirm, dialog: confirmDialog } = useConfirm();
   // Status sinkronisasi cloud
@@ -74,7 +204,7 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
 
   // Drawer menu (mode HP saja). Di mode tablet/desktop, Sidebar selalu tampil
-  // sendiri lewat breakpoint md:, jadi state ini tidak berpengaruh di sana.
+  // sendiri lewat breakpoint md:, jadi realState ini tidak berpengaruh di sana.
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Sidebar statis mode tablet/desktop: bisa disembunyikan lewat tombol X di
   // sidebar itu sendiri, atau tombol hamburger di Navbar, agar konten terlihat
@@ -94,8 +224,8 @@ export default function App() {
 
   const handleSelectTkuSubMenu = (m: 'ringkasan' | 'input' | 'breakdown' | 'realisasi' | 'stok' | 'kendala') => {
     if (tkuSubMenu === 'input' && m !== 'input') {
-      const curDraftDate = localStorage.getItem('yk_active_input_date') || state.activeDate;
-      clearTkuInputDraft(curDraftDate, state.activeTkuId);
+      const curDraftDate = localStorage.getItem('yk_active_input_date') || realState.activeDate;
+      clearTkuInputDraft(curDraftDate, realState.activeTkuId);
     }
     setTkuSubMenu(m);
     try {
@@ -105,17 +235,17 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  const stateRef = useRef(realState);
+  stateRef.current = realState;
   const hasPendingPushRef = useRef(false);
 
-  // Automatically save state to localStorage whenever it changes (cache instan/offline)
+  // Automatically save realState to localStorage whenever it changes (cache instan/offline)
   useEffect(() => {
-    saveAppState(state);
-    if (hasUnsyncedChanges(state)) {
+    saveAppState(realState);
+    if (hasUnsyncedChanges(realState)) {
       hasPendingPushRef.current = true;
     }
-  }, [state]);
+  }, [realState]);
 
   // Beri tahu aplikasi pembungkus (APK/webview) apakah akun sedang masuk atau keluar,
   // supaya ikon gerigi link hanya tampil di layar login.
@@ -123,7 +253,7 @@ export default function App() {
     const kirimStatus = () => {
       try {
         if (window.parent && window.parent !== window) {
-          window.parent.postMessage({ type: 'yk-auth', loggedIn: !!state.role }, '*');
+          window.parent.postMessage({ type: 'yk-auth', loggedIn: !!realState.role }, '*');
         }
       } catch (_) {}
     };
@@ -133,14 +263,14 @@ export default function App() {
     };
     window.addEventListener('message', onPesan);
     return () => window.removeEventListener('message', onPesan);
-  }, [state.role]);
+  }, [realState.role]);
 
   // Jembatan kredensial Supabase dengan aplikasi pembungkus (APK).
   // Di dalam APK, penyimpanan halaman web bisa terpisah/hilang, jadi URL & API key
   // juga dititipkan ke APK dan diminta kembali setiap aplikasi dibuka.
   const adaKredRef = useRef(false);
   useEffect(() => {
-    const { u, k, locked } = state.supabaseConfig;
+    const { u, k, locked } = realState.supabaseConfig;
     try {
       if (!window.parent || window.parent === window) return;
       if (u && k) {
@@ -151,7 +281,7 @@ export default function App() {
         window.parent.postMessage({ type: 'yk-cred-clear' }, '*');
       }
     } catch (_) {}
-  }, [state.supabaseConfig.u, state.supabaseConfig.k, state.supabaseConfig.locked]);
+  }, [realState.supabaseConfig.u, realState.supabaseConfig.k, realState.supabaseConfig.locked]);
 
   useEffect(() => {
     const onKred = (e: MessageEvent) => {
@@ -159,7 +289,7 @@ export default function App() {
       const d = e.data;
       if (!d || d.type !== 'yk-cred') return;
       if (typeof d.u !== 'string' || typeof d.k !== 'string' || !d.u.trim() || !d.k.trim()) return;
-      setState(prev => {
+      setRealState(prev => {
         if (prev.supabaseConfig.u && prev.supabaseConfig.k) return prev;
         const cfg: SupabaseConfig = { u: d.u.trim(), k: d.k.trim(), locked: Boolean(d.locked) };
         saveSupabaseConfigToVault(cfg);
@@ -200,12 +330,12 @@ export default function App() {
         const result = await loadStateFromSupabase(currentState.supabaseConfig, currentState);
         if (result === 'unchanged') {
           setSyncStatus('synced');
-          setState(prev => synchronizeAppState(prev));
+          setRealState(prev => synchronizeAppState(prev));
           if (isManual) showToast('Sinkronisasi selesai! Data lokal & cloud sudah mutakhir dan serasi.', 'success');
         } else if (result && result.state) {
           hasPendingPushRef.current = false;
           // Terapkan sebagai selisih supaya ketikan baru selama proses tarik tidak tertimpa
-          setState(prev => reapplyMergedState(prev, currentState, result.state));
+          setRealState(prev => reapplyMergedState(prev, currentState, result.state));
           setSyncStatus('synced');
           const pBefore = getPeriodInfo(currentState);
           const pAfter = getPeriodInfo(result.state);
@@ -214,17 +344,17 @@ export default function App() {
           }
           if (isManual) showToast('Sinkronisasi cloud berhasil! Seluruh data dan metrik telah disesuaikan.', 'success');
         } else {
-          setState(prev => synchronizeAppState(prev));
+          setRealState(prev => synchronizeAppState(prev));
           setSyncStatus('idle');
           if (isManual) showToast('Rekonsiliasi & sinkronisasi data lokal selesai!', 'success');
         }
       } else {
-        setState(prev => synchronizeAppState(prev));
+        setRealState(prev => synchronizeAppState(prev));
         setSyncStatus('idle');
         if (isManual) showToast('Rekonsiliasi & sinkronisasi data lokal selesai!', 'success');
       }
     } catch {
-      setState(prev => synchronizeAppState(prev));
+      setRealState(prev => synchronizeAppState(prev));
       setSyncStatus('error');
       if (isManual) showToast('Sinkronisasi lokal selesai (koneksi cloud offline)', 'info');
     } finally {
@@ -235,9 +365,9 @@ export default function App() {
   // Poin 4: Tarik data cloud: saat pertama buka, saat kembali ke tab browser (deduplikasi focus/visibility),
   // dan periodik hemat (tiap 2.5 menit).
   // HANYA bergantung pada kredensial Supabase (supabaseSig), TIDAK PERNAH berjalan ulang saat ganti menu!
-  const supabaseSig = state.supabaseConfig.u + '|' + state.supabaseConfig.k;
+  const supabaseSig = realState.supabaseConfig.u + '|' + realState.supabaseConfig.k;
   useEffect(() => {
-    if (!state.supabaseConfig.u || !state.supabaseConfig.k) return;
+    if (!realState.supabaseConfig.u || !realState.supabaseConfig.k) return;
     refreshFromCloud(false);
 
     let lastForegroundPull = Date.now();
@@ -274,7 +404,7 @@ export default function App() {
         refreshFromCloud(false);
       }, wait);
     };
-    const unsubscribePing = subscribeSyncPing(state.supabaseConfig, onPing);
+    const unsubscribePing = subscribeSyncPing(realState.supabaseConfig, onPing);
 
     return () => {
       unsubscribePing();
@@ -288,7 +418,7 @@ export default function App() {
   // Deteksi otomatis saat tanggal kalender berganti hari (misal lewat tengah malam / buka aplikasi di hari baru)
   useEffect(() => {
     const checkDateTransition = () => {
-      setState(prev => {
+      setRealState(prev => {
         const act = computeActiveDate(prev.activePeriod);
         if (act.date !== prev.activeDate || act.day !== prev.currentDayNum) {
           // Amankan data hari kemarin yang belum sempat tersimpan ke pjd
@@ -353,7 +483,7 @@ export default function App() {
   // Hasil gabungan dari simpan (termasuk simpan paksa) diterapkan ke tampilan sebagai selisih.
   useEffect(() => {
     setMergedStateHandler((merged, start) => {
-      setState(prev => reapplyMergedState(prev, start, merged));
+      setRealState(prev => reapplyMergedState(prev, start, merged));
       const pStart = getPeriodInfo(start);
       const pMerged = getPeriodInfo(merged);
       if (pMerged.key > pStart.key) {
@@ -413,15 +543,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!state.supabaseConfig.u || !state.supabaseConfig.k) return;
-    if (!hasUnsyncedChanges(state)) return; // Lewati jika tidak ada perubahan data riil
+    if (!realState.supabaseConfig.u || !realState.supabaseConfig.k) return;
+    if (!hasUnsyncedChanges(realState)) return; // Lewati jika tidak ada perubahan data riil
     hasPendingPushRef.current = true;
     if (supabasePushTimer.current) clearTimeout(supabasePushTimer.current);
     supabasePushTimer.current = setTimeout(() => { pushNow(); }, 600);
     return () => {
       if (supabasePushTimer.current) clearTimeout(supabasePushTimer.current);
     };
-  }, [state, pushNow]);
+  }, [realState, pushNow]);
 
   useEffect(() => {
     // Kirim segera saat HP kembali online, aplikasi dibuka, DAN saat aplikasi diminimalkan/ditutup
@@ -457,7 +587,7 @@ export default function App() {
   // dan belum disimpan, tanggal berhenti di tanggal terakhir bulan kerja tersebut.
   useEffect(() => {
     const sync = () => {
-      setState(prev => {
+      setRealState(prev => {
         const act = computeActiveDate(prev.activePeriod);
         if (prev.activeDate === act.date && prev.currentDayNum === act.day && prev.pembagiHari === act.day) return prev;
         return { ...prev, activeDate: act.date, currentDayNum: act.day, pembagiHari: act.day, pembagiHariMode: 'tanggal' };
@@ -481,6 +611,8 @@ export default function App() {
     }, 4000);
   };
 
+  toastRef.current = showToast;
+
   const dismissToast = (id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
   };
@@ -501,7 +633,7 @@ export default function App() {
 
   // Monitor inaktivitas & deteksi saat aplikasi dibuka kembali setelah diminimalkan / ditutup > 10 menit
   useEffect(() => {
-    if (!state.role) return;
+    if (!realState.role) return;
 
     let lastPersisted = Date.now();
     const onUserActivity = () => {
@@ -515,12 +647,12 @@ export default function App() {
     };
 
     const checkInactivity = () => {
-      if (!state.role) return;
+      if (!realState.role) return;
       const now = Date.now();
       const elapsed = now - lastActiveRef.current;
       if (elapsed > INACTIVITY_TIMEOUT_MS || isSessionExpired()) {
         clearAppSession();
-        setState(prev => ({ ...prev, role: null }));
+        setRealState(prev => ({ ...prev, role: null }));
         showToast('Sesi telah berakhir karena aplikasi ditutup / tidak aktif lebih dari 10 menit. Silakan login kembali.', 'info');
       }
     };
@@ -568,7 +700,7 @@ export default function App() {
       window.removeEventListener('pagehide', onPageHide);
       window.removeEventListener('beforeunload', onPageHide);
     };
-  }, [state.role]);
+  }, [realState.role]);
 
   // Auth Handlers
   const handleLogin = (role: 'a' | 't', tkuId: number) => {
@@ -916,8 +1048,8 @@ export default function App() {
         pjd: nextPjd,
         todayInputs: nextInputs
       });
-      stateRef.current = nextState;
-      saveAppState(nextState);
+      if (!viewRef.current) stateRef.current = nextState;
+      gLocal(nextState);
       return nextState;
     });
     if (supabasePushTimer.current) clearTimeout(supabasePushTimer.current);
@@ -950,8 +1082,8 @@ export default function App() {
         todayInputs: nextInputs,
         pjd: nextPjd
       });
-      stateRef.current = nextState;
-      saveAppState(nextState);
+      if (!viewRef.current) stateRef.current = nextState;
+      gLocal(nextState);
       return nextState;
     });
     if (supabasePushTimer.current) clearTimeout(supabasePushTimer.current);
@@ -962,19 +1094,19 @@ export default function App() {
   const handleSaveSisaStock = async (tkuId: number, record: SisaStockRecord) => {
     const nextStock = { ...(state.sisaStock || {}), [tkuId]: record };
     // 1. Amankan ke vault terisolasi seketika (anti-kehilangan)
-    saveSisaStockBackup(nextStock);
+    gStock(nextStock);
 
     // 2. Terapkan ke state dan simpan permanen
     const nextState = { ...state, sisaStock: nextStock };
     setState(nextState);
-    saveAppState(nextState);
+    gLocal(nextState);
 
     const tkuName = state.tkus.find(t => t.id === tkuId)?.nama || `TKU ${tkuId}`;
     showToast(`Sisa stock ${tkuName} berhasil disimpan & diamankan!`, 'success');
 
     // 3. Langsung kirim ke database Supabase seketika jika terhubung
     if (state.supabaseConfig.u && state.supabaseConfig.k) {
-      saveStateToSupabase(nextState, false);
+      gSave(nextState, false);
     }
   };
 
@@ -1156,8 +1288,8 @@ export default function App() {
     };
 
     // 1. Amankan ke state ref, vault lokal & localStorage seketika
-    stateRef.current = nextState;
-    saveAppState(nextState);
+    if (!viewRef.current) stateRef.current = nextState;
+    gLocal(nextState);
     try {
       localStorage.setItem(`yk_archive_${currentKey}`, JSON.stringify(newArchive));
     } catch (_) {}
@@ -1167,8 +1299,8 @@ export default function App() {
     if (state.supabaseConfig.u && state.supabaseConfig.k) {
       setIsSyncing(true);
       setSyncStatus('syncing');
-      const ok = await saveStateToSupabase(nextState, true);
-      if (ok) await saveMonthBackupToSupabase(nextState, currentKey);
+      const ok = await gSave(nextState, true);
+      if (ok) await gBackup(nextState, currentKey);
       setIsSyncing(false);
       setSyncStatus(ok ? 'synced' : 'error');
       if (ok) {
@@ -1180,6 +1312,183 @@ export default function App() {
       showToast(`Bulan ${curP.label} berhasil diarsipkan!`, 'success');
     }
   };
+
+  // ===== Mode lihat/ubah bulan sebelumnya (khusus HP ini; bulan kerja & HP lain tidak berubah) =====
+  const updateView = (patch: Partial<ViewCtx>) => {
+    const cur = viewRef.current;
+    if (!cur) return;
+    const n: ViewCtx = { ...cur, ...patch };
+    viewRef.current = n;
+    setView(n);
+  };
+
+  const closeView = () => {
+    viewRef.current = null;
+    VIEW_LOCK = false;
+    setView(null);
+  };
+
+  const handleStartView = (key: string) => {
+    if (viewRef.current) return;
+    const real = stateRef.current;
+    if (real.role !== 'a') { showToast('Lihat bulan sebelumnya hanya untuk akun Admin.', 'info'); return; }
+    if (!key || key === getPeriodInfo(real).key) return;
+    // switchWorkingPeriod murni (tidak menyimpan apa pun): hasilnya hanya salinan di layar ini.
+    const seeded: AppState = real.monthStore?.[key]
+      ? real
+      : { ...real, monthStore: { ...(real.monthStore || {}), [key]: buildViewSnapshot(real, key) } };
+    const draft: AppState = { ...switchWorkingPeriod(seeded, key), currentMenu: 'Dashboard' };
+    const ctx: ViewCtx = { key, editing: false, draft, base: draft };
+    viewRef.current = ctx;
+    VIEW_LOCK = true;
+    setView(ctx);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast(`Mode lihat ${periodLabelOf(key)}. Bulan kerja ${getPeriodInfo(real).label} tidak berubah.`, 'info');
+  };
+
+  const handleExitView = () => {
+    const v = viewRef.current;
+    if (!v) return;
+    const go = () => {
+      const theme = v.draft.theme;
+      closeView();
+      setRealState(p => (p.theme === theme ? p : { ...p, theme }));
+    };
+    if (isViewDirty(v)) {
+      askConfirm({
+        title: 'Keluar tanpa menyimpan?',
+        message: `Ada perubahan ${periodLabelOf(v.key)} yang belum disimpan. Jika keluar, perubahan itu dibuang. Data ${periodLabelOf(v.key)} yang sudah tersimpan tetap aman.`,
+        tone: 'danger',
+        confirmLabel: 'Ya, buang & keluar',
+        onConfirm: go
+      });
+    } else {
+      go();
+    }
+  };
+
+  const handleViewEdit = () => {
+    const v = viewRef.current;
+    if (!v || v.editing) return;
+    // Perubahan tampilan turunan yang mungkin terjadi saat mode baca dibuang; hanya tampilan (menu/rayon/tanggal) yang dipertahankan.
+    updateView({ editing: true, draft: { ...v.base, ...pickUiKeys(v.draft) } });
+    showToast(`Mode edit ${periodLabelOf(v.key)}. Perubahan baru tersimpan setelah menekan Simpan.`, 'info');
+  };
+
+  const handleViewCancelEdit = () => {
+    const v = viewRef.current;
+    if (!v || !v.editing) return;
+    const go = () => updateView({ editing: false, draft: { ...v.base, ...pickUiKeys(v.draft) } });
+    if (isViewDirty(v)) {
+      askConfirm({
+        title: 'Batalkan perubahan?',
+        message: `Semua perubahan ${periodLabelOf(v.key)} yang belum disimpan akan dibuang. Data yang sudah tersimpan tidak berubah.`,
+        tone: 'warning',
+        confirmLabel: 'Ya, batalkan',
+        onConfirm: go
+      });
+    } else {
+      go();
+    }
+  };
+
+  // Perbarui arsip bulan yang dilihat (opsional, setelah Simpan). Arsip lama disalin dulu ke HP ini.
+  const doUpdateViewArchive = async (key: string, d: AppState) => {
+    const real = stateRef.current;
+    try { localStorage.setItem(`yk_arsip_sebelum_edit_${key}`, JSON.stringify(real.archives?.[key] || null)); } catch (_) {}
+    const next: AppState = { ...real, archives: { ...(real.archives || {}), [key]: buildArchiveFromState(d) } };
+    stateRef.current = next;
+    saveAppState(next);
+    setRealState(next);
+    if (next.supabaseConfig.u && next.supabaseConfig.k) {
+      const ok = await saveStateToSupabase(next, true);
+      if (ok) await saveMonthBackupToSupabase(next, key);
+      showToast(ok ? `Arsip ${periodLabelOf(key)} diperbarui & tersimpan di Supabase.` : `Arsip ${periodLabelOf(key)} diperbarui di HP ini, tetapi GAGAL terkirim ke Supabase.`, ok ? 'success' : 'error');
+    } else {
+      showToast(`Arsip ${periodLabelOf(key)} diperbarui di HP ini.`, 'success');
+    }
+  };
+
+  const doSaveView = async () => {
+    const v = viewRef.current;
+    if (!v) return;
+    const real = stateRef.current;
+    const key = v.key;
+    const d = v.draft;
+    // 1. Salinan pengaman data bulan ini SEBELUM ditimpa (tetap ada di HP ini).
+    try {
+      localStorage.setItem(`yk_sebelum_edit_${key}`, JSON.stringify({
+        savedAt: new Date().toISOString(),
+        snapshot: real.monthStore?.[key] || null,
+        pjd: pickMonthKeys(real.pjd, key),
+        hjd: pickMonthKeys(real.hjd, key),
+        arsip: real.archives?.[key] || null
+      }));
+    } catch (_) {}
+    // 2. Hanya bulan `key` yang ditulis: foto bulannya + data harian (pjd/hjd) tanggal bulan itu.
+    //    Bulan kerja, bulan lain, master TKU, dan arsip tidak disentuh.
+    const next: AppState = {
+      ...real,
+      monthStore: { ...(real.monthStore || {}), [key]: captureMonthSnapshot(d, key) },
+      pjd: replaceMonthKeys(real.pjd, d.pjd, key),
+      hjd: replaceMonthKeys(real.hjd, d.hjd, key),
+      theme: d.theme
+    };
+    closeView();
+    stateRef.current = next;
+    saveAppState(next);
+    setRealState(next);
+    const label = periodLabelOf(key);
+    if (next.supabaseConfig.u && next.supabaseConfig.k) {
+      setIsSyncing(true);
+      setSyncStatus('syncing');
+      const ok = await saveStateToSupabase(next, true);
+      const okBackup = ok ? await saveMonthBackupToSupabase(next, key) : false;
+      setIsSyncing(false);
+      setSyncStatus(ok ? 'synced' : 'error');
+      if (ok && okBackup) showToast(`Perubahan ${label} tersimpan di HP ini dan Supabase.`, 'success');
+      else if (ok) showToast(`Perubahan ${label} tersimpan di Supabase, tetapi cadangan bulannya belum masuk. Coba "Cadangkan Sekarang" di Pengaturan.`, 'info');
+      else showToast(`Perubahan ${label} aman di HP ini, tetapi GAGAL terkirim ke Supabase. Cek koneksi lalu tekan "Cadangkan Sekarang" di Pengaturan.`, 'error');
+    } else {
+      showToast(`Perubahan ${label} tersimpan di HP ini (Supabase belum dikonfigurasi).`, 'info');
+    }
+    // 3. Arsip tidak ditimpa otomatis (bisa saja sudah diedit manual); tawarkan setelah dialog ini tertutup.
+    if (real.archives?.[key]) {
+      setTimeout(() => {
+        askConfirm({
+          title: `Perbarui arsip ${label} juga?`,
+          message: `Data ${label} sudah disimpan. Arsip ${label} belum ikut berubah. Jika diperbarui, angka arsip mengikuti data terbaru, dan arsip lama disalin dulu di HP ini. Jika arsip pernah kamu edit manual, pilih "Nanti saja".`,
+          tone: 'warning',
+          confirmLabel: 'Perbarui arsip',
+          cancelLabel: 'Nanti saja',
+          onConfirm: () => doUpdateViewArchive(key, d)
+        });
+      }, 600);
+    }
+  };
+
+  const handleSaveView = () => {
+    const v = viewRef.current;
+    if (!v) return;
+    if (!v.editing || !isViewDirty(v)) {
+      showToast('Belum ada perubahan untuk disimpan.', 'info');
+      return;
+    }
+    askConfirm({
+      title: `Simpan perubahan ${periodLabelOf(v.key)}?`,
+      message: `Perubahan hanya ditulis ke ${periodLabelOf(v.key)} (HP ini dan Supabase). Bulan kerja ${getPeriodInfo(stateRef.current).label} dan bulan lain tidak berubah. Salinan data ${periodLabelOf(v.key)} sebelum diubah disimpan dulu di HP ini.`,
+      tone: 'warning',
+      confirmLabel: 'Ya, simpan',
+      onConfirm: doSaveView
+    });
+  };
+
+  const viewMonthOptions = (() => {
+    const act = getPeriodInfo(realState).key;
+    return listSelectablePeriods(realState)
+      .filter(k => k !== act && (realState.monthStore?.[k] || realState.archives?.[k] || summarizePeriod(realState, k).days > 0))
+      .map(k => ({ key: k, label: periodLabelOf(k) }));
+  })();
 
   // Pindah bulan kerja (dipakai pilihan bulan di Pengaturan).
   // Bulan lama disimpan utuh (memori perangkat + Supabase), bulan baru dibuka kosong.
@@ -1203,15 +1512,15 @@ export default function App() {
 
     const next = switchWorkingPeriod(base, newKey);
     setState(next);
-    saveAppState(next);
+    gLocal(next);
     const nextLabel = getPeriodInfo(next).label;
     const oldLabel = getPeriodInfo(base).label;
 
     if (state.supabaseConfig.u && state.supabaseConfig.k) {
       setIsSyncing(true);
       setSyncStatus('syncing');
-      const ok = await saveStateToSupabase(next, true);
-      const okBackup = ok ? await saveMonthBackupToSupabase(next, curKey) : false;
+      const ok = await gSave(next, true);
+      const okBackup = ok ? await gBackup(next, curKey) : false;
       setIsSyncing(false);
       setSyncStatus(ok ? 'synced' : 'error');
       if (ok && okBackup) {
@@ -1234,8 +1543,8 @@ export default function App() {
     }
     setIsSyncing(true);
     setSyncStatus('syncing');
-    const ok = await saveStateToSupabase(state, true);
-    const okBackup = ok ? await saveMonthBackupToSupabase(state, getPeriodInfo(state).key) : false;
+    const ok = await gSave(state, true);
+    const okBackup = ok ? await gBackup(state, getPeriodInfo(state).key) : false;
     setIsSyncing(false);
     setSyncStatus(ok ? 'synced' : 'error');
     if (ok && okBackup) {
@@ -1270,7 +1579,7 @@ export default function App() {
     };
     setState(nextState);
     if (state.supabaseConfig.u && state.supabaseConfig.k) {
-      saveStateToSupabase(nextState, true);
+      gSave(nextState, true);
     }
   };
 
@@ -1286,7 +1595,7 @@ export default function App() {
     };
     setState(nextState);
     if (state.supabaseConfig.u && state.supabaseConfig.k) {
-      saveStateToSupabase(nextState, true);
+      gSave(nextState, true);
     }
   };
 
@@ -1314,12 +1623,12 @@ export default function App() {
       activeArchiveKey: nextActive
     };
     setState(nextState);
-    saveAppState(nextState);
+    gLocal(nextState);
 
     if (state.supabaseConfig.u && state.supabaseConfig.k) {
       setIsSyncing(true);
       setSyncStatus('syncing');
-      const ok = await saveStateToSupabase(nextState, true);
+      const ok = await gSave(nextState, true);
       setIsSyncing(false);
       setSyncStatus(ok ? 'synced' : 'error');
       showToast(
@@ -1340,7 +1649,7 @@ export default function App() {
     }
     setIsSyncing(true);
     setSyncStatus('syncing');
-    const ok = await saveStateToSupabase(state, true);
+    const ok = await gSave(state, true);
     setIsSyncing(false);
     setSyncStatus(ok ? 'synced' : 'error');
     if (ok) {
@@ -1408,7 +1717,7 @@ export default function App() {
       setState(nextState);
 
       if (state.supabaseConfig.u && state.supabaseConfig.k) {
-        saveStateToSupabase(nextState, true);
+        gSave(nextState, true);
       }
 
       showToast(`Berhasil mengimpor ${importedCount} data untuk arsip ${monthLabel}!`, 'success');
@@ -1485,12 +1794,12 @@ export default function App() {
     };
 
     setState(nextState);
-    saveAppState(nextState);
+    gLocal(nextState);
 
     if (state.supabaseConfig.u && state.supabaseConfig.k) {
       setIsSyncing(true);
       setSyncStatus('syncing');
-      const ok = await saveStateToSupabase(nextState, true);
+      const ok = await gSave(nextState, true);
       setIsSyncing(false);
       setSyncStatus(ok ? 'synced' : 'error');
       if (ok) {
@@ -1612,7 +1921,43 @@ export default function App() {
         {/* Content Viewport */}
         {/* @container: kolom di dalam halaman menyesuaikan lebar AREA ISI (bukan lebar layar), jadi tetap lega saat menu samping terbuka */}
         <main className={`flex-1 @container p-4 md:p-6 lg:p-8 min-w-0 pb-24 md:pb-6 lg:pb-8`}>
-          {isPeriodBehindCalendar(state) && (
+          {localSaveFailed && (
+            <div className="sticky top-0 z-50 mb-4 p-3.5 rounded-2xl border border-red-400 dark:border-red-800 bg-red-50 dark:bg-red-950/60 text-red-900 dark:text-red-100 text-xs space-y-2 shadow-sm">
+              <p className="font-bold">Data GAGAL tersimpan di HP ini (memori penuh atau penyimpanan diblokir).</p>
+              <p className="leading-relaxed">
+                Jangan menutup atau memuat ulang aplikasi dulu, karena input terbaru bisa hilang. Tekan Ekspor Data untuk menyimpan salinan, lalu kosongkan ruang di HP atau data situs lain di browser.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={handleExportJson} className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold cursor-pointer">Ekspor Data</button>
+                <button type="button" onClick={() => { saveAppState(stateRef.current); }} className="px-3 py-1.5 rounded-xl border border-red-400 dark:border-red-700 font-semibold cursor-pointer">Coba simpan lagi</button>
+              </div>
+            </div>
+          )}
+          {view && (
+            <div className={`sticky top-0 z-40 mb-4 p-3 rounded-2xl border shadow-sm text-xs space-y-2 ${view.editing ? 'border-orange-400 bg-orange-50 text-orange-900 dark:border-orange-700 dark:bg-orange-950/60 dark:text-orange-100' : 'border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-100'}`}>
+              <p className="font-bold">
+                {view.editing ? `Mengedit ${periodLabelOf(view.key)}` : `Mode lihat: ${periodLabelOf(view.key)} (hanya baca)`}
+              </p>
+              <p className="leading-relaxed">
+                {view.editing
+                  ? `Perubahan belum tersimpan sebelum menekan Simpan. Hanya ${periodLabelOf(view.key)} yang ditulis.`
+                  : `Hanya di HP ini. Bulan kerja ${getPeriodInfo(realState).label} dan HP lain tidak berubah.`}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {!view.editing && (
+                  <button type="button" onClick={handleViewEdit} className="px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold cursor-pointer">Edit</button>
+                )}
+                {view.editing && (
+                  <>
+                    <button type="button" onClick={handleSaveView} className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer">Simpan</button>
+                    <button type="button" onClick={handleViewCancelEdit} className="px-3 py-1.5 rounded-xl border border-orange-400 dark:border-orange-700 font-semibold cursor-pointer">Batal</button>
+                  </>
+                )}
+                <button type="button" onClick={handleExitView} className="px-3 py-1.5 rounded-xl border border-neutral-400 dark:border-neutral-600 font-semibold cursor-pointer">Kembali ke bulan berjalan</button>
+              </div>
+            </div>
+          )}
+          {!view && isPeriodBehindCalendar(state) && (
             <div className="mb-4 p-3.5 rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-xs space-y-2" role="alert">
               <p className="font-bold">
                 Bulan kerja masih {getPeriodInfo(state).label}, padahal kalender sudah {periodLabelOf(getCalendarPeriodKey())}.
@@ -1796,6 +2141,8 @@ export default function App() {
                   onClearPjdHjd={handleClearPjdHjd}
                   onManualSync={() => refreshFromCloud(true)}
                   onSwitchPeriod={handleSwitchPeriod}
+                  viewMonthOptions={viewMonthOptions}
+                  onStartViewMonth={handleStartView}
                   onGoToArsip={() => handleSelectMenu('Arsip')}
                   onBackupNow={handleBackupNow}
                   isSyncing={isSyncing}

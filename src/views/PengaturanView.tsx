@@ -46,6 +46,8 @@ interface PengaturanViewProps {
   onClearPjdHjd?: () => void;
   onManualSync?: () => void;
   onSwitchPeriod?: (periodKey: string) => void | Promise<void>;
+  viewMonthOptions?: { key: string; label: string }[];
+  onStartViewMonth?: (periodKey: string) => void;
   onGoToArsip?: () => void;
   onBackupNow?: () => Promise<boolean>;
   isSyncing?: boolean;
@@ -65,6 +67,8 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
   onClearPjdHjd,
   onManualSync,
   onSwitchPeriod,
+  viewMonthOptions,
+  onStartViewMonth,
   onGoToArsip,
   onBackupNow,
   isSyncing = false,
@@ -95,6 +99,7 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
   const activePeriodKey = getPeriodInfo(state).key;
   const periodOptions = listSelectablePeriods(state);
   const [pickedPeriod, setPickedPeriod] = useState(activePeriodKey);
+  const [viewPicked, setViewPicked] = useState('');
   const [isInspecting, setIsInspecting] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [cloudResult, setCloudResult] = useState<CloudInspectResult | null>(null);
@@ -427,6 +432,40 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
       )}
 
 
+
+      {/* 0b. Lihat bulan sebelumnya (hanya di HP ini, tidak memindahkan bulan kerja) */}
+      {onStartViewMonth && state.role === 'a' && (
+        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-4 space-y-3">
+          <h2 className="text-base font-bold text-neutral-900 dark:text-neutral-100">Lihat Bulan Sebelumnya</h2>
+          <p className="text-xs text-neutral-600 dark:text-neutral-400 leading-relaxed">
+            Hanya di HP ini. Bulan kerja dan HP lain tidak berubah, dan tidak perlu menyimpan arsip dulu. Data bisa diubah lewat tombol Edit, lalu Simpan untuk menulis ke bulan yang dilihat saja.
+          </p>
+          {viewMonthOptions && viewMonthOptions.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={viewPicked}
+                onChange={e => setViewPicked(e.target.value)}
+                className="px-3 py-2 rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-sm"
+              >
+                <option value="">Pilih bulan...</option>
+                {viewMonthOptions.map(o => (
+                  <option key={o.key} value={o.key}>{o.label}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={!viewPicked}
+                onClick={() => { if (viewPicked) onStartViewMonth(viewPicked); }}
+                className="px-3 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-sm font-bold cursor-pointer"
+              >
+                Lihat bulan ini
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-amber-700 dark:text-amber-400">Belum ada bulan lain yang datanya tersimpan.</p>
+          )}
+        </div>
+      )}
 
       {/* 2. Security PIN Settings */}
       <div className="p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm space-y-4">
