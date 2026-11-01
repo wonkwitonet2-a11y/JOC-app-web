@@ -6,9 +6,29 @@ import { defineConfig } from 'vite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// ID unik tiap kali build/publish. Dipakai agar aplikasi yang sedang terbuka (termasuk di
+// WebView/APK) tahu ada versi baru dan memperbarui diri otomatis.
+const BUILD_ID = String(Date.now());
+
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    define: {
+      __APP_BUILD_ID__: JSON.stringify(BUILD_ID),
+    },
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'emit-version-json',
+        generateBundle() {
+          this.emitFile({
+            type: 'asset',
+            fileName: 'version.json',
+            source: JSON.stringify({ id: BUILD_ID }),
+          });
+        },
+      },
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

@@ -1,3 +1,4 @@
+import { fetchLatestBuildId, hasNewVersion, reloadToLatest } from './services/autoUpdate';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AppState, TkuItem, DailySalesRecord, VariantCode, ArchiveRecord, ArchiveRow, SupabaseConfig, SisaStockRecord, WeeklyNote, MonthSnapshot } from './types';
 import { withNoteMovedByDate, withReplyByKey } from './services/weeklyNotes';
@@ -303,6 +304,34 @@ export default function App() {
       }
     } catch (_) {}
     return () => window.removeEventListener('message', onKred);
+  }, []);
+
+  // Auto-update: kalau aplikasi sudah dipublish ulang, halaman ini otomatis memuat versi terbaru
+  // (cek saat dibuka, saat kembali ke aplikasi, dan tiap 60 detik). Hanya reload saat aman:
+  // tidak ada data yang belum terkirim dan tidak sedang mengetik.
+  useEffect(() => {
+    let stop = false;
+    const cek = async () => {
+      if (stop || document.visibilityState === 'hidden') return;
+      const latest = await fetchLatestBuildId();
+      if (stop || !hasNewVersion(latest)) return;
+      const el = document.activeElement as HTMLElement | null;
+      const sedangMengetik = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+      if (sedangMengetik || hasPendingPushRef.current || hasUnsyncedChanges(stateRef.current)) return;
+      reloadToLatest(latest!);
+    };
+    cek();
+    const timer = window.setInterval(cek, 60_000);
+    document.addEventListener('visibilitychange', cek);
+    window.addEventListener('focus', cek);
+    window.addEventListener('online', cek);
+    return () => {
+      stop = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', cek);
+      window.removeEventListener('focus', cek);
+      window.removeEventListener('online', cek);
+    };
   }, []);
 
   // Fungsi sinkronisasi data menyeluruh (lokal & cloud Supabase jika terhubung)
