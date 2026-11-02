@@ -111,6 +111,7 @@ export interface ArchiveRecord {
   // Salinan catatan Kendala & Solusi TKU (n) dan tanggapan admin (r) bulan ini, diambil saat "Simpan Bulan Ini".
   // Arsip lama tanpa field ini menampilkan catatan langsung dari data aktif.
   catatan?: { n: Record<string, WeeklyNote>; r: Record<string, WeeklyReply> };
+  u?: number; // epoch ms terakhir diubah (agar koreksi arsip tidak tertimpa saat sinkronisasi)
 }
 
 // ===== Sisa Stock =====

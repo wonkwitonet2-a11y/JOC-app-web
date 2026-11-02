@@ -1686,7 +1686,8 @@ export function buildArchiveFromState(state: AppState): ArchiveRecord {
     d: curP.daysInMonth,
     terkunci: true,
     rows,
-    catatan: { n: catatanN, r: catatanR }
+    catatan: { n: catatanN, r: catatanR },
+    u: Date.now()
   };
 }
 

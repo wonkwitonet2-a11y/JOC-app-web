@@ -1591,44 +1591,64 @@ export default function App() {
     const arc = state.archives[archiveKey];
     if (!arc) return;
     const trunc2 = (n: number): number => Math.floor(n * 100 + 1e-9) / 100;
+    const updatedArchive: ArchiveRecord = {
+      ...arc,
+      u: Date.now(),
+      rows: arc.rows.map((r, i) => {
+        const pt = patch[i];
+        if (!pt) return r;
+        // % vs tahun lalu = rata harian ÷ rata harian tahun lalu (rumus sama dengan saat arsip dibuat; tanpa tahun lalu = 1)
+        const vsLyPct = pt.tahunLalu > 0 ? Math.floor(((r.rataHarian || 0) / pt.tahunLalu) * 1000 * 100 + 1e-9) / 100 / 1000 : 1;
+        const next = { ...r, absenYl: pt.absenYl, frekuensiAbsen: pt.frekuensiAbsen, tahunLalu: pt.tahunLalu, vsLyPct };
+        // Akm BB, Akm JWP, Jml Area, Jml YL, YL<250, YL<300 (opsional) + turunannya dihitung ulang dengan rumus saat arsip dibuat
+        const sold = r.total || 0;
+        if (pt.akmBb !== undefined) {
+          next.akmBb = pt.akmBb;
+          next.akmBbPct = (sold + pt.akmBb) > 0 ? trunc2((pt.akmBb / (sold + pt.akmBb)) * 1000) / 1000 : 0;
+        }
+        if (pt.akmJwp !== undefined) {
+          next.akmJwp = pt.akmJwp;
+          next.sYl = pt.akmJwp > 0 ? Math.floor(sold / pt.akmJwp) : 0;
+        }
+        if (pt.jumlahArea !== undefined) next.jumlahArea = pt.jumlahArea;
+        if (pt.jumlahYl !== undefined) next.jumlahYl = pt.jumlahYl;
+        if (pt.jumlahArea !== undefined || pt.jumlahYl !== undefined) {
+          const area = next.jumlahArea || 0;
+          next.coverageArea = area > 0 ? trunc2(((next.jumlahYl || 0) / area) * 1000) / 1000 : 1;
+        }
+        if (pt.l250 !== undefined) next.l250 = pt.l250;
+        if (pt.l300 !== undefined) next.l300 = pt.l300;
+        return next;
+      })
+    };
     const nextState: AppState = {
       ...state,
       archives: {
         ...state.archives,
-        [archiveKey]: {
-          ...arc,
-          rows: arc.rows.map((r, i) => {
-            const pt = patch[i];
-            if (!pt) return r;
-            // % vs tahun lalu = rata harian ÷ rata harian tahun lalu (rumus sama dengan saat arsip dibuat; tanpa tahun lalu = 1)
-            const vsLyPct = pt.tahunLalu > 0 ? Math.floor(((r.rataHarian || 0) / pt.tahunLalu) * 1000 * 100 + 1e-9) / 100 / 1000 : 1;
-            const next = { ...r, absenYl: pt.absenYl, frekuensiAbsen: pt.frekuensiAbsen, tahunLalu: pt.tahunLalu, vsLyPct };
-            // Akm BB, Akm JWP, Jml Area, Jml YL, YL<250, YL<300 (opsional) + turunannya dihitung ulang dengan rumus saat arsip dibuat
-            const sold = r.total || 0;
-            if (pt.akmBb !== undefined) {
-              next.akmBb = pt.akmBb;
-              next.akmBbPct = (sold + pt.akmBb) > 0 ? trunc2((pt.akmBb / (sold + pt.akmBb)) * 1000) / 1000 : 0;
-            }
-            if (pt.akmJwp !== undefined) {
-              next.akmJwp = pt.akmJwp;
-              next.sYl = pt.akmJwp > 0 ? Math.floor(sold / pt.akmJwp) : 0;
-            }
-            if (pt.jumlahArea !== undefined) next.jumlahArea = pt.jumlahArea;
-            if (pt.jumlahYl !== undefined) next.jumlahYl = pt.jumlahYl;
-            if (pt.jumlahArea !== undefined || pt.jumlahYl !== undefined) {
-              const area = next.jumlahArea || 0;
-              next.coverageArea = area > 0 ? trunc2(((next.jumlahYl || 0) / area) * 1000) / 1000 : 1;
-            }
-            if (pt.l250 !== undefined) next.l250 = pt.l250;
-            if (pt.l300 !== undefined) next.l300 = pt.l300;
-            return next;
-          })
-        }
+        [archiveKey]: updatedArchive
       }
     };
+    if (!viewRef.current) stateRef.current = nextState;
+    gLocal(nextState);
+    try {
+      localStorage.setItem(`yk_archive_${archiveKey}`, JSON.stringify(updatedArchive));
+    } catch (_) {}
     setState(nextState);
+
     if (state.supabaseConfig.u && state.supabaseConfig.k) {
-      gSave(nextState, true);
+      setIsSyncing(true);
+      setSyncStatus('syncing');
+      const ok = await gSave(nextState, true);
+      if (ok) await gBackup(nextState, archiveKey);
+      setIsSyncing(false);
+      setSyncStatus(ok ? 'synced' : 'error');
+      if (ok) {
+        showToast(`Data operasional & tahun lalu arsip ${arc.namaBulan} berhasil disimpan ke Supabase!`, 'success');
+      } else {
+        showToast(`Data operasional ${arc.namaBulan} tersimpan di perangkat ini (gagal kirim ke Supabase).`, 'info');
+      }
+    } else {
+      showToast(`Data operasional ${arc.namaBulan} tersimpan di perangkat ini.`, 'success');
     }
   };
 
@@ -1642,59 +1662,90 @@ export default function App() {
     if (!arc || INITIAL_ARCHIVES[archiveKey]) return;
     const d = arc.d || 30;
     const trunc2 = (n: number): number => Math.floor(n * 100 + 1e-9) / 100;
+    const updatedArchive: ArchiveRecord = {
+      ...arc,
+      u: Date.now(),
+      rows: arc.rows.map((r, i) => {
+        const pv = patch[i];
+        if (!pv) return r;
+        const varian = pv.map(x => Math.max(0, Math.round(Number(x) || 0))) as [number, number, number, number];
+        const sold = varian.reduce((x, y) => x + y, 0);
+        const rataHarian = Math.floor(sold / d);
+        const rataVarian = varian.map(x => Math.floor(x / d)) as [number, number, number, number];
+        const targetHarian = r.targetHarian || 0;
+        const bulanLalu = r.bulanLalu || 0;
+        const tahunLalu = r.tahunLalu || 0;
+        const akmBb = r.akmBb || 0;
+        const akmJwp = r.akmJwp || 0;
+        return {
+          ...r,
+          varian,
+          total: sold,
+          rataHarian,
+          rataVarian,
+          vsTargetPct: targetHarian > 0 ? trunc2((rataHarian / targetHarian) * 1000) / 1000 : 1,
+          vsLmPct: bulanLalu > 0 ? trunc2((rataHarian / bulanLalu) * 1000) / 1000 : 1,
+          vsLyPct: tahunLalu > 0 ? trunc2((rataHarian / tahunLalu) * 1000) / 1000 : 1,
+          akmBbPct: (sold + akmBb) > 0 ? trunc2((akmBb / (sold + akmBb)) * 1000) / 1000 : 0,
+          sYl: akmJwp > 0 ? Math.floor(sold / akmJwp) : 0
+        };
+      })
+    };
     const nextState: AppState = {
       ...state,
       archives: {
         ...state.archives,
-        [archiveKey]: {
-          ...arc,
-          rows: arc.rows.map((r, i) => {
-            const pv = patch[i];
-            if (!pv) return r;
-            const varian = pv.map(x => Math.max(0, Math.round(Number(x) || 0))) as [number, number, number, number];
-            const sold = varian.reduce((x, y) => x + y, 0);
-            const rataHarian = Math.floor(sold / d);
-            const rataVarian = varian.map(x => Math.floor(x / d)) as [number, number, number, number];
-            const targetHarian = r.targetHarian || 0;
-            const bulanLalu = r.bulanLalu || 0;
-            const tahunLalu = r.tahunLalu || 0;
-            const akmBb = r.akmBb || 0;
-            const akmJwp = r.akmJwp || 0;
-            return {
-              ...r,
-              varian,
-              total: sold,
-              rataHarian,
-              rataVarian,
-              vsTargetPct: targetHarian > 0 ? trunc2((rataHarian / targetHarian) * 1000) / 1000 : 1,
-              vsLmPct: bulanLalu > 0 ? trunc2((rataHarian / bulanLalu) * 1000) / 1000 : 1,
-              vsLyPct: tahunLalu > 0 ? trunc2((rataHarian / tahunLalu) * 1000) / 1000 : 1,
-              akmBbPct: (sold + akmBb) > 0 ? trunc2((akmBb / (sold + akmBb)) * 1000) / 1000 : 0,
-              sYl: akmJwp > 0 ? Math.floor(sold / akmJwp) : 0
-            };
-          })
-        }
+        [archiveKey]: updatedArchive
       }
     };
+    if (!viewRef.current) stateRef.current = nextState;
+    gLocal(nextState);
+    try {
+      localStorage.setItem(`yk_archive_${archiveKey}`, JSON.stringify(updatedArchive));
+    } catch (_) {}
     setState(nextState);
+
     if (state.supabaseConfig.u && state.supabaseConfig.k) {
-      gSave(nextState, true);
+      setIsSyncing(true);
+      setSyncStatus('syncing');
+      const ok = await gSave(nextState, true);
+      if (ok) await gBackup(nextState, archiveKey);
+      setIsSyncing(false);
+      setSyncStatus(ok ? 'synced' : 'error');
+      if (ok) {
+        showToast(`Penjualan varian arsip ${arc.namaBulan} berhasil diperbarui di Supabase!`, 'success');
+      } else {
+        showToast(`Penjualan varian ${arc.namaBulan} tersimpan di perangkat ini.`, 'info');
+      }
+    } else {
+      showToast(`Penjualan varian ${arc.namaBulan} tersimpan di perangkat ini.`, 'success');
     }
   };
 
   const handleUnlockArchive = async (archiveKey: string) => {
     const arc = state.archives[archiveKey];
     if (!arc) return;
+    const updatedArchive: ArchiveRecord = {
+      ...arc,
+      terkunci: !arc.terkunci,
+      u: Date.now()
+    };
     const nextState: AppState = {
       ...state,
       archives: {
         ...state.archives,
-        [archiveKey]: { ...arc, terkunci: !arc.terkunci }
+        [archiveKey]: updatedArchive
       }
     };
+    if (!viewRef.current) stateRef.current = nextState;
+    gLocal(nextState);
+    try {
+      localStorage.setItem(`yk_archive_${archiveKey}`, JSON.stringify(updatedArchive));
+    } catch (_) {}
     setState(nextState);
     if (state.supabaseConfig.u && state.supabaseConfig.k) {
-      gSave(nextState, true);
+      await gSave(nextState, true);
+      await gBackup(nextState, archiveKey);
     }
   };
 

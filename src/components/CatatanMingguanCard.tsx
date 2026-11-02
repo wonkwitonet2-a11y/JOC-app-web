@@ -29,7 +29,7 @@ const waktu = (iso: string): string => {
   return d.toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 };
 const num = (n: number | null | undefined): string => (n === null || n === undefined ? '—' : formatNumber(n));
-const statusText = (st: SolusiStatus): string => STATUS_SOLUSI.find(s => s.id === st)?.text || 'Belum';
+const statusText = (st: SolusiStatus): string => STATUS_SOLUSI.find(s => s.id === st)?.text || 'Proses';
 
 const cardCls = 'rounded-2xl border shadow-xs bg-white dark:bg-neutral-900';
 const areaCls = 'w-full text-sm rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 p-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40';
@@ -79,7 +79,7 @@ export const CatatanMingguanCard: React.FC<Props> = ({ state, tkuIdx, onSaveNote
 
   // Tombol "Tambah Catatan": selalu membuat catatan BARU (kunci kosong berikutnya), tidak menimpa yang lama.
   const addNote = () => {
-    onSaveNote(nextNoteKey(state, info.period, tkuId, week), { ...draft, st: 'belum' });
+    onSaveNote(nextNoteKey(state, info.period, tkuId, week), { ...draft, st: 'proses' });
     showToast('Catatan ditambahkan ke Riwayat', 'success');
     setDraft(emptyNote());
   };

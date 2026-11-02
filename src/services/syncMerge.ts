@@ -358,17 +358,26 @@ function runMerge(base: Syncable | null, local: Syncable, remote: Syncable, nb: 
         if (!lArc && !rArc) return;
         if (!lArc) { mergedArchives[k] = rArc; return; }
         if (!rArc) { mergedArchives[k] = lArc; return; }
-        if (deepEq(lArc, rArc)) { mergedArchives[k] = lArc; return; }
-        // Keduanya ada: jika salah satu memiliki catatan sedangkan yang lain tidak, ambil yang punya catatan
-        const lHasNotes = Boolean(lArc.catatan?.n && Object.keys(lArc.catatan.n).length > 0);
-        const rHasNotes = Boolean(rArc.catatan?.n && Object.keys(rArc.catatan.n).length > 0);
-        if (lHasNotes && !rHasNotes) { mergedArchives[k] = lArc; return; }
-        if (rHasNotes && !lHasNotes) { mergedArchives[k] = rArc; return; }
-        // Utamakan arsip yang terkunci
-        if (lArc.terkunci && !rArc.terkunci) { mergedArchives[k] = lArc; return; }
-        if (rArc.terkunci && !lArc.terkunci) { mergedArchives[k] = rArc; return; }
-        // Default: lokal diutamakan
-        mergedArchives[k] = lArc;
+        // Keduanya ada: bandingkan timestamp u (epoch ms) terakhir diedit
+        const lTime = Number(lArc.u) || 0;
+        const rTime = Number(rArc.u) || 0;
+
+        const winner = lTime > rTime ? lArc : (rTime > lTime ? rArc : lArc);
+        const other = winner === lArc ? rArc : lArc;
+
+        // Gabungkan catatan agar tidak hilang jika salah satu sisi punya catatan lebih lengkap
+        let mergedNotes = winner.catatan;
+        if (other.catatan?.n && Object.keys(other.catatan.n).length > 0) {
+          mergedNotes = {
+            n: { ...(other.catatan.n || {}), ...(winner.catatan?.n || {}) },
+            r: { ...(other.catatan.r || {}), ...(winner.catatan?.r || {}) },
+          };
+        }
+
+        mergedArchives[k] = {
+          ...winner,
+          ...(mergedNotes ? { catatan: mergedNotes } : {})
+        };
       });
       out.archives = mergedArchives;
       return;

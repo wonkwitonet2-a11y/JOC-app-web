@@ -19,26 +19,29 @@ const th = 'px-2.5 py-2 text-left text-[11px] font-bold uppercase tracking-wider
 const td = 'px-2.5 py-2 align-top text-xs sm:text-sm text-neutral-800 dark:text-neutral-200 whitespace-pre-wrap break-words';
 const dash = <span className="text-neutral-400">—</span>;
 
-const StatusPills: React.FC<{ st: SolusiStatus; onChange?: (st: SolusiStatus) => void }> = ({ st, onChange }) => (
-  <div className="flex flex-wrap gap-1">
-    {STATUS_SOLUSI.map(s => {
-      const on = st === s.id;
-      const tone = s.id === 'selesai' ? 'bg-emerald-600 border-emerald-600' : s.id === 'proses' ? 'bg-amber-500 border-amber-500' : 'bg-neutral-500 border-neutral-500';
-      return (
-        <button
-          key={s.id}
-          type="button"
-          disabled={!onChange}
-          onClick={() => !on && onChange?.(s.id)}
-          aria-pressed={on}
-          className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${onChange ? 'cursor-pointer' : 'cursor-default'} ${on ? `${tone} text-white` : 'border-neutral-200 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400'}`}
-        >
-          {on && <Check className="w-3 h-3" strokeWidth={3} />}{s.text}
-        </button>
-      );
-    })}
-  </div>
-);
+const StatusPills: React.FC<{ st: SolusiStatus; onChange?: (st: SolusiStatus) => void }> = ({ st, onChange }) => {
+  const effectiveSt: SolusiStatus = st === 'selesai' ? 'selesai' : 'proses';
+  return (
+    <div className="flex flex-wrap gap-1">
+      {STATUS_SOLUSI.map(s => {
+        const on = effectiveSt === s.id;
+        const tone = s.id === 'selesai' ? 'bg-emerald-600 border-emerald-600' : 'bg-amber-500 border-amber-500';
+        return (
+          <button
+            key={s.id}
+            type="button"
+            disabled={!onChange}
+            onClick={() => !on && onChange?.(s.id)}
+            aria-pressed={on}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${onChange ? 'cursor-pointer' : 'cursor-default'} ${on ? `${tone} text-white` : 'border-neutral-200 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400'}`}
+          >
+            {on && <Check className="w-3 h-3" strokeWidth={3} />}{s.text}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
 
 const ReplyView: React.FC<{ text: string }> = ({ text }) =>
   text.trim() ? (

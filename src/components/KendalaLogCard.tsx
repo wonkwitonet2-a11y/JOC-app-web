@@ -66,11 +66,11 @@ export const KendalaLogCard: React.FC<Props> = ({ state, tkuIdx, onSaveNote, sho
     a: dr.a.trim(), s: dr.s.trim(), l, st, u: '',
     d: dr.d, tp: dr.tp.trim(), ar: dr.ar.trim().toUpperCase(), h: dr.h.trim()
   });
-  const filled = (dr: Draft) => isNoteFilled(toNote(dr, 'belum')) && !!dr.d;
+  const filled = (dr: Draft) => isNoteFilled(toNote(dr, 'proses')) && !!dr.d;
 
   const save = () => {
     if (!filled(draft)) return;
-    onSaveNote(keyForDate(state, tkuId, draft.d), toNote(draft, 'belum'));
+    onSaveNote(keyForDate(state, tkuId, draft.d), toNote(draft, 'proses'));
     showToast('Kendala ditambahkan ke Riwayat', 'success');
     setDraft(blank());
   };
@@ -83,7 +83,7 @@ export const KendalaLogCard: React.FC<Props> = ({ state, tkuIdx, onSaveNote, sho
   const saveEdit = () => {
     if (!editKey) return;
     const cur = all.find(x => x.k === editKey);
-    onSaveNote(editKey, toNote(editDraft, cur?.n.st || 'belum', cur?.n.l || []));
+    onSaveNote(editKey, toNote(editDraft, cur?.n.st === 'selesai' ? 'selesai' : 'proses', cur?.n.l || []));
     showToast('Perubahan tersimpan', 'success');
     setEditKey(null);
   };

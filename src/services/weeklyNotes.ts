@@ -16,7 +16,6 @@ export const LABEL_PENYEBAB = [
 ] as const;
 
 export const STATUS_SOLUSI: { id: SolusiStatus; text: string }[] = [
-  { id: 'belum', text: 'Belum' },
   { id: 'proses', text: 'Proses' },
   { id: 'selesai', text: 'Selesai' }
 ];
@@ -27,7 +26,7 @@ export const SYL_BATAS = 250;
 export const noteKey = (periode: string, tkuId: number, week: number): string =>
   `${periode}:${tkuId}:${week}`;
 
-export const emptyNote = (): WeeklyNote => ({ a: '', s: '', l: [], st: 'belum', u: '', d: '', tp: '', ar: '', h: '' });
+export const emptyNote = (): WeeklyNote => ({ a: '', s: '', l: [], st: 'proses', u: '', d: '', tp: '', ar: '', h: '' });
 
 export const isNoteFilled = (n?: WeeklyNote | null): boolean =>
   !!n && (

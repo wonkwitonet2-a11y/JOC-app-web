@@ -25,7 +25,7 @@ import {
 import { AppState, ArchiveRecord, ArchiveRow, VARIANTS } from '../types';
 import { ArsipLineChart } from '../components/ArsipYearCharts';
 import { ArsipCatatanMingguan } from '../components/ArsipCatatanMingguan';
-import { formatNumber, formatDecimal, round2, formatPercent, getPeriodInfo, getBbStatusClass } from '../services/storage';
+import { formatNumber, formatDecimal, round2, formatPercent, getPeriodInfo, getBbStatusClass, formatDiff } from '../services/storage';
 import { INITIAL_ARCHIVES } from '../data/initialData';
 
 // 'Jember' (arsip lama) dan 'JEMBER 1' (data aktif) adalah unit yang sama
@@ -402,6 +402,80 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
     return { rata, target, ly, vsTgt: target > 0 ? rata / target : null, vsLy: ly > 0 ? rata / ly : null };
   }, [branchMonths]);
 
+  // Data Tahunan Akumulasi & Rata-rata (Januari s/d Bulan Terakhir yang Terarsip)
+  const ytdStats = useMemo(() => {
+    const archives = yearKeysAsc.map(k => state.archives[k]).filter((a): a is ArchiveRecord => Boolean(a && a.rows));
+    if (archives.length === 0) return null;
+
+    let totalDays = 0;
+    let totalSold = 0;
+    let totalTarget = 0;
+    let totalLy = 0;
+    let totalBb = 0;
+    let totalJwp = 0;
+
+    archives.forEach(arc => {
+      const d = arc.d || 30;
+      totalDays += d;
+      const rows = arc.rows || [];
+      rows.forEach(r => {
+        const sold = r.total || 0;
+        const tgtDay = r.targetHarian || 0;
+        const lyDay = r.tahunLalu || 0;
+        const bb = r.akmBb || 0;
+        const jwp = r.akmJwp || 0;
+
+        totalSold += sold;
+        totalTarget += tgtDay * d;
+        totalLy += lyDay * d;
+        totalBb += bb;
+        totalJwp += jwp;
+      });
+    });
+
+    const avgSoldDaily = totalDays > 0 ? totalSold / totalDays : 0;
+    const avgTargetDaily = totalDays > 0 ? totalTarget / totalDays : 0;
+    const avgLyDaily = totalDays > 0 ? totalLy / totalDays : 0;
+
+    const diffVsTarget = totalSold - totalTarget;
+    const diffVsTargetDaily = avgSoldDaily - avgTargetDaily;
+    const pctVsTarget = totalTarget > 0 ? totalSold / totalTarget : null;
+
+    const diffVsLy = totalSold - totalLy;
+    const diffVsLyDaily = avgSoldDaily - avgLyDaily;
+    const pctVsLy = totalLy > 0 ? totalSold / totalLy : null;
+
+    const totalCirculation = totalSold + totalBb;
+    const bbPct = totalCirculation > 0 ? totalBb / totalCirculation : 0;
+    const syl = totalJwp > 0 ? Math.floor(totalSold / totalJwp) : null;
+
+    const firstMonthLabel = (archives[0].namaBulan || yearKeysAsc[0]).replace(/\s*\d{4}$/, '');
+    const lastMonthLabel = archives[archives.length - 1].namaBulan || yearKeysAsc[yearKeysAsc.length - 1];
+
+    return {
+      totalMonths: archives.length,
+      totalDays,
+      totalSold,
+      avgSoldDaily,
+      totalTarget,
+      avgTargetDaily,
+      diffVsTarget,
+      diffVsTargetDaily,
+      pctVsTarget,
+      totalLy,
+      avgLyDaily,
+      diffVsLy,
+      diffVsLyDaily,
+      pctVsLy,
+      totalBb,
+      bbPct,
+      totalJwp,
+      syl,
+      firstMonthLabel,
+      lastMonthLabel
+    };
+  }, [yearKeysAsc, state.archives]);
+
   // Baris "Total Cabang" pada Riwayat Tahunan: rata-rata & nilai terakhir
   const branchHistVals = yearKeysAsc
     .map(k => state.archives[k])
@@ -748,62 +822,156 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
         )}
       </div>
 
-      {/* Summary KPI Cards across Archives */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 items-stretch">
-        <div className="p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col min-w-0 h-full">
-          <div className="flex items-start justify-between gap-2 text-neutral-500 text-xs mb-1">
-            <span>Periode Arsip</span>
-            <Calendar className="w-4 h-4 text-blue-500 shrink-0" />
+      {/* KARTU ATAS: Rekapitulasi Kinerja Tahunan YTD (Januari s/d Bulan Berjalan) */}
+      {ytdStats ? (
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 px-1">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-brand-600" />
+              <h2 className="text-sm font-bold text-neutral-900 dark:text-neutral-100 uppercase tracking-wider">
+                Kinerja Tahunan ({selectedYear}) — s/d Bulan Terakhir Terarsip
+              </h2>
+            </div>
+            <div className="text-xs text-neutral-500 font-medium">
+              {ytdStats.firstMonthLabel} – {ytdStats.lastMonthLabel} ({ytdStats.totalMonths} bulan · {ytdStats.totalDays} hari kerja)
+            </div>
           </div>
-          <div className="text-lg sm:text-xl lg:text-2xl break-words leading-tight font-bold text-neutral-900 dark:text-neutral-100">
-            {totalMonths} Bulan <span className="text-xs font-semibold text-neutral-500">({selectedYear})</span>
-          </div>
-          <div className="text-xs text-neutral-500 mt-auto pt-0.5 break-words">
-            {yearKeysAsc.length > 0
-              ? `${(state.archives[yearKeysAsc[0]]?.namaBulan || yearKeysAsc[0]).replace(/\s*\d{4}$/, '')} – ${state.archives[yearKeysAsc[yearKeysAsc.length - 1]]?.namaBulan || yearKeysAsc[yearKeysAsc.length - 1]}`
-              : '—'}
-          </div>
-        </div>
 
-        <div className="p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col min-w-0 h-full">
-          <div className="flex items-start justify-between gap-2 text-neutral-500 text-xs mb-1">
-            <span>Total Botol Terarsip</span>
-            <Layers className="w-4 h-4 text-brand-500 shrink-0" />
-          </div>
-          <div className="text-lg sm:text-xl lg:text-2xl break-words leading-tight font-bold text-neutral-900 dark:text-neutral-100 font-mono">
-            {formatNumber(grandTotalBottles)}
-          </div>
-          <div className="text-xs text-neutral-500 mt-auto pt-0.5 break-words">
-            Botol seluruh cabang
-          </div>
-        </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 items-stretch">
+            {/* Card 1: Realisasi Tahunan (Akm & Rata) */}
+            <div className="p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col justify-between min-w-0">
+              <div>
+                <div className="flex items-center justify-between gap-2 text-neutral-500 text-xs mb-1">
+                  <span className="font-semibold">Realisasi Tahunan</span>
+                  <Layers className="w-4 h-4 text-brand-500 shrink-0" />
+                </div>
+                <div className="text-lg sm:text-xl xl:text-2xl font-extrabold text-neutral-900 dark:text-neutral-100 font-mono leading-tight">
+                  {formatNumber(ytdStats.totalSold)} <span className="text-xs font-semibold text-neutral-500">btl</span>
+                </div>
+                <div className="text-xs font-bold text-brand-700 dark:text-brand-300 font-mono mt-1">
+                  Rata: {formatDecimal(ytdStats.avgSoldDaily)} btl/hr
+                </div>
+              </div>
+              <div className="text-[11px] text-neutral-500 mt-2.5 pt-2 border-t border-neutral-100 dark:border-neutral-800">
+                Akm total penjualan cabang
+              </div>
+            </div>
 
-        <div className="p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col min-w-0 h-full">
-          <div className="flex items-start justify-between gap-2 text-neutral-500 text-xs mb-1">
-            <span>Rata-rata / Hari</span>
-            <TrendingUp className="w-4 h-4 text-emerald-500 shrink-0" />
-          </div>
-          <div className="text-lg sm:text-xl lg:text-2xl break-words leading-tight font-bold text-neutral-900 dark:text-neutral-100 font-mono">
-            {formatDecimal(avgBottlesPerDay)}
-          </div>
-          <div className="text-xs text-neutral-500 mt-auto pt-0.5 break-words">
-            {formatNumber(grandTotalBottles)} btl ÷ {totalDaysArchived} hari
-          </div>
-        </div>
+            {/* Card 2: vs Target Tahunan */}
+            <div className="p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col justify-between min-w-0">
+              <div>
+                <div className="flex items-center justify-between gap-2 text-neutral-500 text-xs mb-1">
+                  <span className="font-semibold">vs Target Tahunan</span>
+                  <Target className="w-4 h-4 text-blue-500 shrink-0" />
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <div className={`text-lg sm:text-xl xl:text-2xl font-extrabold font-mono leading-tight ${
+                    ytdStats.pctVsTarget !== null && ytdStats.pctVsTarget >= 1
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-amber-600 dark:text-amber-400'
+                  }`}>
+                    {ytdStats.pctVsTarget !== null ? formatPercent(ytdStats.pctVsTarget) : '—'}
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300">
+                    Capaian
+                  </span>
+                </div>
+                <div className="text-xs font-mono text-neutral-700 dark:text-neutral-300 mt-1">
+                  Tgt: {formatNumber(ytdStats.totalTarget)} btl <span className="text-neutral-400">({formatDecimal(ytdStats.avgTargetDaily)}/hr)</span>
+                </div>
+              </div>
+              <div className={`text-[11px] font-semibold mt-2.5 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between ${
+                ytdStats.diffVsTarget >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+              }`}>
+                <span>Selisih:</span>
+                <span className="font-mono font-bold">{formatDiff(ytdStats.diffVsTarget)} btl ({formatDiff(ytdStats.diffVsTargetDaily)}/hr)</span>
+              </div>
+            </div>
 
-        <div className="p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col min-w-0 h-full">
-          <div className="flex items-start justify-between gap-2 text-neutral-500 text-xs mb-1">
-            <span>Rata-rata Bulan Tertinggi</span>
-            <Award className="w-4 h-4 text-amber-500 shrink-0" />
-          </div>
-          <div className="text-sm font-bold text-neutral-900 dark:text-neutral-100 truncate">
-            {bestMonth ? bestMonth.namaBulan : '—'}
-          </div>
-          <div className="text-xs text-neutral-500 mt-0.5 font-mono">
-            {bestMonth ? `${formatDecimal(bestMonth.rata)} btl/hr` : '—'}
+            {/* Card 3: vs Tahun Lalu (LY) Tahunan */}
+            <div className="p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col justify-between min-w-0">
+              <div>
+                <div className="flex items-center justify-between gap-2 text-neutral-500 text-xs mb-1">
+                  <span className="font-semibold">vs Tahun Lalu (LY)</span>
+                  <RotateCcw className="w-4 h-4 text-purple-500 shrink-0" />
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <div className={`text-lg sm:text-xl xl:text-2xl font-extrabold font-mono leading-tight ${
+                    ytdStats.pctVsLy !== null && ytdStats.pctVsLy >= 1
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-amber-600 dark:text-amber-400'
+                  }`}>
+                    {ytdStats.pctVsLy !== null ? formatPercent(ytdStats.pctVsLy) : '—'}
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300">
+                    vs LY
+                  </span>
+                </div>
+                <div className="text-xs font-mono text-neutral-700 dark:text-neutral-300 mt-1">
+                  LY: {formatNumber(ytdStats.totalLy)} btl <span className="text-neutral-400">({formatDecimal(ytdStats.avgLyDaily)}/hr)</span>
+                </div>
+              </div>
+              <div className={`text-[11px] font-semibold mt-2.5 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between ${
+                ytdStats.diffVsLy >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+              }`}>
+                <span>Pertumbuhan:</span>
+                <span className="font-mono font-bold">{formatDiff(ytdStats.diffVsLy)} btl ({formatDiff(ytdStats.diffVsLyDaily)}/hr)</span>
+              </div>
+            </div>
+
+            {/* Card 4: Akm BB & % BB Tahunan */}
+            <div className="p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col justify-between min-w-0">
+              <div>
+                <div className="flex items-center justify-between gap-2 text-neutral-500 text-xs mb-1">
+                  <span className="font-semibold">Akm BB &amp; % BB Tahunan</span>
+                  <Award className="w-4 h-4 text-amber-500 shrink-0" />
+                </div>
+                <div className={`text-lg sm:text-xl xl:text-2xl font-extrabold font-mono leading-tight ${getBbStatusClass(ytdStats.bbPct)}`}>
+                  {formatPercent(ytdStats.bbPct)}
+                </div>
+                <div className="text-xs font-bold text-neutral-800 dark:text-neutral-200 font-mono mt-1">
+                  Akm BB: {formatNumber(ytdStats.totalBb)} btl
+                </div>
+              </div>
+              <div className="text-[11px] text-neutral-500 mt-2.5 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between">
+                <span>Status:</span>
+                <span className="font-semibold">{ytdStats.bbPct <= 0.005 ? 'Sangat Baik (≤0,5%)' : ytdStats.bbPct <= 0.008 ? 'Wajar (≤0,8%)' : 'Perlu Perhatian'}</span>
+              </div>
+            </div>
+
+            {/* Card 5: s/YL Tahunan */}
+            <div className="p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col justify-between min-w-0">
+              <div>
+                <div className="flex items-center justify-between gap-2 text-neutral-500 text-xs mb-1">
+                  <span className="font-semibold">s/YL Tahunan</span>
+                  <Users className="w-4 h-4 text-emerald-500 shrink-0" />
+                </div>
+                <div className="text-lg sm:text-xl xl:text-2xl font-extrabold text-neutral-900 dark:text-neutral-100 font-mono leading-tight">
+                  {ytdStats.syl !== null ? formatNumber(ytdStats.syl) : '—'} <span className="text-xs font-semibold text-neutral-500">btl/YL</span>
+                </div>
+                <div className="text-xs font-mono text-neutral-700 dark:text-neutral-300 mt-1">
+                  Total JWP: {formatNumber(ytdStats.totalJwp)}
+                </div>
+              </div>
+              <div className="text-[11px] text-neutral-500 mt-2.5 pt-2 border-t border-neutral-100 dark:border-neutral-800">
+                Akumulasi penjualan ÷ JWP
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 items-stretch">
+          <div className="p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col min-w-0 h-full">
+            <div className="flex items-start justify-between gap-2 text-neutral-500 text-xs mb-1">
+              <span>Periode Arsip</span>
+              <Calendar className="w-4 h-4 text-blue-500 shrink-0" />
+            </div>
+            <div className="text-lg sm:text-xl lg:text-2xl break-words leading-tight font-bold text-neutral-900 dark:text-neutral-100">
+              {totalMonths} Bulan <span className="text-xs font-semibold text-neutral-500">({selectedYear})</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Impor Spreadsheet Accordion */}
       {showImport && (
@@ -1577,6 +1745,18 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                   <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{yearSummary.ly > 0 ? formatDecimal(yearSummary.ly) : '—'}</td>
                   <td className="py-3.5 px-3 text-right font-extrabold text-brand-700 dark:text-brand-400">{yearSummary.vsLy !== null ? formatPercent(yearSummary.vsLy) : '—'}</td>
                 </tr>
+                {ytdStats && (
+                  <tr className="bg-neutral-50 dark:bg-neutral-800/60 font-bold border-t border-neutral-200 dark:border-neutral-700 text-xs">
+                    <td className="py-3.5 px-4 font-sans text-neutral-800 dark:text-neutral-200 sticky left-0 bg-neutral-50 dark:bg-neutral-800 z-10 border-r border-neutral-200 dark:border-neutral-700">
+                      Akumulasi {selectedYear} ({branchMonths.length} bln)
+                    </td>
+                    <td className="py-3.5 px-3 text-right text-neutral-900 dark:text-neutral-100">{formatNumber(ytdStats.totalSold)}</td>
+                    <td className="py-3.5 px-3 text-right text-neutral-700 dark:text-neutral-300">{ytdStats.totalTarget > 0 ? formatNumber(ytdStats.totalTarget) : '—'}</td>
+                    <td className="py-3.5 px-3 text-right font-extrabold text-neutral-900 dark:text-neutral-100">{ytdStats.pctVsTarget !== null ? formatPercent(ytdStats.pctVsTarget) : '—'}</td>
+                    <td className="py-3.5 px-3 text-right text-neutral-700 dark:text-neutral-300">{ytdStats.totalLy > 0 ? formatNumber(ytdStats.totalLy) : '—'}</td>
+                    <td className="py-3.5 px-3 text-right font-extrabold text-neutral-900 dark:text-neutral-100">{ytdStats.pctVsLy !== null ? formatPercent(ytdStats.pctVsLy) : '—'}</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

@@ -15,7 +15,7 @@ const distPath = path.join(__dirname, 'dist');
 // - index.html & version.json: tidak boleh di-cache (selalu ambil yang terbaru)
 // - /assets/*: nama file ber-hash, aman di-cache lama
 const NO_CACHE = 'no-store, no-cache, must-revalidate, max-age=0';
-function setCacheHeaders(res, filePath) {
+function setCacheHeaders(res: express.Response, filePath: string) {
   const base = path.basename(filePath);
   if (base === 'index.html' || base === 'version.json') {
     res.setHeader('Cache-Control', NO_CACHE);

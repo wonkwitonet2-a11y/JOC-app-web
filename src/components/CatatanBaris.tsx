@@ -44,7 +44,8 @@ export const CatatanBaris: React.FC<Props> = ({ note, onChangeStatus }) => {
       {/* SAMPING: status, tinggal dicentang */}
       <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-2 flex flex-col justify-center gap-1.5 bg-neutral-50/50 dark:bg-neutral-800/30">
         {STATUS_SOLUSI.map(s => {
-          const on = note.st === s.id;
+          const effectiveSt: SolusiStatus = note.st === 'selesai' ? 'selesai' : 'proses';
+          const on = effectiveSt === s.id;
           return (
             <button
               key={s.id}
@@ -57,8 +58,7 @@ export const CatatanBaris: React.FC<Props> = ({ note, onChangeStatus }) => {
               <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
                 on
                   ? s.id === 'selesai' ? 'bg-emerald-600 border-emerald-600 text-white'
-                    : s.id === 'proses' ? 'bg-amber-500 border-amber-500 text-white'
-                    : 'bg-neutral-500 border-neutral-500 text-white'
+                    : 'bg-amber-500 border-amber-500 text-white'
                   : 'border-neutral-300 dark:border-neutral-600'
               }`}>
                 {on && <Check className="w-3 h-3" strokeWidth={3} />}

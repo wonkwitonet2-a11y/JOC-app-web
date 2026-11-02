@@ -129,8 +129,6 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   const [internalSubMenu] = useState<TkuSubMenu>('ringkasan');
   const [bdPopup, setBdPopup] = useState(false); // popup Salin/Tempel breakdown: muncul saat sel ditahan
   const [bdFabMin, setBdFabMin] = useState(false); // popup diperkecil jadi bulatan
-  const [bdPasteOpen, setBdPasteOpen] = useState(false); // kotak tempel manual (cadangan bila clipboard diblokir APK)
-  const [bdPasteText, setBdPasteText] = useState('');
   const activeSubMenu = activeSubMenuProp !== undefined ? activeSubMenuProp : internalSubMenu;
   
   const tkuIdx = state.activeTkuId;
@@ -249,15 +247,18 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   const bdDragging = useRef(false);
   // Mode Pilih Sel (untuk HP / layar sentuh): ketuk sel awal, lalu ketuk sel akhir
   const [bdSelMode, setBdSelMode] = useState<boolean>(false);
+  const [showPasteModal, setShowPasteModal] = useState<boolean>(false);
+  const [pasteModalText, setPasteModalText] = useState<string>('');
   const bdClipRef = useRef<string>('');
   const bdWrapRef = useRef<HTMLDivElement | null>(null);
   const [bdWrapEl, setBdWrapEl] = useState<HTMLDivElement | null>(null);
   const bdWrapRefCb = useCallback((n: HTMLDivElement | null) => { bdWrapRef.current = n; setBdWrapEl(n); }, []);
   const bdJustDraggedRef = useRef<number>(0);
+  const hasUserLeftAppRef = useRef<boolean>(false);
   useEffect(() => {
-    const up = () => { bdDragging.current = false; };
-    window.addEventListener('mouseup', up);
-    return () => window.removeEventListener('mouseup', up);
+    const onBlur = () => { hasUserLeftAppRef.current = true; };
+    window.addEventListener('blur', onBlur);
+    return () => window.removeEventListener('blur', onBlur);
   }, []);
 
   // Mode Pilih Sel di HP: tekan-tahan sebentar pada sel lalu geser jari untuk memilih rentang sel
@@ -808,6 +809,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   };
   const writeClipboard = async (text: string) => {
     bdClipRef.current = text;
+    hasUserLeftAppRef.current = false;
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -838,22 +840,48 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     const r = getBdRect();
     if (!r) { showToast('Pilih sel tujuan dulu.', 'info'); return; }
     let text = '';
-    try { text = await navigator.clipboard.readText(); } catch { text = ''; }
-    if (text) { pasteText(text, r.d1, VAR_CODES[r.v1]); return; }
-    // Clipboard diblokir (APK): bila sebelumnya menyalin sel DI DALAM aplikasi, tempel langsung dari salinan itu (tanpa kotak).
-    if (bdClipRef.current) { pasteText(bdClipRef.current, r.d1, VAR_CODES[r.v1]); return; }
-    // Di APK / iframe, pembacaan clipboard otomatis diblokir (dan window.prompt juga tidak tampil).
-    // Buka kotak tempel di dalam aplikasi: tekan-tahan di kotak lalu pilih Tempel (berlaku untuk data dari Spreadsheet).
-    setBdPasteText('');
-    setBdPasteOpen(true);
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
+        text = await navigator.clipboard.readText();
+      }
+    } catch {
+      text = '';
+    }
+    if (text && text.trim()) {
+      pasteText(text, r.d1, VAR_CODES[r.v1]);
+      showToast('Data berhasil ditempel langsung ke tabel breakdown.', 'success');
+      return;
+    }
+    // Salinan dari dalam aplikasi (hanya dipakai kalau pengguna belum keluar aplikasi sejak menyalin)
+    if (!hasUserLeftAppRef.current && bdClipRef.current && bdClipRef.current.trim()) {
+      pasteText(bdClipRef.current, r.d1, VAR_CODES[r.v1]);
+      showToast('Data salinan berhasil ditempel ke tabel breakdown.', 'success');
+      return;
+    }
+    // Clipboard tidak terbaca (mis. WebView) atau salinan dari luar aplikasi:
+    // buka kotak tempel. Tahan kotak -> muncul bubble putih "Tempel" bawaan Android.
+    setPasteModalText('');
+    setShowPasteModal(true);
   };
-  const applyManualPaste = (text: string) => {
-    const r = getBdRect();
-    if (!r || !text.trim()) { showToast('Tidak ada data untuk ditempel.', 'info'); return; }
-    pasteText(text, r.d1, VAR_CODES[r.v1]);
-    setBdPasteOpen(false);
-    setBdPasteText('');
-  };
+
+  useEffect(() => {
+    if (activeSubMenu !== 'breakdown') return;
+    const handleNativePaste = (e: ClipboardEvent) => {
+      const activeTag = (document.activeElement as HTMLElement)?.tagName?.toLowerCase();
+      const activeId = (document.activeElement as HTMLElement)?.id || '';
+      if (activeTag === 'textarea' || (activeTag === 'input' && !activeId.startsWith('bd-input-'))) return;
+
+      const r = getBdRect();
+      if (!r) return;
+      const text = e.clipboardData?.getData('text/plain') || e.clipboardData?.getData('text');
+      if (text && text.trim().length > 0) {
+        e.preventDefault();
+        pasteText(text, r.d1, VAR_CODES[r.v1]);
+      }
+    };
+    window.addEventListener('paste', handleNativePaste);
+    return () => window.removeEventListener('paste', handleNativePaste);
+  }, [activeSubMenu, selA, selB, DIM, editPastPlan]);
   const handleBtnClear = () => {
     if (!getBdRect()) { showToast('Pilih sel dulu.', 'info'); return; }
     const n = clearBdSelection();
@@ -3060,7 +3088,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                             })()}
                           </span>
                           <span className="flex items-center shrink-0">
-                            <button type="button" onClick={() => { if (!getBdRect()) { showToast('Pilih sel tujuan dulu.', 'info'); return; } setBdPasteText(''); setBdPasteOpen(true); }} className="mr-1 px-1.5 h-6 rounded-md text-[11px] font-semibold text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-950/40 whitespace-nowrap">Dari Spreadsheet</button>
+                            <button type="button" onClick={handleBtnPaste} className="mr-1 px-1.5 h-6 rounded-md text-[11px] font-semibold text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-950/40 whitespace-nowrap">Tempel Langsung</button>
                             <button type="button" onClick={() => { setBdFabMin(true); setBdSelMode(false); }} aria-label="Perkecil" className="w-7 h-6 rounded-md flex items-center justify-center text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"><ChevronDown className="w-4 h-4" /></button>
                             <button type="button" onClick={() => { setBdPopup(false); setBdSelMode(false); setSelA(null); setSelB(null); }} aria-label="Tutup" className="w-7 h-6 rounded-md flex items-center justify-center text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"><X className="w-4 h-4" /></button>
                           </span>
@@ -3086,38 +3114,84 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                     ),
                     document.body
                   )}
-                  {bdPasteOpen && createPortal(
-                    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-3" onClick={() => setBdPasteOpen(false)}>
-                      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 shadow-2xl p-3.5 space-y-2.5" onClick={e => e.stopPropagation()}>
-                        <div className="text-sm font-bold text-neutral-900 dark:text-neutral-100">Tempel dari Spreadsheet</div>
-                        <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-snug">
-                          Salin sel di Spreadsheet, lalu <b>tekan-tahan di kotak bawah dan pilih Tempel</b>. Data akan masuk mulai dari sel yang dipilih.
-                        </p>
-                        <textarea
-                          autoFocus
-                          value={bdPasteText}
-                          onChange={e => setBdPasteText(e.target.value)}
-                          onPaste={e => {
-                            const t = e.clipboardData.getData('text/plain');
-                            if (t) { e.preventDefault(); setBdPasteText(t); }
-                          }}
-                          rows={5}
-                          placeholder="Tempel di sini..."
-                          className="w-full px-2.5 py-2 text-xs font-mono rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
-                        />
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] text-neutral-500">
-                            {bdPasteText.trim() ? `${bdPasteText.trim().split(/\r\n|\n|\r/).length} baris terbaca` : ''}
-                          </span>
-                          <span className="flex items-center gap-1.5">
-                            {bdClipRef.current && (
-                              <button type="button" onClick={() => applyManualPaste(bdClipRef.current)} className="px-2.5 h-9 rounded-lg text-xs font-semibold border border-neutral-300 dark:border-neutral-600 text-neutral-700 dark:text-neutral-200">
-                                Pakai salinan terakhir
-                              </button>
-                            )}
-                            <button type="button" onClick={() => setBdPasteOpen(false)} className="px-3 h-9 rounded-lg text-xs font-semibold bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200">Batal</button>
-                            <button type="button" onClick={() => applyManualPaste(bdPasteText)} disabled={!bdPasteText.trim()} className="px-3 h-9 rounded-lg text-xs font-bold bg-brand-600 text-white disabled:opacity-40">Tempel</button>
-                          </span>
+                  {showPasteModal && createPortal(
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+                      <div className="bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-5 md:p-6 w-full max-w-md space-y-4">
+                        <div className="flex items-center justify-between border-b border-neutral-100 dark:border-neutral-800 pb-3">
+                          <h3 className="text-sm font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+                            <ClipboardPaste className="w-5 h-5 text-brand-600 dark:text-brand-400" />
+                            <span>Tempel Data dari Excel / Spreadsheets</span>
+                          </h3>
+                          <button
+                            type="button"
+                            onClick={() => { setShowPasteModal(false); setPasteModalText(''); }}
+                            className="p-1.5 rounded-lg text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        <div className="space-y-2 text-xs text-neutral-600 dark:text-neutral-300">
+                          <p>
+                            Salin datanya dulu, lalu <b>tahan kotak di bawah ini beberapa detik</b> sampai muncul tombol putih <b>Tempel</b>, kemudian ketuk tombol itu:
+                          </p>
+                          <textarea
+                            autoFocus
+                            rows={5}
+                            value={pasteModalText}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setPasteModalText(val);
+                              if (val.trim()) {
+                                const rect = getBdRect();
+                                if (rect) {
+                                  pasteText(val, rect.d1, VAR_CODES[rect.v1]);
+                                  setShowPasteModal(false);
+                                  setPasteModalText('');
+                                }
+                              }
+                            }}
+                            onPaste={(e) => {
+                              const pasted = e.clipboardData.getData('text/plain') || e.clipboardData.getData('text');
+                              if (pasted && pasted.trim()) {
+                                e.preventDefault();
+                                const rect = getBdRect();
+                                if (rect) {
+                                  pasteText(pasted, rect.d1, VAR_CODES[rect.v1]);
+                                  setShowPasteModal(false);
+                                  setPasteModalText('');
+                                }
+                              }
+                            }}
+                            placeholder="Klik di sini lalu tekan Ctrl + V (atau Tahan & Tempel)..."
+                            className="w-full p-3 rounded-2xl border border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 font-mono text-xs text-neutral-900 dark:text-neutral-100 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
+                          <button
+                            type="button"
+                            onClick={() => { setShowPasteModal(false); setPasteModalText(''); }}
+                            className="px-4 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs font-semibold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                          >
+                            Batal
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const rect = getBdRect();
+                              if (rect && pasteModalText.trim()) {
+                                pasteText(pasteModalText, rect.d1, VAR_CODES[rect.v1]);
+                                setShowPasteModal(false);
+                                setPasteModalText('');
+                              } else {
+                                showToast('Kotak masih kosong. Tempelkan data Excel dulu.', 'info');
+                              }
+                            }}
+                            className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-md shadow-brand-600/20"
+                          >
+                            Proses Tempel Ke Tabel
+                          </button>
                         </div>
                       </div>
                     </div>,

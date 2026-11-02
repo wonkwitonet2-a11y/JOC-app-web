@@ -87,3 +87,49 @@ test('pengaman: penghapusan massal dicurigai, tidak menghapus data cloud', () =>
   const r = mergeSyncable(dates && { pjd: dates } as any, { pjd: {} } as any, { pjd: dates } as any, { guard: true });
   assert.equal(Object.keys((r.merged as any).pjd).length, 20, 'data cloud terhapus massal');
 });
+
+test('arsip: editan lokal dengan timestamp u lebih baru menang meskipun remote terkunci', () => {
+  const remoteArc = {
+    periode: '2026-09',
+    namaBulan: 'September 2026',
+    d: 30,
+    terkunci: true,
+    u: 1000,
+    rows: [{ nama: 'JEMBER 1', absenYl: 0, frekuensiAbsen: 0 }]
+  };
+  const localArc = {
+    periode: '2026-09',
+    namaBulan: 'September 2026',
+    d: 30,
+    terkunci: false,
+    u: 2000,
+    rows: [{ nama: 'JEMBER 1', absenYl: 5, frekuensiAbsen: 12 }]
+  };
+  const res: any = mergeSyncable(null, { archives: { '2026-09': localArc } } as any, { archives: { '2026-09': remoteArc } } as any);
+  assert.equal(res.merged.archives['2026-09'].rows[0].absenYl, 5, 'editan absen lokal terhapus');
+  assert.equal(res.merged.archives['2026-09'].rows[0].frekuensiAbsen, 12, 'editan frekuensi lokal terhapus');
+});
+
+test('arsip: catatan digabung sehingga tidak hilang saat salah satu sisi diperbarui', () => {
+  const remoteArc = {
+    periode: '2026-09',
+    namaBulan: 'September 2026',
+    d: 30,
+    terkunci: true,
+    u: 1000,
+    catatan: { n: { '2026-W36-0': { isi: 'Catatan minggu 1' } }, r: {} },
+    rows: [{ nama: 'JEMBER 1', absenYl: 0 }]
+  };
+  const localArc = {
+    periode: '2026-09',
+    namaBulan: 'September 2026',
+    d: 30,
+    terkunci: false,
+    u: 2000,
+    rows: [{ nama: 'JEMBER 1', absenYl: 3 }]
+  };
+  const res: any = mergeSyncable(null, { archives: { '2026-09': localArc } } as any, { archives: { '2026-09': remoteArc } } as any);
+  assert.equal(res.merged.archives['2026-09'].rows[0].absenYl, 3);
+  assert.ok(res.merged.archives['2026-09'].catatan?.n['2026-W36-0'], 'catatan hilang saat sync');
+});
+
