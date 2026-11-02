@@ -227,6 +227,13 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   const opsDirtyRef = useRef(false);
   opsDirtyRef.current = opsDirty;
   const opsKeyRef = useRef<string>('');
+  // Ketikan penjualan/BB/PDM yang belum disimpan. Selama true, sinkronisasi dari state/cloud
+  // TIDAK boleh menimpa isian form (penyebab data hilang saat pindah aplikasi lalu kembali).
+  const formDirtyRef = useRef(false);
+  const formKeyRef = useRef<string>('');
+  const editSalesV = (n: [number, number, number, number]) => { formDirtyRef.current = true; setSalesV(n); };
+  const editBbV = (n: [number, number, number, number]) => { formDirtyRef.current = true; setBbV(n); };
+  const editPdmV = (n: [number, number, number, number]) => { formDirtyRef.current = true; setPdmV(n); };
 
   // Breakdown Sub-Menu States
   const [selectedBreakdownPeriod, setSelectedBreakdownPeriod] = useState<'M1' | 'M2' | 'M3' | 'M4' | 'M5' | 'ALL'>('M1');
@@ -441,31 +448,39 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     // Cek apakah ada draf ketikan yang belum sempat disimpan untuk tanggal dan TKU ini
     const draft = loadTkuInputDraft(inputDate, tkuIdx);
 
-    // Tentukan apakah draf vs data resmi/seed yang memiliki angka penjualan nyata (> 0)
-    const draftHasSales = Boolean(draft && Array.isArray(draft.v) && draft.v.some(x => x > 0));
-    const inputHasSales = Boolean(input && Array.isArray(input.v) && input.v.some(x => x > 0));
+    const nz = (a?: number[]) => Array.isArray(a) && a.some(x => x > 0);
+    const draftHasData = Boolean(draft && (nz(draft.v) || nz(draft.b) || nz(draft.pdmV)));
+    const savedHasData = Boolean(input && (nz(input.v) || nz(input.b) || nz(input.pdmV) || (input.pdm || 0) > 0));
+    const sameArr = (a?: number[], b?: number[]) =>
+      (a || [0, 0, 0, 0]).every((x, i) => (x || 0) === ((b || [0, 0, 0, 0])[i] || 0));
+    const draftDiffers = Boolean(draft && input && !(sameArr(draft.v, input.v) && sameArr(draft.b, input.b) && sameArr(draft.pdmV, input.pdmV || [input.pdm || 0, 0, 0, 0])));
 
-    // Jika data tersimpan di pjd/todayInputs sudah ada, data tersimpan tersebut adalah acuan utama
-    const hasSavedInput = Boolean(input && Array.isArray(input.v));
-    const finalSalesV: [number, number, number, number] = hasSavedInput
-      ? input!.v
-      : (draftHasSales ? draft!.v : (inputHasSales ? input!.v : (draft?.v || [0, 0, 0, 0])));
+    // Pemuatan pertama untuk tanggal+TKU ini (buka aplikasi / pindah TKU / pindah tanggal)?
+    const formKey = `${inputDate}_${tkuIdx}`;
+    const firstLoad = formKeyRef.current !== formKey;
+    if (firstLoad) {
+      formKeyRef.current = formKey;
+      formDirtyRef.current = false;
+    }
 
-    const draftHasBb = Boolean(draft && Array.isArray(draft.b) && draft.b.some(x => x > 0));
-    const inputHasBb = Boolean(input && Array.isArray(input.b) && input.b.some(x => x > 0));
-    const finalBbV: [number, number, number, number] = hasSavedInput
-      ? input!.b
-      : (draftHasBb ? draft!.b : (inputHasBb ? input!.b : (draft?.b || [0, 0, 0, 0])));
+    // Draf menang jika: (a) tidak ada data tersimpan, atau (b) pemuatan pertama dan draf lebih baru dari data tersimpan
+    // (ketikan belum disimpan yang selamat dari aplikasi tertutup/ter-refresh).
+    const draftNewer = Boolean(draft && draft.updatedAt > (input?.u || 0));
+    const useDraft = draftHasData && (!savedHasData || (firstLoad && draftDiffers && draftNewer));
 
-    const draftHasPdm = Boolean(draft && Array.isArray(draft.pdmV) && draft.pdmV.some(x => x > 0));
-    const inputHasPdm = Boolean(input && ((Array.isArray(input?.pdmV) && input.pdmV.some(x => x > 0)) || Boolean(input?.pdm && input.pdm > 0)));
-    const finalPdmV: [number, number, number, number] = hasSavedInput
-      ? (input!.pdmV || [input!.pdm || 0, 0, 0, 0])
-      : (draftHasPdm ? draft!.pdmV : (inputHasPdm ? (input!.pdmV || [input!.pdm || 0, 0, 0, 0]) : (draft?.pdmV || [0, 0, 0, 0])));
+    if (!formDirtyRef.current) {
+      const finalSalesV: [number, number, number, number] = useDraft ? draft!.v : (input?.v || [0, 0, 0, 0]);
+      const finalBbV: [number, number, number, number] = useDraft ? draft!.b : (input?.b || [0, 0, 0, 0]);
+      const finalPdmV: [number, number, number, number] = useDraft
+        ? draft!.pdmV
+        : (input?.pdmV || [input?.pdm || 0, 0, 0, 0]);
+      if (useDraft && firstLoad) formDirtyRef.current = true; // draf yang dipulihkan = belum tersimpan
 
-    setSalesV(finalSalesV);
-    setBbV(finalBbV);
-    setPdmV(finalPdmV);
+      // Hanya set jika isinya benar-benar berbeda (hindari render berantai)
+      setSalesV(prev => sameArr(prev, finalSalesV) ? prev : finalSalesV);
+      setBbV(prev => sameArr(prev, finalBbV) ? prev : finalBbV);
+      setPdmV(prev => sameArr(prev, finalPdmV) ? prev : finalPdmV);
+    }
 
     setYl(draft?.yl ?? input?.yl ?? tku.jumlahYl ?? 10);
     setAr(draft?.ar ?? input?.ar ?? tku.jumlahArea ?? 10);
@@ -495,6 +510,9 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       lastAutosaveKeyRef.current = curKey;
       return;
     }
+    // Form kosong yang belum disentuh pengguna (mis. baru di-reset oleh sinkronisasi): jangan hapus draf.
+    const blank = ![...salesV, ...bbV, ...pdmV].some(x => x > 0);
+    if (blank && !formDirtyRef.current) return;
     saveTkuInputDraft(inputDate, tkuIdx, salesV, bbV, pdmV, {
       yl,
       ar,
@@ -568,11 +586,13 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
         showToast('Tanggal di luar rentang bulan kerja / melewati tanggal update.', 'error');
         return;
       }
+      formDirtyRef.current = false;
       onReviseDailyData(inputDate, tkuIdx, record);
       showToast(`Penjualan ${tku.nama} tanggal ${formatDateIndo(inputDate)} berhasil disimpan!`, 'success');
       return;
     }
 
+    formDirtyRef.current = false;
     onSaveTkuInput(tkuIdx, record, inputDate);
 
     if (totalSoldToday >= tkuTarget) {
@@ -2503,7 +2523,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                         const val = Math.max(0, Number(e.target.value));
                         const next = [...salesV] as [number, number, number, number];
                         next[i] = val;
-                        setSalesV(next);
+                        editSalesV(next);
                       }}
                       placeholder="0"
                       className="w-full pl-3 pr-10 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-base font-mono font-bold text-neutral-900 dark:text-white focus:ring-2 focus:ring-brand-500 focus:outline-none"
@@ -2546,7 +2566,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                         const val = Math.max(0, Number(e.target.value));
                         const next = [...bbV] as [number, number, number, number];
                         next[i] = val;
-                        setBbV(next);
+                        editBbV(next);
                       }}
                       placeholder="0"
                       className="w-full pl-3 pr-10 py-2 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-sm font-mono text-neutral-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
@@ -2598,7 +2618,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                         const val = Math.max(0, Number(e.target.value));
                         const next = [...pdmV] as [number, number, number, number];
                         next[i] = val;
-                        setPdmV(next);
+                        editPdmV(next);
                       }}
                       placeholder="0"
                       className="w-full pl-3 pr-10 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-neutral-50/50 dark:bg-neutral-900 text-sm font-mono font-bold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
