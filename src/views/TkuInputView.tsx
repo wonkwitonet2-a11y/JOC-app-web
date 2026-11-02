@@ -129,6 +129,8 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   const [internalSubMenu] = useState<TkuSubMenu>('ringkasan');
   const [bdPopup, setBdPopup] = useState(false); // popup Salin/Tempel breakdown: muncul saat sel ditahan
   const [bdFabMin, setBdFabMin] = useState(false); // popup diperkecil jadi bulatan
+  const [bdPasteOpen, setBdPasteOpen] = useState(false); // kotak tempel manual (cadangan bila clipboard diblokir APK)
+  const [bdPasteText, setBdPasteText] = useState('');
   const activeSubMenu = activeSubMenuProp !== undefined ? activeSubMenuProp : internalSubMenu;
   
   const tkuIdx = state.activeTkuId;
@@ -313,12 +315,19 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     };
   }, [bdSelMode]);
 
-  // Tekan-tahan satu sel (HP) atau klik kanan (komputer) => muncul popup Salin / Tempel / Pilih Sel.
+  // Popup Salin/Tempel muncul HANYA bila sel ditahan (+/- 0,6 detik) atau diketuk 2 kali (komputer: klik 2 kali / klik kanan).
+  // Ketuk 1 kali = isi / edit sel seperti biasa.
   useEffect(() => {
     const el = bdWrapEl;
     if (!el) return;
     let timer: number | null = null;
     let sx = 0, sy = 0;
+    let lastTap = { t: 0, d: 0, v: -1 };
+    let touchStartAt = 0; // kapan jari terakhir menyentuh layar
+    let touchEndAt = 0;
+    // Event contextmenu / dblclick milik browser HP sering muncul sendiri saat sel diketuk (karena isi sel langsung terblok
+    // oleh select()). Maka untuk layar sentuh HANYA gestur buatan sendiri (tahan / ketuk 2x) yang boleh membuka popup.
+    const recentTouch = () => Date.now() - Math.max(touchStartAt, touchEndAt) < 1500;
     const cancel = () => { if (timer !== null) { window.clearTimeout(timer); timer = null; } };
     const cellOf = (t: EventTarget | null) => {
       const td = (t as HTMLElement | null)?.closest?.('td[data-bd-d]') as HTMLElement | null;
@@ -328,41 +337,74 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       return d ? { d, v } : null;
     };
     const open = (c: { d: number; v: number }) => {
+      cancel();
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); // tutup keyboard
       setSelA(c); setSelB(c);
       setBdPopup(true); setBdFabMin(false);
-      setBdSelMode(true); // sel yang ditahan = sel awal; tinggal ketuk sel akhir
+      setBdSelMode(true); // sel yang ditahan / diketuk 2x = sel awal; tinggal ketuk sel akhir
       if (navigator.vibrate) { try { navigator.vibrate(15); } catch { /* abaikan */ } }
     };
     const onStart = (e: TouchEvent) => {
       cancel();
+      touchStartAt = Date.now();
       if (e.touches.length !== 1) return;
       const t = e.touches[0];
       sx = t.clientX; sy = t.clientY;
       const c = cellOf(e.target);
       if (!c) return;
-      timer = window.setTimeout(() => { timer = null; open(c); }, 450);
+      timer = window.setTimeout(() => { timer = null; open(c); lastTap = { t: 0, d: 0, v: -1 }; }, 600);
     };
     const onMove = (e: TouchEvent) => {
       const t = e.touches[0];
       if (t && (Math.abs(t.clientX - sx) > 8 || Math.abs(t.clientY - sy) > 8)) cancel();
     };
+    const onEnd = (e: TouchEvent) => {
+      touchEndAt = Date.now();
+      const wasHolding = timer !== null; // jari diangkat sebelum 0,6 detik = ketukan biasa
+      cancel();
+      if (!wasHolding) return;
+      const c = cellOf(e.target);
+      if (!c) return;
+      const now = Date.now();
+      if (now - lastTap.t < 350 && lastTap.d === c.d && lastTap.v === c.v) {
+        lastTap = { t: 0, d: 0, v: -1 };
+        e.preventDefault();
+        open(c); // ketuk 2 kali
+      } else {
+        lastTap = { t: now, d: c.d, v: c.v };
+      }
+    };
+    const onDbl = (e: MouseEvent) => {
+      if (recentTouch()) return; // di layar sentuh, ketuk 2x sudah ditangani di atas
+      const c = cellOf(e.target);
+      if (c) { e.preventDefault(); open(c); }
+    };
     const onCtx = (e: MouseEvent) => {
       const c = cellOf(e.target);
       if (!c) return;
-      e.preventDefault(); // tahan di HP / klik kanan di komputer: tampilkan popup, bukan menu bawaan browser
-      open(c);
+      e.preventDefault(); // cegah menu bawaan browser
+      if (recentTouch()) {
+        // Layar sentuh: menu muncul juga saat sel yang sudah terblok diketuk sekali (cepat, < 0,45 detik) = abaikan.
+        // Hanya tahan sungguhan (>= 0,45 detik) yang membuka popup.
+        const held = (touchEndAt >= touchStartAt ? touchEndAt : Date.now()) - touchStartAt; // lama jari menempel
+        if (held >= 450) open(c);
+        return;
+      }
+      open(c); // komputer: klik kanan
     };
     el.addEventListener('touchstart', onStart, { passive: true });
     el.addEventListener('touchmove', onMove, { passive: true });
-    el.addEventListener('touchend', cancel);
+    el.addEventListener('touchend', onEnd);
     el.addEventListener('touchcancel', cancel);
+    el.addEventListener('dblclick', onDbl);
     el.addEventListener('contextmenu', onCtx);
     return () => {
       cancel();
       el.removeEventListener('touchstart', onStart);
       el.removeEventListener('touchmove', onMove);
-      el.removeEventListener('touchend', cancel);
+      el.removeEventListener('touchend', onEnd);
       el.removeEventListener('touchcancel', cancel);
+      el.removeEventListener('dblclick', onDbl);
       el.removeEventListener('contextmenu', onCtx);
     };
   }, [bdWrapEl]);
@@ -777,14 +819,20 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     if (!r) { showToast('Pilih sel tujuan dulu.', 'info'); return; }
     let text = '';
     try { text = await navigator.clipboard.readText(); } catch { text = ''; }
-    if (!text) text = bdClipRef.current;
-    if (!text) {
-      // Browser HP sering memblokir pembacaan clipboard otomatis: minta tempel manual lewat kotak isian
-      const manual = window.prompt('Clipboard tidak bisa dibaca otomatis. Tekan-tahan di kotak ini lalu pilih Tempel:', '');
-      if (!manual) { showToast('Clipboard kosong. Salin dulu sel yang ingin ditempel.', 'info'); return; }
-      text = manual;
-    }
+    if (text) { pasteText(text, r.d1, VAR_CODES[r.v1]); return; }
+    // Clipboard diblokir (APK): bila sebelumnya menyalin sel DI DALAM aplikasi, tempel langsung dari salinan itu (tanpa kotak).
+    if (bdClipRef.current) { pasteText(bdClipRef.current, r.d1, VAR_CODES[r.v1]); return; }
+    // Di APK / iframe, pembacaan clipboard otomatis diblokir (dan window.prompt juga tidak tampil).
+    // Buka kotak tempel di dalam aplikasi: tekan-tahan di kotak lalu pilih Tempel (berlaku untuk data dari Spreadsheet).
+    setBdPasteText('');
+    setBdPasteOpen(true);
+  };
+  const applyManualPaste = (text: string) => {
+    const r = getBdRect();
+    if (!r || !text.trim()) { showToast('Tidak ada data untuk ditempel.', 'info'); return; }
     pasteText(text, r.d1, VAR_CODES[r.v1]);
+    setBdPasteOpen(false);
+    setBdPasteText('');
   };
   const handleBtnClear = () => {
     if (!getBdRect()) { showToast('Pilih sel dulu.', 'info'); return; }
@@ -842,7 +890,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
 
     const grid = rawRows.map(rowStr => {
       let cells = rowStr.split('\t');
-      if (cells.length === 1 && (rowStr.includes(';') || rowStr.includes(','))) cells = rowStr.split(/[;,]/);
+      if (cells.length === 1 && (rowStr.includes(';') || rowStr.includes(',')) && !/^\s*\d{1,3}([.,]\d{3})+\s*$/.test(rowStr)) cells = rowStr.split(/[;,]/);
       return cells.map(c => {
         const cleaned = c.trim().replace(/[^\d]/g, '');
         const n = cleaned === '' ? 0 : parseInt(cleaned, 10);
@@ -2962,7 +3010,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                       <span className="inline-block w-3 h-3 rounded-sm align-[-2px] mx-0.5 bg-red-300 dark:bg-red-500/50" />kurang,{' '}
                       <span className="inline-block w-3 h-3 rounded-sm align-[-2px] mx-0.5 bg-emerald-300 dark:bg-emerald-500/50" />lebih,{' '}
                       <span className="inline-block w-3 h-3 rounded-sm align-[-2px] mx-0.5 bg-neutral-400 dark:bg-neutral-500/60" />sama.
-                      {' '}Komputer: seret / Shift+klik lalu Ctrl+C/X/V atau Delete. HP: tekan-tahan sebuah sel sampai muncul tombol melayang (Pilih Sel, Salin, Potong, Tempel, Hapus).
+                      {' '}Komputer: seret / Shift+klik lalu Ctrl+C/X/V atau Delete. HP: ketuk 1 kali untuk mengisi sel; tahan sel atau ketuk 2 kali untuk memunculkan tombol melayang (Pilih Sel, Salin, Potong, Tempel, Hapus).
                       {showOrigPlan && (
                         <>
                           {' '}<span className="inline-block w-3 h-3 rounded-sm align-[-2px] mx-0.5 bg-sky-300 dark:bg-sky-500/50" />biru miring = rencana asli (hanya lihat). Total, akumulasi, dan rata-rata di bawah tetap memakai realisasi.
@@ -2992,7 +3040,8 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                             })()}
                           </span>
                           <span className="flex items-center shrink-0">
-                            <button type="button" onClick={() => setBdFabMin(true)} aria-label="Perkecil" className="w-7 h-6 rounded-md flex items-center justify-center text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"><ChevronDown className="w-4 h-4" /></button>
+                            <button type="button" onClick={() => { if (!getBdRect()) { showToast('Pilih sel tujuan dulu.', 'info'); return; } setBdPasteText(''); setBdPasteOpen(true); }} className="mr-1 px-1.5 h-6 rounded-md text-[11px] font-semibold text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-950/40 whitespace-nowrap">Dari Spreadsheet</button>
+                            <button type="button" onClick={() => { setBdFabMin(true); setBdSelMode(false); }} aria-label="Perkecil" className="w-7 h-6 rounded-md flex items-center justify-center text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"><ChevronDown className="w-4 h-4" /></button>
                             <button type="button" onClick={() => { setBdPopup(false); setBdSelMode(false); setSelA(null); setSelB(null); }} aria-label="Tutup" className="w-7 h-6 rounded-md flex items-center justify-center text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"><X className="w-4 h-4" /></button>
                           </span>
                         </div>
@@ -3017,7 +3066,44 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                     ),
                     document.body
                   )}
-                  <div ref={bdWrapRefCb} style={{ WebkitTouchCallout: 'none' }} className={`overflow-x-auto ${bdSelMode ? 'select-none' : ''}`} onClickCapture={handleTableTapSelect}>
+                  {bdPasteOpen && createPortal(
+                    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-3" onClick={() => setBdPasteOpen(false)}>
+                      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 shadow-2xl p-3.5 space-y-2.5" onClick={e => e.stopPropagation()}>
+                        <div className="text-sm font-bold text-neutral-900 dark:text-neutral-100">Tempel dari Spreadsheet</div>
+                        <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-snug">
+                          Salin sel di Spreadsheet, lalu <b>tekan-tahan di kotak bawah dan pilih Tempel</b>. Data akan masuk mulai dari sel yang dipilih.
+                        </p>
+                        <textarea
+                          autoFocus
+                          value={bdPasteText}
+                          onChange={e => setBdPasteText(e.target.value)}
+                          onPaste={e => {
+                            const t = e.clipboardData.getData('text/plain');
+                            if (t) { e.preventDefault(); setBdPasteText(t); }
+                          }}
+                          rows={5}
+                          placeholder="Tempel di sini..."
+                          className="w-full px-2.5 py-2 text-xs font-mono rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                        />
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] text-neutral-500">
+                            {bdPasteText.trim() ? `${bdPasteText.trim().split(/\r\n|\n|\r/).length} baris terbaca` : ''}
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            {bdClipRef.current && (
+                              <button type="button" onClick={() => applyManualPaste(bdClipRef.current)} className="px-2.5 h-9 rounded-lg text-xs font-semibold border border-neutral-300 dark:border-neutral-600 text-neutral-700 dark:text-neutral-200">
+                                Pakai salinan terakhir
+                              </button>
+                            )}
+                            <button type="button" onClick={() => setBdPasteOpen(false)} className="px-3 h-9 rounded-lg text-xs font-semibold bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200">Batal</button>
+                            <button type="button" onClick={() => applyManualPaste(bdPasteText)} disabled={!bdPasteText.trim()} className="px-3 h-9 rounded-lg text-xs font-bold bg-brand-600 text-white disabled:opacity-40">Tempel</button>
+                          </span>
+                        </div>
+                      </div>
+                    </div>,
+                    document.body
+                  )}
+                  <div ref={bdWrapRefCb} style={{ WebkitTouchCallout: 'none', touchAction: 'manipulation' }} className={`overflow-x-auto ${bdSelMode ? 'select-none' : ''}`} onClickCapture={handleTableTapSelect}>
                     <table className="w-full text-xs text-left border-collapse">
                       <thead className="bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 font-semibold">
                         <tr className="border-b border-neutral-200 dark:border-neutral-700">
