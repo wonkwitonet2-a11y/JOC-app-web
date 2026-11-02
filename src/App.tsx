@@ -1612,6 +1612,56 @@ export default function App() {
     }
   };
 
+  // Koreksi akumulasi penjualan per varian arsip: total, rata-rata, dan persentase dihitung ulang
+  // dengan rumus yang sama seperti saat arsip dibuat (buildArchiveFromState), pembagi = jumlah hari arsip (arc.d).
+  const handleUpdateArchiveVarian = async (
+    archiveKey: string,
+    patch: Record<number, [number, number, number, number]>
+  ) => {
+    const arc = state.archives[archiveKey];
+    if (!arc || INITIAL_ARCHIVES[archiveKey]) return;
+    const d = arc.d || 30;
+    const trunc2 = (n: number): number => Math.floor(n * 100 + 1e-9) / 100;
+    const nextState: AppState = {
+      ...state,
+      archives: {
+        ...state.archives,
+        [archiveKey]: {
+          ...arc,
+          rows: arc.rows.map((r, i) => {
+            const pv = patch[i];
+            if (!pv) return r;
+            const varian = pv.map(x => Math.max(0, Math.round(Number(x) || 0))) as [number, number, number, number];
+            const sold = varian.reduce((x, y) => x + y, 0);
+            const rataHarian = Math.floor(sold / d);
+            const rataVarian = varian.map(x => Math.floor(x / d)) as [number, number, number, number];
+            const targetHarian = r.targetHarian || 0;
+            const bulanLalu = r.bulanLalu || 0;
+            const tahunLalu = r.tahunLalu || 0;
+            const akmBb = r.akmBb || 0;
+            const akmJwp = r.akmJwp || 0;
+            return {
+              ...r,
+              varian,
+              total: sold,
+              rataHarian,
+              rataVarian,
+              vsTargetPct: targetHarian > 0 ? trunc2((rataHarian / targetHarian) * 1000) / 1000 : 1,
+              vsLmPct: bulanLalu > 0 ? trunc2((rataHarian / bulanLalu) * 1000) / 1000 : 1,
+              vsLyPct: tahunLalu > 0 ? trunc2((rataHarian / tahunLalu) * 1000) / 1000 : 1,
+              akmBbPct: (sold + akmBb) > 0 ? trunc2((akmBb / (sold + akmBb)) * 1000) / 1000 : 0,
+              sYl: akmJwp > 0 ? Math.floor(sold / akmJwp) : 0
+            };
+          })
+        }
+      }
+    };
+    setState(nextState);
+    if (state.supabaseConfig.u && state.supabaseConfig.k) {
+      gSave(nextState, true);
+    }
+  };
+
   const handleUnlockArchive = async (archiveKey: string) => {
     const arc = state.archives[archiveKey];
     if (!arc) return;
@@ -2147,6 +2197,7 @@ export default function App() {
                   onSaveCurrentMonthArchive={handleSaveCurrentMonthArchive}
                   onUnlockArchive={handleUnlockArchive}
                   onUpdateArchiveAbsen={handleUpdateArchiveAbsen}
+                  onUpdateArchiveVarian={handleUpdateArchiveVarian}
                   onImportCsvArchive={handleImportCsvArchive}
                   onSelectArchive={handleSelectArchive}
                   onDeleteArchive={handleDeleteArchive}

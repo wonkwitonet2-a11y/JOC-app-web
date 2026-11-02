@@ -155,6 +155,8 @@ interface ArsipViewProps {
   onForcePushArchive?: () => void;
   /** Simpan koreksi Absen & Frekuensi per baris arsip (index baris -> nilai baru) */
   onUpdateArchiveAbsen?: (archiveKey: string, patch: Record<number, { absenYl: number; frekuensiAbsen: number; tahunLalu: number }>) => void;
+  /** Simpan koreksi akumulasi penjualan per varian [YO, OM, OS, YT] per baris arsip */
+  onUpdateArchiveVarian?: (archiveKey: string, patch: Record<number, [number, number, number, number]>) => void;
 }
 
 type ArchiveTab = 'item_sales' | 'target_eval' | 'ops_bb' | 'all_columns' | 'kendala_solusi';
@@ -172,7 +174,8 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
   syncStatus = 'idle',
   onManualSync,
   onForcePushArchive,
-  onUpdateArchiveAbsen
+  onUpdateArchiveAbsen,
+  onUpdateArchiveVarian
 }) => {
   const [csvInput, setCsvInput] = useState('');
   const [showImport, setShowImport] = useState(false);
@@ -217,6 +220,71 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
   // Arsip bawaan (Jan–Agu 2026, dst) selalu dipulihkan dari data bawaan saat dimuat, jadi koreksi hanya untuk arsip lain (mis. September 2026)
   const canEditAbsen = Boolean(activeArchive && !activeArchive.terkunci && !INITIAL_ARCHIVES[activeKey] && onUpdateArchiveAbsen);
   useEffect(() => { setEditAbsen(false); }, [activeKey]);
+
+  // ---- Koreksi akumulasi penjualan per varian (YO, OM, OS, YT) ----
+  const [editVarian, setEditVarian] = useState(false);
+  const [varianDraft, setVarianDraft] = useState<Record<number, [string, string, string, string]>>({});
+  const canEditVarian = Boolean(activeArchive && !activeArchive.terkunci && !INITIAL_ARCHIVES[activeKey] && onUpdateArchiveVarian);
+  useEffect(() => { setEditVarian(false); }, [activeKey]);
+  const toNum = (x: string) => Math.max(0, Math.round(Number(String(x).replace(/[^\d]/g, '')) || 0));
+  const startEditVarian = () => {
+    const d: Record<number, [string, string, string, string]> = {};
+    activeArchive.rows.forEach((r, i) => {
+      d[i] = [0, 1, 2, 3].map(k => String(r.varian?.[k] ?? 0)) as [string, string, string, string];
+    });
+    setVarianDraft(d);
+    setEditVarian(true);
+  };
+  const saveEditVarian = () => {
+    const patch: Record<number, [number, number, number, number]> = {};
+    Object.keys(varianDraft).forEach(k => {
+      const i = Number(k);
+      patch[i] = varianDraft[i].map(toNum) as [number, number, number, number];
+    });
+    onUpdateArchiveVarian?.(activeKey, patch);
+    setEditVarian(false);
+    showToast(`Akumulasi penjualan arsip ${activeKey} disimpan`, 'success');
+  };
+  const varianBar = (
+    <div className="flex flex-wrap items-center gap-2 px-1 pb-3">
+      {editVarian ? (
+        <>
+          <button type="button" onClick={saveEditVarian} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">Simpan</button>
+          <button type="button" onClick={() => setEditVarian(false)} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200">Batal</button>
+          <span className="text-xs text-neutral-500">Ubah akumulasi YO, OM, OS, YT tiap TKU. Total, rata-rata, dan persentase ikut dihitung ulang.</span>
+        </>
+      ) : canEditVarian ? (
+        <button type="button" onClick={startEditVarian} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-600 text-white hover:bg-brand-700">Edit Akumulasi Penjualan per Varian</button>
+      ) : (
+        <span className="text-xs text-neutral-500">
+          {INITIAL_ARCHIVES[activeKey]
+            ? 'Arsip bawaan tidak bisa diedit.'
+            : activeArchive?.terkunci
+              ? 'Untuk mengoreksi data arsip, buka kunci arsip dulu lewat menu Opsi Arsip.'
+              : ''}
+        </span>
+      )}
+    </div>
+  );
+  const varianInput = (idx: number, k: number) => (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={varianDraft[idx]?.[k] ?? ''}
+      onChange={e => {
+        const v = e.target.value.replace(/[^\d]/g, '');
+        setVarianDraft(d => { const row = [...(d[idx] || ['0', '0', '0', '0'])] as [string, string, string, string]; row[k] = v; return { ...d, [idx]: row }; });
+      }}
+      onFocus={e => e.target.select()}
+      className="w-20 px-1.5 py-1 text-right text-xs font-mono rounded-md border border-brand-400 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white"
+    />
+  );
+  // Nilai tampilan baris saat mode edit (hitung langsung dari isian)
+  const draftRow = (idx: number): { v: number[]; total: number; rata: number } => {
+    const v = (varianDraft[idx] || ['0', '0', '0', '0']).map(toNum);
+    const total = v.reduce((a, b) => a + b, 0);
+    return { v, total, rata: Math.floor(total / (activeArchive.d || 30)) };
+  };
   const startEditAbsen = () => {
     const d: Record<number, { abs: string; frk: string; ty: string }> = {};
     activeArchive.rows.forEach((r, i) => { d[i] = { abs: String(r.absenYl ?? 0), frk: String(r.frekuensiAbsen ?? 0), ty: String(r.tahunLalu ?? 0) }; });
@@ -975,6 +1043,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
             {/* TAB 1: Rata-rata per Item & Varian */}
             {activeTab === 'item_sales' && (
               <div className="overflow-x-auto">
+                {varianBar}
                 <table className="w-full text-left text-sm border-collapse min-w-[900px]">
                   <thead>
                     <tr className="border-b border-neutral-200 dark:border-neutral-800 text-neutral-500 text-xs bg-neutral-50 dark:bg-neutral-800/40">
@@ -1005,19 +1074,25 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                             R{row.rayon}
                           </span>
                         </td>
-                        <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(row.varian[0])}</td>
-                        <td className="py-3 px-3 text-right text-neutral-500">{formatDecimal(getRowRataVarian(row, 0, activeArchive.d))}</td>
-                        <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(row.varian[1])}</td>
-                        <td className="py-3 px-3 text-right text-neutral-500">{formatDecimal(getRowRataVarian(row, 1, activeArchive.d))}</td>
-                        <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">{row.varian[2] > 0 ? formatNumber(row.varian[2]) : '—'}</td>
-                        <td className="py-3 px-3 text-right text-neutral-500">{row.varian[2] > 0 ? formatDecimal(getRowRataVarian(row, 2, activeArchive.d)) : '—'}</td>
-                        <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">{formatNumber(row.varian[3])}</td>
-                        <td className="py-3 px-3 text-right text-neutral-500">{formatDecimal(getRowRataVarian(row, 3, activeArchive.d))}</td>
+                        {[0, 1, 2, 3].map(k => (
+                          <React.Fragment key={k}>
+                            <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">
+                              {editVarian
+                                ? varianInput(idx, k)
+                                : (k === 2 && !(row.varian[2] > 0) ? '—' : formatNumber(row.varian[k]))}
+                            </td>
+                            <td className="py-3 px-3 text-right text-neutral-500">
+                              {editVarian
+                                ? formatDecimal(Math.floor(draftRow(idx).v[k] / (activeArchive.d || 30)))
+                                : (k === 2 && !(row.varian[2] > 0) ? '—' : formatDecimal(getRowRataVarian(row, k, activeArchive.d)))}
+                            </td>
+                          </React.Fragment>
+                        ))}
                         <td className="py-3 px-4 text-right font-bold text-neutral-900 dark:text-neutral-100 bg-neutral-100/30 dark:bg-neutral-800/30">
-                          {formatNumber(row.total)}
+                          {formatNumber(editVarian ? draftRow(idx).total : row.total)}
                         </td>
                         <td className="py-3 px-3 text-right font-semibold text-neutral-700 dark:text-neutral-300">
-                          {formatDecimal(getRowRataHarian(row, activeArchive.d))}
+                          {formatDecimal(editVarian ? draftRow(idx).rata : getRowRataHarian(row, activeArchive.d))}
                         </td>
                       </tr>
                     ))}
