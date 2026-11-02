@@ -141,6 +141,19 @@ const fmtHist = (metric: HistoricalMetric, v: number, asAvg = false): string => 
   return formatNumber(v);
 };
 
+/** Koreksi data operasional satu baris arsip. Field BB/JWP/Area/YL/<250/<300 opsional. */
+export interface ArchiveOpsPatch {
+  absenYl: number;
+  frekuensiAbsen: number;
+  tahunLalu: number;
+  akmBb?: number;
+  akmJwp?: number;
+  jumlahArea?: number;
+  jumlahYl?: number;
+  l250?: number;
+  l300?: number;
+}
+
 interface ArsipViewProps {
   state: AppState;
   onSaveCurrentMonthArchive: () => void;
@@ -154,7 +167,7 @@ interface ArsipViewProps {
   onManualSync?: () => void;
   onForcePushArchive?: () => void;
   /** Simpan koreksi Absen & Frekuensi per baris arsip (index baris -> nilai baru) */
-  onUpdateArchiveAbsen?: (archiveKey: string, patch: Record<number, { absenYl: number; frekuensiAbsen: number; tahunLalu: number }>) => void;
+  onUpdateArchiveAbsen?: (archiveKey: string, patch: Record<number, ArchiveOpsPatch>) => void;
   /** Simpan koreksi akumulasi penjualan per varian [YO, OM, OS, YT] per baris arsip */
   onUpdateArchiveVarian?: (archiveKey: string, patch: Record<number, [number, number, number, number]>) => void;
 }
@@ -188,7 +201,8 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
   const [showConfirmSaveMonth, setShowConfirmSaveMonth] = useState(false);
   // Mode koreksi Absen & Frekuensi (hanya arsip buatan sendiri yang kuncinya dibuka)
   const [editAbsen, setEditAbsen] = useState(false);
-  const [absenDraft, setAbsenDraft] = useState<Record<number, { abs: string; frk: string; ty: string }>>({});
+  type OpsDraft = { abs: string; frk: string; ty: string; bb: string; jwp: string; area: string; yl: string; l250: string; l300: string };
+  const [absenDraft, setAbsenDraft] = useState<Record<number, OpsDraft>>({});
 
   const hasSupabase = Boolean(state.supabaseConfig?.u && state.supabaseConfig?.k);
 
@@ -286,23 +300,54 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
     return { v, total, rata: Math.floor(total / (activeArchive.d || 30)) };
   };
   const startEditAbsen = () => {
-    const d: Record<number, { abs: string; frk: string; ty: string }> = {};
-    activeArchive.rows.forEach((r, i) => { d[i] = { abs: String(r.absenYl ?? 0), frk: String(r.frekuensiAbsen ?? 0), ty: String(r.tahunLalu ?? 0) }; });
+    const d: Record<number, OpsDraft> = {};
+    activeArchive.rows.forEach((r, i) => {
+      d[i] = {
+        abs: String(r.absenYl ?? 0), frk: String(r.frekuensiAbsen ?? 0), ty: String(r.tahunLalu ?? 0),
+        bb: String(r.akmBb ?? 0), jwp: String(r.akmJwp ?? 0), area: String(r.jumlahArea ?? 0), yl: String(r.jumlahYl ?? 0),
+        l250: String(r.l250 ?? 0), l300: String(r.l300 ?? 0)
+      };
+    });
     setAbsenDraft(d);
     setEditAbsen(true);
   };
+  const intOf = (x: string | undefined) => Math.max(0, Math.round(Number(String(x ?? '').replace(',', '.')) || 0));
   const saveEditAbsen = () => {
-    const patch: Record<number, { absenYl: number; frekuensiAbsen: number; tahunLalu: number }> = {};
+    const patch: Record<number, ArchiveOpsPatch> = {};
     Object.keys(absenDraft).forEach(k => {
       const i = Number(k);
-      const abs = Math.max(0, Math.round(Number(absenDraft[i].abs) || 0));
-      const frk = Math.max(0, Math.round(Number(absenDraft[i].frk) || 0));
-      const ty = Math.max(0, Math.round((Number(String(absenDraft[i].ty).replace(',', '.')) || 0) * 100) / 100);
-      patch[i] = { absenYl: abs, frekuensiAbsen: frk, tahunLalu: ty };
+      const dr = absenDraft[i];
+      const ty = Math.max(0, Math.round((Number(String(dr.ty).replace(',', '.')) || 0) * 100) / 100);
+      patch[i] = {
+        absenYl: intOf(dr.abs), frekuensiAbsen: intOf(dr.frk), tahunLalu: ty,
+        akmBb: intOf(dr.bb), akmJwp: intOf(dr.jwp), jumlahArea: intOf(dr.area), jumlahYl: intOf(dr.yl),
+        l250: intOf(dr.l250), l300: intOf(dr.l300)
+      };
     });
     onUpdateArchiveAbsen?.(activeKey, patch);
     setEditAbsen(false);
     showToast(`Perubahan arsip ${activeKey} disimpan`, 'success');
+  };
+  const opsInput = (idx: number, f: keyof OpsDraft, w = 'w-16') => (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={absenDraft[idx]?.[f] ?? ''}
+      onChange={e => { const v = e.target.value.replace(/[^\d]/g, ''); setAbsenDraft(d => ({ ...d, [idx]: { ...d[idx], [f]: v } })); }}
+      onFocus={e => e.target.select()}
+      className={`${w} px-1.5 py-1 text-right text-xs font-mono rounded-md border border-brand-400 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white`}
+    />
+  );
+  // Nilai turunan saat mode edit (rumus sama dengan saat arsip dibuat)
+  const trunc2 = (n: number): number => Math.floor(n * 100 + 1e-9) / 100;
+  const opsCalc = (idx: number, total: number) => {
+    const dr = absenDraft[idx];
+    const bb = intOf(dr?.bb), jwp = intOf(dr?.jwp), area = intOf(dr?.area), yl = intOf(dr?.yl);
+    return {
+      bbPct: (total + bb) > 0 ? trunc2((bb / (total + bb)) * 1000) / 1000 : 0,
+      syl: jwp > 0 ? Math.floor(total / jwp) : 0,
+      cover: area > 0 ? trunc2((yl / area) * 1000) / 1000 : 1
+    };
   };
   const editBar = (
     <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-neutral-100 dark:border-neutral-800">
@@ -310,10 +355,10 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
         <>
           <button type="button" onClick={saveEditAbsen} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">Simpan</button>
           <button type="button" onClick={() => setEditAbsen(false)} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200">Batal</button>
-          <span className="text-xs text-neutral-500">Isi Absen, Frekuensi, atau rata-rata Tahun Lalu tiap TKU</span>
+          <span className="text-xs text-neutral-500">Ubah Akm BB, Akm JWP, Absen, Frekuensi, Jml Area, Jml YL, YL &lt; 250, YL &lt; 300, atau Tahun Lalu tiap TKU. % BB, s/YL, dan Coverage dihitung ulang.</span>
         </>
       ) : canEditAbsen ? (
-        <button type="button" onClick={startEditAbsen} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-600 text-white hover:bg-brand-700">Edit Absen, Frekuensi &amp; Tahun Lalu</button>
+        <button type="button" onClick={startEditAbsen} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-600 text-white hover:bg-brand-700">Edit Data Operasional &amp; Tahun Lalu</button>
       ) : (
         <span className="text-xs text-neutral-500">
           {INITIAL_ARCHIVES[activeKey]
@@ -1264,16 +1309,16 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                           </span>
                         </td>
                         <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">
-                          {row.akmBb !== undefined ? formatNumber(row.akmBb) : '—'}
+                          {editAbsen ? opsInput(idx, 'bb', 'w-20') : (row.akmBb !== undefined ? formatNumber(row.akmBb) : '—')}
                         </td>
-                        <td className={`py-3 px-3 text-right font-semibold ${getBbStatusClass(row.akmBbPct)}`}>
-                          {row.akmBbPct !== undefined ? formatPercent(row.akmBbPct) : '—'}
+                        <td className={`py-3 px-3 text-right font-semibold ${getBbStatusClass(editAbsen ? opsCalc(idx, row.total).bbPct : row.akmBbPct)}`}>
+                          {editAbsen ? formatPercent(opsCalc(idx, row.total).bbPct) : (row.akmBbPct !== undefined ? formatPercent(row.akmBbPct) : '—')}
                         </td>
                         <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">
-                          {row.akmJwp !== undefined ? formatNumber(row.akmJwp) : '—'}
+                          {editAbsen ? opsInput(idx, 'jwp', 'w-20') : (row.akmJwp !== undefined ? formatNumber(row.akmJwp) : '—')}
                         </td>
                         <td className="py-3 px-3 text-right font-bold text-neutral-900 dark:text-neutral-100">
-                          {row.sYl !== undefined ? row.sYl : '—'}
+                          {editAbsen ? opsCalc(idx, row.total).syl : (row.sYl !== undefined ? row.sYl : '—')}
                         </td>
                         <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">
                           {editAbsen ? (
@@ -1300,23 +1345,27 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                           ) : (row.frekuensiAbsen !== undefined ? row.frekuensiAbsen : '—')}
                         </td>
                         <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">
-                          {row.jumlahArea !== undefined ? row.jumlahArea : '—'}
+                          {editAbsen ? opsInput(idx, 'area') : (row.jumlahArea !== undefined ? row.jumlahArea : '—')}
                         </td>
                         <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">
-                          {row.jumlahYl !== undefined ? row.jumlahYl : '—'}
+                          {editAbsen ? opsInput(idx, 'yl') : (row.jumlahYl !== undefined ? row.jumlahYl : '—')}
                         </td>
                         <td className="py-3 px-4 text-right font-bold">
-                          {row.coverageArea !== undefined ? (
+                          {editAbsen ? (
+                            <span className={opsCalc(idx, row.total).cover >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>
+                              {formatPercent(opsCalc(idx, row.total).cover)}
+                            </span>
+                          ) : row.coverageArea !== undefined ? (
                             <span className={row.coverageArea >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>
                               {formatPercent(row.coverageArea)}
                             </span>
                           ) : '—'}
                         </td>
                         <td className="py-3 px-3 text-right font-bold text-red-600 dark:text-red-400 border-l border-neutral-200 dark:border-neutral-700">
-                          {row.l250 !== undefined ? row.l250 : '—'}
+                          {editAbsen ? opsInput(idx, 'l250') : (row.l250 !== undefined ? row.l250 : '—')}
                         </td>
                         <td className="py-3 px-3 text-right font-bold text-amber-600 dark:text-amber-400">
-                          {row.l300 !== undefined ? row.l300 : '—'}
+                          {editAbsen ? opsInput(idx, 'l300') : (row.l300 !== undefined ? row.l300 : '—')}
                         </td>
                       </tr>
                     ))}

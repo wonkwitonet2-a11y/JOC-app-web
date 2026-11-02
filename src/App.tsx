@@ -1586,10 +1586,11 @@ export default function App() {
 
   const handleUpdateArchiveAbsen = async (
     archiveKey: string,
-    patch: Record<number, { absenYl: number; frekuensiAbsen: number; tahunLalu: number }>
+    patch: Record<number, { absenYl: number; frekuensiAbsen: number; tahunLalu: number; akmBb?: number; akmJwp?: number; jumlahArea?: number; jumlahYl?: number; l250?: number; l300?: number }>
   ) => {
     const arc = state.archives[archiveKey];
     if (!arc) return;
+    const trunc2 = (n: number): number => Math.floor(n * 100 + 1e-9) / 100;
     const nextState: AppState = {
       ...state,
       archives: {
@@ -1601,7 +1602,26 @@ export default function App() {
             if (!pt) return r;
             // % vs tahun lalu = rata harian ÷ rata harian tahun lalu (rumus sama dengan saat arsip dibuat; tanpa tahun lalu = 1)
             const vsLyPct = pt.tahunLalu > 0 ? Math.floor(((r.rataHarian || 0) / pt.tahunLalu) * 1000 * 100 + 1e-9) / 100 / 1000 : 1;
-            return { ...r, absenYl: pt.absenYl, frekuensiAbsen: pt.frekuensiAbsen, tahunLalu: pt.tahunLalu, vsLyPct };
+            const next = { ...r, absenYl: pt.absenYl, frekuensiAbsen: pt.frekuensiAbsen, tahunLalu: pt.tahunLalu, vsLyPct };
+            // Akm BB, Akm JWP, Jml Area, Jml YL, YL<250, YL<300 (opsional) + turunannya dihitung ulang dengan rumus saat arsip dibuat
+            const sold = r.total || 0;
+            if (pt.akmBb !== undefined) {
+              next.akmBb = pt.akmBb;
+              next.akmBbPct = (sold + pt.akmBb) > 0 ? trunc2((pt.akmBb / (sold + pt.akmBb)) * 1000) / 1000 : 0;
+            }
+            if (pt.akmJwp !== undefined) {
+              next.akmJwp = pt.akmJwp;
+              next.sYl = pt.akmJwp > 0 ? Math.floor(sold / pt.akmJwp) : 0;
+            }
+            if (pt.jumlahArea !== undefined) next.jumlahArea = pt.jumlahArea;
+            if (pt.jumlahYl !== undefined) next.jumlahYl = pt.jumlahYl;
+            if (pt.jumlahArea !== undefined || pt.jumlahYl !== undefined) {
+              const area = next.jumlahArea || 0;
+              next.coverageArea = area > 0 ? trunc2(((next.jumlahYl || 0) / area) * 1000) / 1000 : 1;
+            }
+            if (pt.l250 !== undefined) next.l250 = pt.l250;
+            if (pt.l300 !== undefined) next.l300 = pt.l300;
+            return next;
           })
         }
       }
