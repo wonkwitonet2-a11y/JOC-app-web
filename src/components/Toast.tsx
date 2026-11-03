@@ -35,7 +35,7 @@ export const ToastContainer: React.FC<ToastProps> = ({ toasts, onDismiss }) => {
               {isSuccess && <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />}
               {isError && <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />}
               {!isSuccess && !isError && <Info className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />}
-              <p className="text-xs font-medium leading-relaxed truncate">{toast.message}</p>
+              <p className="text-xs font-medium leading-relaxed break-words">{toast.message}</p>
             </div>
             <button
               onClick={() => onDismiss(toast.id)}

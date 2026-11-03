@@ -129,6 +129,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   const [internalSubMenu] = useState<TkuSubMenu>('ringkasan');
   const [bdPopup, setBdPopup] = useState(false); // popup Salin/Tempel breakdown: muncul saat sel ditahan
   const [bdFabMin, setBdFabMin] = useState(false); // popup diperkecil jadi bulatan
+  const [bdPopupPos, setBdPopupPos] = useState<{ left: number; top: number; width: number } | null>(null); // posisi toolbar melayang (dekat sel)
   const activeSubMenu = activeSubMenuProp !== undefined ? activeSubMenuProp : internalSubMenu;
   
   const tkuIdx = state.activeTkuId;
@@ -247,8 +248,6 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   const bdDragging = useRef(false);
   // Mode Pilih Sel (untuk HP / layar sentuh): ketuk sel awal, lalu ketuk sel akhir
   const [bdSelMode, setBdSelMode] = useState<boolean>(false);
-  const [showPasteModal, setShowPasteModal] = useState<boolean>(false);
-  const [pasteModalText, setPasteModalText] = useState<string>('');
   const bdClipRef = useRef<string>('');
   const bdWrapRef = useRef<HTMLDivElement | null>(null);
   const [bdWrapEl, setBdWrapEl] = useState<HTMLDivElement | null>(null);
@@ -840,12 +839,32 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     const r = getBdRect();
     if (!r) { showToast('Pilih sel tujuan dulu.', 'info'); return; }
     let text = '';
+    let errInfo = '';
     try {
+      if (typeof document !== 'undefined' && !document.hasFocus()) {
+        try { window.focus(); } catch { /* abaikan */ }
+      }
       if (navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
         text = await navigator.clipboard.readText();
+      } else {
+        errInfo = 'navigator.clipboard.readText tidak tersedia';
       }
-    } catch {
+    } catch (err) {
       text = '';
+      errInfo = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    }
+    if (!(text && text.trim())) {
+      // Data diagnosa: supaya penyebab gagalnya baca clipboard terlihat jelas di kotak tempel
+      try {
+        const doc = document as unknown as {
+          permissionsPolicy?: { allowsFeature?: (f: string) => boolean };
+          featurePolicy?: { allowsFeature?: (f: string) => boolean };
+        };
+        const pol = doc.permissionsPolicy?.allowsFeature?.('clipboard-read') ?? doc.featurePolicy?.allowsFeature?.('clipboard-read');
+        let perm = '?';
+        try { perm = (await navigator.permissions.query({ name: 'clipboard-read' as PermissionName })).state; } catch { perm = 'tidak bisa dicek'; }
+        errInfo += ` | fokus=${document.hasFocus()} | iframe=${window.self !== window.top} | kebijakan-iframe=${pol === undefined ? '?' : pol} | izin=${perm} | aktif=${(document.activeElement as HTMLElement | null)?.tagName ?? '-'} | aman=${window.isSecureContext}`;
+      } catch { /* abaikan */ }
     }
     if (text && text.trim()) {
       pasteText(text, r.d1, VAR_CODES[r.v1]);
@@ -860,8 +879,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     }
     // Clipboard tidak terbaca (mis. WebView) atau salinan dari luar aplikasi:
     // buka kotak tempel. Tahan kotak -> muncul bubble putih "Tempel" bawaan Android.
-    setPasteModalText('');
-    setShowPasteModal(true);
+    showToast(`Tempel gagal: ${errInfo || 'clipboard kosong / tidak terbaca'}`, 'error');
   };
 
   useEffect(() => {
@@ -882,6 +900,43 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     window.addEventListener('paste', handleNativePaste);
     return () => window.removeEventListener('paste', handleNativePaste);
   }, [activeSubMenu, selA, selB, DIM, editPastPlan]);
+  // Posisi toolbar melayang: tepat di atas sel terpilih (atau di bawahnya kalau tidak muat), ikut bergeser saat tabel di-scroll.
+  useEffect(() => {
+    if (!bdPopup) { setBdPopupPos(null); return; }
+    let raf = 0;
+    const compute = () => {
+      const r = getBdRect();
+      if (!r) { setBdPopupPos(null); return; }
+      const ea = document.getElementById(`bd-input-${r.d1}-${VAR_CODES[r.v1]}`);
+      const eb = document.getElementById(`bd-input-${r.d2}-${VAR_CODES[r.v2]}`);
+      if (!ea || !eb) { setBdPopupPos(null); return; }
+      const ra = ea.getBoundingClientRect();
+      const rb = eb.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.visualViewport?.height ?? window.innerHeight;
+      const width = Math.min(330, vw - 16);
+      const H = 52;
+      const cx = (Math.min(ra.left, rb.left) + Math.max(ra.right, rb.right)) / 2;
+      const left = Math.min(Math.max(cx - width / 2, 8), vw - width - 8);
+      let top = Math.min(ra.top, rb.top) - H - 10;
+      if (top < 8) top = Math.max(ra.bottom, rb.bottom) + 10;
+      top = Math.min(Math.max(top, 8), vh - H - 8);
+      setBdPopupPos(prev => (prev && prev.left === left && prev.top === top && prev.width === width) ? prev : { left, top, width });
+    };
+    const schedule = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(compute); };
+    compute();
+    window.addEventListener('scroll', schedule, true);
+    window.addEventListener('resize', schedule);
+    window.visualViewport?.addEventListener('resize', schedule);
+    document.addEventListener('focusin', schedule);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', schedule, true);
+      window.removeEventListener('resize', schedule);
+      window.visualViewport?.removeEventListener('resize', schedule);
+      document.removeEventListener('focusin', schedule);
+    };
+  }, [bdPopup, selA, selB, activeSubMenu]);
   const handleBtnClear = () => {
     if (!getBdRect()) { showToast('Pilih sel dulu.', 'info'); return; }
     const n = clearBdSelection();
@@ -3067,132 +3122,40 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                     </p>
                   </div>
                   {/* Popup melayang: muncul saat sel ditahan. Pilih Sel, Salin, Potong, Tempel, Hapus. Bisa diperkecil / ditutup. */}
-                  {bdPopup && createPortal(
-                    bdFabMin ? (
-                      <button
-                        type="button"
-                        onClick={() => setBdFabMin(false)}
-                        aria-label="Tampilkan tombol Salin dan Tempel"
-                        className="fixed right-3 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] md:bottom-5 z-40 w-11 h-11 rounded-full bg-brand-600 text-white shadow-lg shadow-black/25 flex items-center justify-center active:scale-95 transition-transform"
-                      >
-                        <ClipboardPaste className="w-5 h-5" />
-                      </button>
-                    ) : (
-                      <div className="fixed right-3 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] md:bottom-5 z-40 max-w-[calc(100vw-1.5rem)] rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-white/95 dark:bg-neutral-900/95 backdrop-blur shadow-xl shadow-black/20 text-xs">
-                        <div className="flex items-center justify-between gap-2 px-2.5 pt-1.5 text-[11px] text-neutral-500 dark:text-neutral-400">
-                          <span className="truncate">
-                            {(() => {
-                              const r = getBdRect();
-                              if (bdSelMode) return r && isBdMulti() ? `${(r.d2 - r.d1 + 1) * (r.v2 - r.v1 + 1)} sel dipilih` : (r ? 'Ketuk sel akhir yang mau diblok' : 'Ketuk sel awal lalu sel akhir');
-                              return r ? (isBdMulti() ? `${(r.d2 - r.d1 + 1) * (r.v2 - r.v1 + 1)} sel (tgl ${r.d1}–${r.d2})` : `Tgl ${r.d1} · ${VAR_CODES[r.v1]}`) : 'Pilih sel';
-                            })()}
-                          </span>
-                          <span className="flex items-center shrink-0">
-                            <button type="button" onClick={handleBtnPaste} className="mr-1 px-1.5 h-6 rounded-md text-[11px] font-semibold text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-950/40 whitespace-nowrap">Tempel Langsung</button>
-                            <button type="button" onClick={() => { setBdFabMin(true); setBdSelMode(false); }} aria-label="Perkecil" className="w-7 h-6 rounded-md flex items-center justify-center text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"><ChevronDown className="w-4 h-4" /></button>
-                            <button type="button" onClick={() => { setBdPopup(false); setBdSelMode(false); setSelA(null); setSelB(null); }} aria-label="Tutup" className="w-7 h-6 rounded-md flex items-center justify-center text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"><X className="w-4 h-4" /></button>
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1 p-1.5">
-                          <button type="button" onClick={() => { setSelA(null); setSelB(null); setBdSelMode(v => !v); }} aria-pressed={bdSelMode} className="inline-flex flex-col items-center justify-center gap-0.5 w-11 h-11 rounded-xl font-semibold active:scale-95 transition-all text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800">
-                            <Layers className={`w-4 h-4 ${bdSelMode ? 'text-indigo-600 dark:text-indigo-300' : ''}`} /><span className={`text-[10px] leading-none ${bdSelMode ? 'text-indigo-600 dark:text-indigo-300' : ''}`}>{bdSelMode ? 'Selesai' : 'Pilih Sel'}</span>
-                          </button>
-                          <button type="button" onClick={handleBtnCopy} className="inline-flex flex-col items-center justify-center gap-0.5 w-11 h-11 rounded-xl font-semibold active:scale-95 transition-all text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800">
-                            <Copy className="w-4 h-4" /><span className="text-[10px] leading-none">Salin</span>
-                          </button>
-                          <button type="button" onClick={handleBtnCut} className="inline-flex flex-col items-center justify-center gap-0.5 w-11 h-11 rounded-xl font-semibold active:scale-95 transition-all text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800">
-                            <Scissors className="w-4 h-4" /><span className="text-[10px] leading-none">Potong</span>
-                          </button>
-                          <button type="button" onClick={handleBtnPaste} className="inline-flex flex-col items-center justify-center gap-0.5 w-11 h-11 rounded-xl font-semibold active:scale-95 transition-all bg-brand-600 text-white hover:bg-brand-700">
-                            <ClipboardPaste className="w-4 h-4" /><span className="text-[10px] leading-none">Tempel</span>
-                          </button>
-                          <button type="button" onClick={handleBtnClear} className="inline-flex flex-col items-center justify-center gap-0.5 w-11 h-11 rounded-xl font-semibold active:scale-95 transition-all text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40">
-                            <Trash2 className="w-4 h-4" /><span className="text-[10px] leading-none">Hapus</span>
-                          </button>
-                        </div>
-                      </div>
-                    ),
-                    document.body
-                  )}
-                  {showPasteModal && createPortal(
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-                      <div className="bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl p-5 md:p-6 w-full max-w-md space-y-4">
-                        <div className="flex items-center justify-between border-b border-neutral-100 dark:border-neutral-800 pb-3">
-                          <h3 className="text-sm font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
-                            <ClipboardPaste className="w-5 h-5 text-brand-600 dark:text-brand-400" />
-                            <span>Tempel Data dari Excel / Spreadsheets</span>
-                          </h3>
-                          <button
-                            type="button"
-                            onClick={() => { setShowPasteModal(false); setPasteModalText(''); }}
-                            className="p-1.5 rounded-lg text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-
-                        <div className="space-y-2 text-xs text-neutral-600 dark:text-neutral-300">
-                          <p>
-                            Salin datanya dulu, lalu <b>tahan kotak di bawah ini beberapa detik</b> sampai muncul tombol putih <b>Tempel</b>, kemudian ketuk tombol itu:
-                          </p>
-                          <textarea
-                            autoFocus
-                            rows={5}
-                            value={pasteModalText}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setPasteModalText(val);
-                              if (val.trim()) {
-                                const rect = getBdRect();
-                                if (rect) {
-                                  pasteText(val, rect.d1, VAR_CODES[rect.v1]);
-                                  setShowPasteModal(false);
-                                  setPasteModalText('');
-                                }
-                              }
-                            }}
-                            onPaste={(e) => {
-                              const pasted = e.clipboardData.getData('text/plain') || e.clipboardData.getData('text');
-                              if (pasted && pasted.trim()) {
-                                e.preventDefault();
-                                const rect = getBdRect();
-                                if (rect) {
-                                  pasteText(pasted, rect.d1, VAR_CODES[rect.v1]);
-                                  setShowPasteModal(false);
-                                  setPasteModalText('');
-                                }
-                              }
-                            }}
-                            placeholder="Klik di sini lalu tekan Ctrl + V (atau Tahan & Tempel)..."
-                            className="w-full p-3 rounded-2xl border border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 font-mono text-xs text-neutral-900 dark:text-neutral-100 focus:ring-2 focus:ring-brand-500 focus:outline-none"
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
-                          <button
-                            type="button"
-                            onClick={() => { setShowPasteModal(false); setPasteModalText(''); }}
-                            className="px-4 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs font-semibold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800"
-                          >
-                            Batal
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const rect = getBdRect();
-                              if (rect && pasteModalText.trim()) {
-                                pasteText(pasteModalText, rect.d1, VAR_CODES[rect.v1]);
-                                setShowPasteModal(false);
-                                setPasteModalText('');
-                              } else {
-                                showToast('Kotak masih kosong. Tempelkan data Excel dulu.', 'info');
-                              }
-                            }}
-                            className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-md shadow-brand-600/20"
-                          >
-                            Proses Tempel Ke Tabel
-                          </button>
-                        </div>
+                  {bdPopup && bdPopupPos && createPortal(
+                    <div
+                      data-bd-toolbar="true"
+                      style={{ position: 'fixed', left: bdPopupPos.left, top: bdPopupPos.top, width: bdPopupPos.width, zIndex: 9999 }}
+                      className="bg-neutral-900/95 text-white px-2 py-1.5 flex items-center justify-between gap-1 shadow-2xl rounded-xl border border-neutral-700/80 backdrop-blur-md select-none"
+                    >
+                      <span className="shrink-0 text-xs font-bold bg-brand-600/30 text-brand-300 border border-brand-500/40 px-2 py-0.5 rounded-md font-mono">
+                        {(() => {
+                          const r = getBdRect();
+                          if (!r) return bdSelMode ? 'Pilih' : '–';
+                          const rows = r.d2 - r.d1 + 1; const cols = r.v2 - r.v1 + 1;
+                          return `${rows}x${cols} (${rows * cols})`;
+                        })()}
+                      </span>
+                      <div className="flex items-center gap-0.5">
+                        <button type="button" title="Pilih Sel" aria-pressed={bdSelMode} onClick={() => { setSelA(null); setSelB(null); setBdSelMode(v => !v); }} className="inline-flex items-center justify-center w-9 h-9 rounded-lg active:scale-95 transition-colors cursor-pointer select-none hover:bg-neutral-800">
+                          <Layers className={`w-4 h-4 ${bdSelMode ? 'text-indigo-300' : 'text-indigo-400'}`} />
+                        </button>
+                        <button type="button" title="Salin" onClick={handleBtnCopy} className="inline-flex items-center justify-center w-9 h-9 rounded-lg active:scale-95 transition-colors cursor-pointer select-none text-brand-400 hover:bg-neutral-800">
+                          <Copy className="w-4 h-4" />
+                        </button>
+                        <button type="button" title="Potong" onClick={handleBtnCut} className="inline-flex items-center justify-center w-9 h-9 rounded-lg active:scale-95 transition-colors cursor-pointer select-none text-amber-400 hover:bg-neutral-800">
+                          <Scissors className="w-4 h-4" />
+                        </button>
+                        <button type="button" title="Tempel" onClick={handleBtnPaste} className="inline-flex items-center justify-center w-9 h-9 rounded-lg active:scale-95 transition-colors cursor-pointer select-none text-emerald-400 hover:bg-neutral-800">
+                          <ClipboardPaste className="w-4 h-4" />
+                        </button>
+                        <button type="button" title="Hapus" onClick={handleBtnClear} className="inline-flex items-center justify-center w-9 h-9 rounded-lg active:scale-95 transition-colors cursor-pointer select-none text-rose-400 hover:bg-neutral-800">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                        <div className="w-px h-5 bg-neutral-700 mx-0.5" />
+                        <button type="button" title="Tutup" onClick={() => { setBdPopup(false); setBdSelMode(false); setSelA(null); setSelB(null); }} className="inline-flex items-center justify-center w-8 h-9 rounded-lg text-neutral-400 hover:bg-neutral-800 hover:text-white cursor-pointer">
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>,
                     document.body
