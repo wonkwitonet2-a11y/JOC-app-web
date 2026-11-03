@@ -485,7 +485,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const peringkatData = hitungPeringkat(rankedTkus.map(buildPeringkatInput), divider);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0 max-w-full">
       {/* Top Bar with Segmented Rayon Controls & Pemilih Akun */}
       <div className="flex flex-col @2xl:flex-row @2xl:items-center @2xl:justify-between gap-4 p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
         <div>
@@ -861,7 +861,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* Master TKU Table: Rekap Penjualan (kondisi operasional lengkap ada di Evaluasi > Tabel Utuh) */}
-      <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm p-5 space-y-4">
+      <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm p-5 space-y-4 min-w-0">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -874,9 +874,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full">
             {/* Pilih tampilan tabel: Penjualan atau Kondisi TKU */}
-            <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl shrink-0">
+            <div className="inline-flex max-w-full overflow-x-auto p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl">
               {([['penjualan', 'Peringkat Penjualan'], ['kondisi', 'Peringkat Kondisi TKU'], ['peringkat', 'Peringkat Total']] as const).map(([id, label]) => (
                 <button
                   key={id}
