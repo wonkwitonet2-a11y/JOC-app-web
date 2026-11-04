@@ -1816,7 +1816,9 @@ export function getDefaultState(): AppState {
   // Jika kalender sudah di bulan yang lebih baru (mis. Oktober 2026),
   // arsipkan data September 2026 secara resmi dan mulai langsung di bulan berjalan!
   if (nowKey > SEED_PERIOD) {
-    const sepArchive = buildArchiveFromState(seedState);
+    // u: 0 = arsip bawaan hasil buatan otomatis (belum pernah diedit pengguna). Jangan diberi cap waktu baru,
+    // kalau tidak arsip kosong ini akan "menang" saat sinkron dan menimpa koreksi Absen/Frekuensi dari HP lain.
+    const sepArchive = { ...buildArchiveFromState(seedState), u: 0 };
     const withArchive: AppState = {
       ...seedState,
       archives: { ...seedState.archives, [SEED_PERIOD]: sepArchive },

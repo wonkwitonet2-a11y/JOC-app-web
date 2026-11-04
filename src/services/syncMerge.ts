@@ -362,6 +362,8 @@ function runMerge(base: Syncable | null, local: Syncable, remote: Syncable, nb: 
         const lTime = Number(lArc.u) || 0;
         const rTime = Number(rArc.u) || 0;
 
+        // Arsip tanpa cap waktu (u kosong/0) = hasil buatan otomatis yang belum pernah diedit:
+        // tidak boleh menimpa arsip yang sudah punya cap waktu (pernah disimpan/dikoreksi pengguna).
         const winner = lTime > rTime ? lArc : (rTime > lTime ? rArc : lArc);
         const other = winner === lArc ? rArc : lArc;
 
