@@ -98,6 +98,7 @@ export function buildNotes(ev: ProgressEval, units: EvalUnit[], total: EvalUnit)
   // 3d. Realisasi vs breakdown (rencana PIC TKU) minggu ini, dihitung per minggu bukan per hari.
   // Ada TKU di bawah 90% -> sebut semuanya (paling jauh di bawah rencana dulu).
   // Tidak ada -> cukup satu TKU yang terendah, warna mengikuti persentasenya.
+  // Bila yang terendah pun sudah >= 100% (semua mencapai breakdown), catatan ini tidak ditampilkan.
   // Penilaian memakai angka yang tampil di layar (dipotong 1 desimal) supaya warna & angka cocok.
   const planList = units
     .filter(u => u.week.planCur > 0)
@@ -112,7 +113,8 @@ export function buildNotes(ev: ProgressEval, units: EvalUnit[], total: EvalUnit)
     const low = planList.filter(x => x.s < PLAN_MERAH);
     if (low.length > 0) {
       notes.push({ tone: 'bad', text: `Di bawah breakdown (< 90%) minggu ini: ${fmtPlan(low)}.` });
-    } else {
+    } else if (planList[0].s < 1) {
+      // Yang sudah mencapai / melebihi breakdown (>= 100%) tidak disebut; hanya yang masih kurang.
       const bottom = planList[0];
       const label = planList.length > 1 ? 'Realisasi terendah vs breakdown minggu ini' : 'Realisasi vs breakdown minggu ini';
       const warn = bottom.s < PLAN_WARN;
