@@ -7,7 +7,7 @@
 
 // Kata penghubung / sebutan umum yang tidak membedakan topik.
 const STOP = new Set([
-  'yl', 'syl', 's', 'yang', 'yg', 'dengan', 'dgn', 'dan', 'di', 'ke', 'untuk', 'utk', 'pada',
+  'yl', 'syl', 's', 'ada', 'yang', 'yg', 'dengan', 'dgn', 'dan', 'di', 'ke', 'untuk', 'utk', 'pada',
   'btl', 'bt', 'botol', 'per', 'hari', 'hr', 'rata', 'rata2', 'ratarata', 'masalah', 'kendala', 'topik'
 ]);
 
@@ -21,6 +21,9 @@ export function canonTopik(raw?: string): string {
   if (!t.trim()) return '';
   t = t.replace(/s\s*\/\s*yl/g, ' syl ');
   t = t.replace(/(\d)[.,](\d{3})(?!\d)/g, '$1$2'); // 1.000 -> 1000
+  // Sinonim: "balik botol" = "kembali botol" = "BB" = "KB" -> satu istilah (bb)
+  t = t.replace(/\b(?:balik|kembali|kembalian|return)\s+botol\b/g, ' bb ').replace(/\bbotol\s+(?:balik|kembali)\b/g, ' bb ');
+  t = t.replace(/\b(?:kb|bk)\b/g, ' bb ');
   t = t.replace(LESS, ' < ').replace(MORE, ' > ');
   t = t.replace(/[^a-z0-9<>\s]/g, ' ');
   // pisahkan angka dari huruf: "250btl" -> "250 btl", "yl250" -> "yl 250"

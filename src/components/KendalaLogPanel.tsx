@@ -255,15 +255,17 @@ export const KendalaLogPanel: React.FC<Props> = ({ state, selectedRayon, onSaveR
       </div>
 
       {rekap.length > 0 && (
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           <span className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1"><BarChart3 className="w-3 h-3" />Topik terbanyak</span>
           {(showAllRekap ? rekap : rekap.slice(0, REKAP_AWAL)).map(r => (
-            <div key={r.label} className="flex items-center gap-2 text-xs">
-              <span className="w-32 shrink-0 font-semibold text-neutral-700 dark:text-neutral-300 truncate" title={r.variants.length > 1 ? `${r.label} (digabung dari: ${r.variants.join(' | ')})` : r.label}>{r.label}</span>
-              <div className="flex-1 h-2 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
-                <div className="h-full rounded-full bg-brand-600" style={{ width: `${(r.count / maxCount) * 100}%` }} />
+            <div key={r.label} className="text-xs" title={r.variants.length > 1 ? `Digabung dari: ${r.variants.join(' | ')}` : undefined}>
+              <span className="block font-semibold text-neutral-700 dark:text-neutral-300 break-words leading-snug">{r.label}</span>
+              <div className="flex items-center gap-2 mt-0.5">
+                <div className="flex-1 h-2 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
+                  <div className="h-full rounded-full bg-brand-600" style={{ width: `${(r.count / maxCount) * 100}%` }} />
+                </div>
+                <span className="w-6 text-right font-mono font-bold text-neutral-700 dark:text-neutral-300">{r.count}</span>
               </div>
-              <span className="w-6 text-right font-mono font-bold text-neutral-700 dark:text-neutral-300">{r.count}</span>
             </div>
           ))}
           {rekap.length > REKAP_AWAL && (
