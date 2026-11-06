@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { 
   TrendingUp, 
-  Award, 
-  AlertTriangle, 
   Table as TableIcon, 
   FileSpreadsheet, 
   Sparkles,
@@ -191,23 +189,20 @@ const RingkasanPrestasiPanel: React.FC<RingkasanPrestasiPanelProps> = ({
       className={`p-2 sm:p-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xs flex flex-col justify-center gap-1 min-w-0 overflow-hidden cursor-pointer hover:border-brand-500/50 hover:shadow-xs transition-all group ${c.span2 && isCompact ? 'col-span-2' : ''}`}
     >
       {/* Baris 1: Judul Kategori | Nilainya */}
-      <div className="flex items-center justify-between gap-1 leading-tight">
-        <div className="flex items-center gap-1.5 min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 leading-tight">
+        <div className="flex items-center gap-1.5 shrink-0">
           <c.icon className={`w-3.5 h-3.5 ${c.iconColor} shrink-0`} />
-          <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 truncate">
+          <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 whitespace-nowrap">
             {c.title}
           </span>
         </div>
-        <div className="flex items-center gap-1 shrink-0 font-mono text-xs">
-          <span className="text-neutral-300 dark:text-neutral-600 font-normal">|</span>
-          <span className={`font-bold ${c.valColor}`}>{c.value}</span>
-        </div>
+        <span className={`ml-auto font-mono text-xs font-bold whitespace-nowrap ${c.valColor}`}>{c.value}</span>
       </div>
 
       {/* Baris 2: TKU tsb. */}
       <div className="min-w-0 mt-0.5 pt-1 border-t border-neutral-100 dark:border-neutral-800/80">
         <span 
-          className="text-xs font-semibold text-neutral-600 dark:text-neutral-300 block leading-snug break-words group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors line-clamp-2" 
+          className={`text-xs font-semibold text-neutral-600 dark:text-neutral-300 block leading-snug break-words group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors ${isCompact ? 'line-clamp-2' : ''}`} 
           title={c.shortNames}
         >
           {c.shortNames}
@@ -335,9 +330,6 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
     : r2Rows;
 
   // Sorting for performance analysis
-  const sortedByPerf = [...displayedRows].sort((a, b) => b.vsTgPct - a.vsTgPct);
-  const top3Tkus = sortedByPerf.slice(0, 3);
-  const bottom3Tkus = [...displayedRows].sort((a, b) => a.vsTgPct - b.vsTgPct).slice(0, 3);
 
   return (
     <div className="space-y-6">
@@ -562,71 +554,6 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
             showToast={showToast}
             afterCapaian={<RekapMingguanChart state={state} weeks={weeks} selectedRayon={selectedRayon} />}
           />
-
-          {/* Top Performer vs Bottom Performer Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Top 3 Performers */}
-            <div className="p-5 rounded-3xl bg-white dark:bg-neutral-900 border border-emerald-200/80 dark:border-emerald-900/50 shadow-sm space-y-3 min-w-0 h-full">
-              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-sm">
-                <Award className="w-5 h-5" />
-                <h3>3 TKU Terbaik</h3>
-              </div>
-              <div className="space-y-2">
-                {top3Tkus.map((r, i) => (
-                  <div key={r.tku.id} className="p-3 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <span className="w-6 h-6 shrink-0 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center">
-                        {i + 1}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="font-bold text-xs text-neutral-900 dark:text-white break-words">{r.tku.nama} (Rayon {r.tku.rayon})</p>
-                        <span className="text-xs text-neutral-500 font-mono block break-words">
-                          Rata: {formatNumber(r.rata2)} btl/hr &bull; s/YL: {r.syl} &bull; % BB: {formatPercent(r.pctBb)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <span className="text-sm font-bold font-mono break-words leading-tight text-emerald-600 dark:text-emerald-400">
-                        {formatPercent(r.vsTgPct)}
-                      </span>
-                      <span className="text-xs text-neutral-400 block">vs Target</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Bottom 3 Performers */}
-            <div className="p-5 rounded-3xl bg-white dark:bg-neutral-900 border border-red-200/80 dark:border-red-900/50 shadow-sm space-y-3 min-w-0 h-full">
-              <div className="flex items-center gap-2 text-red-600 dark:text-red-400 font-bold text-sm">
-                <AlertTriangle className="w-5 h-5" />
-                <h3>3 TKU Perlu Pembinaan</h3>
-              </div>
-              <div className="space-y-2">
-                {bottom3Tkus.map((r, i) => (
-                  <div key={r.tku.id} className="p-3 rounded-2xl bg-red-50/50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/40 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <span className="w-6 h-6 shrink-0 rounded-full bg-red-600 text-white font-bold text-xs flex items-center justify-center">
-                        {i + 1}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="font-bold text-xs text-neutral-900 dark:text-white break-words">{r.tku.nama} (Rayon {r.tku.rayon})</p>
-                        <span className="text-xs text-neutral-500 font-mono block break-words">
-                          Rata: {formatNumber(r.rata2)} btl/hr &bull; YL &lt; 250: {r.l250} ({formatPercent(r.pctL250)})
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <span className="text-sm font-bold font-mono break-words leading-tight text-red-600 dark:text-red-400">
-                        {formatPercent(r.vsTgPct)}
-                      </span>
-                      <span className="text-xs text-neutral-400 block">vs Target</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
 
           {/* Rangkuman Analisa Eksekutif */}
           <div className="p-6 bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-sm space-y-4">

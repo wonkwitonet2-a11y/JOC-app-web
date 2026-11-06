@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ClipboardList, BarChart3, Search, ChevronDown, ChevronRight, Copy, LayoutGrid, Rows3, CheckCircle2 } from 'lucide-react';
+import { ClipboardList, BarChart3, Search, ChevronDown, ChevronRight, Copy, LayoutGrid, Rows3, CheckCircle2, Tags } from 'lucide-react';
 import { AppState } from '../types';
 import { getPeriodInfo } from '../services/storage';
-import { buildWaText, copyText, fmtTgl, groupKey, listLog, LogEntry, normTopik, rekapTopik, STATUS_SOLUSI } from '../services/weeklyNotes';
+import { buildWaText, copyText, fmtTgl, groupKey, listLog, LogEntry, normTopik, STATUS_SOLUSI } from '../services/weeklyNotes';
 import { ReplyBox } from './CatatanMingguanPanel';
+import { canonTopik, clusterTopik, TopikCluster, topikClusterOf } from '../services/topikGroup';
 
 interface Props {
   state: AppState;
@@ -12,7 +13,7 @@ interface Props {
   showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-type ViewMode = 'papan' | 'dropdown';
+type ViewMode = 'papan' | 'dropdown' | 'topik';
 const VIEW_KEY = 'kendala-admin-view';
 
 const dash = <span className="text-neutral-400">—</span>;
@@ -39,8 +40,10 @@ const EntryTable: React.FC<{
   onCopy?: () => void;
   copyCount?: number;
   dim?: boolean;
-}> = ({ e, reply, onSaveReply, showToast, onCopy, copyCount = 1, dim }) => {
+  tkuName?: string;
+}> = ({ e, reply, onSaveReply, showToast, onCopy, copyCount = 1, dim, tkuName }) => {
   const rows: [string, React.ReactNode][] = [
+    ...(tkuName ? [['TKU', <span className="font-bold text-brand-700 dark:text-brand-300">{tkuName}</span>] as [string, React.ReactNode]] : []),
     ['Topik', <span className="font-semibold">{e.v.tp || dash}{e.v.legacy && <span className="block text-[10px] text-neutral-400">catatan lama</span>}</span>],
     ['Siapa', <span className="font-bold">{e.v.ar || dash}</span>],
     ['Kapan', <span className="font-mono">{fmtTgl(e.v.d) || dash}</span>],
@@ -142,7 +145,7 @@ export const KendalaLogPanel: React.FC<Props> = ({ state, selectedRayon, onSaveR
   const period = getPeriodInfo(state).key;
   const [fText, setFText] = useState('');
   const [view, setView] = useState<ViewMode>(() => {
-    try { return localStorage.getItem(VIEW_KEY) === 'dropdown' ? 'dropdown' : 'papan'; } catch { return 'papan'; }
+    try { const v = localStorage.getItem(VIEW_KEY); return v === 'dropdown' || v === 'topik' ? v : 'papan'; } catch { return 'papan'; }
   });
   useEffect(() => { try { localStorage.setItem(VIEW_KEY, view); } catch { /* abaikan */ } }, [view]);
   const [open, setOpen] = useState<Record<number, boolean>>({});
@@ -163,7 +166,12 @@ export const KendalaLogPanel: React.FC<Props> = ({ state, selectedRayon, onSaveR
   const filtered = useMemo(() => {
     const q = normTopik(fText);
     if (!q) return base;
-    return base.filter(e => normTopik([e.v.tp, e.v.ar, e.v.a, e.v.s, e.v.h].join(' ')).includes(q));
+    const qc = canonTopik(fText);
+    return base.filter(e => {
+      if (normTopik([e.v.tp, e.v.ar, e.v.a, e.v.s, e.v.h].join(' ')).includes(q)) return true;
+      // "kurang dr 250" juga menemukan topik "YL < 250"
+      return !!qc && canonTopik(e.v.tp).includes(qc);
+    });
   }, [base, fText]);
 
   const byTku = useMemo(() => {
@@ -172,7 +180,35 @@ export const KendalaLogPanel: React.FC<Props> = ({ state, selectedRayon, onSaveR
     return m;
   }, [filtered]);
 
-  const rekap = useMemo(() => rekapTopik(base.map(e => e.v)), [base]);
+  // Topik yang maknanya sama (beda tulisan antar TKU) otomatis digabung jadi satu.
+  const clusters = useMemo(() => clusterTopik(base.map(e => e.v.tp)), [base]);
+  const rekap = useMemo(() => {
+    const seen = new Set<TopikCluster>();
+    const list: { label: string; count: number; variants: string[] }[] = [];
+    base.forEach(e => {
+      const c = topikClusterOf(clusters, e.v.tp);
+      if (c && !seen.has(c)) { seen.add(c); list.push({ label: c.label, count: c.count, variants: c.variants }); }
+    });
+    return list.sort((a, b) => b.count - a.count);
+  }, [base, clusters]);
+
+  // Tampilan "Topik": semua catatan (hasil filter) dikelompokkan per topik lintas TKU.
+  const topikGroups = useMemo(() => {
+    const m = new Map<string, { c: TopikCluster | null; list: LogEntry[] }>();
+    filtered.forEach(e => {
+      const c = topikClusterOf(clusters, e.v.tp) || null;
+      const id = c ? c.id : '~tanpa-topik';
+      if (!m.has(id)) m.set(id, { c, list: [] });
+      m.get(id)!.list.push(e);
+    });
+    return Array.from(m.entries())
+      .map(([id, g]) => ({ id, ...g, active: g.list.filter(x => x.n.st !== 'selesai').length, tkuCount: new Set(g.list.map(x => x.id)).size }))
+      .sort((a, b) => (a.c ? 0 : 1) - (b.c ? 0 : 1) || b.list.length - a.list.length);
+  }, [filtered, clusters]);
+  const tkuNameOf = (id: number) => state.tkus.find(t => t.id === id)?.nama || `TKU ${id}`;
+  const [openTopik, setOpenTopik] = useState<Record<string, boolean>>({});
+  const [showAllRekap, setShowAllRekap] = useState(false);
+  const REKAP_AWAL = 6;
   const maxCount = rekap.reduce((m, r) => Math.max(m, r.count), 0) || 1;
   const belum = base.filter(e => e.n.st !== 'selesai').length;
   const tkuTulis = new Set(base.map(e => e.id)).size;
@@ -221,15 +257,22 @@ export const KendalaLogPanel: React.FC<Props> = ({ state, selectedRayon, onSaveR
       {rekap.length > 0 && (
         <div className="space-y-1.5">
           <span className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1"><BarChart3 className="w-3 h-3" />Topik terbanyak</span>
-          {rekap.slice(0, 6).map(r => (
+          {(showAllRekap ? rekap : rekap.slice(0, REKAP_AWAL)).map(r => (
             <div key={r.label} className="flex items-center gap-2 text-xs">
-              <span className="w-32 shrink-0 font-semibold text-neutral-700 dark:text-neutral-300 truncate" title={r.label}>{r.label}</span>
+              <span className="w-32 shrink-0 font-semibold text-neutral-700 dark:text-neutral-300 truncate" title={r.variants.length > 1 ? `${r.label} (digabung dari: ${r.variants.join(' | ')})` : r.label}>{r.label}</span>
               <div className="flex-1 h-2 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
                 <div className="h-full rounded-full bg-brand-600" style={{ width: `${(r.count / maxCount) * 100}%` }} />
               </div>
               <span className="w-6 text-right font-mono font-bold text-neutral-700 dark:text-neutral-300">{r.count}</span>
             </div>
           ))}
+          {rekap.length > REKAP_AWAL && (
+            <button type="button" onClick={() => setShowAllRekap(v => !v)} aria-expanded={showAllRekap}
+              className="flex items-center gap-1 text-xs font-bold text-brand-700 dark:text-brand-300 cursor-pointer pt-0.5">
+              {showAllRekap ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+              {showAllRekap ? 'Sembunyikan' : `Lihat semua topik (${rekap.length - REKAP_AWAL} lagi)`}
+            </button>
+          )}
         </div>
       )}
 
@@ -237,6 +280,7 @@ export const KendalaLogPanel: React.FC<Props> = ({ state, selectedRayon, onSaveR
         <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl">
           {tabBtn('papan', 'Papan', LayoutGrid)}
           {tabBtn('dropdown', 'Dropdown', Rows3)}
+          {tabBtn('topik', 'Per Topik', Tags)}
         </div>
         <div className="relative flex-1 min-w-[160px]">
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400" />
@@ -267,6 +311,43 @@ export const KendalaLogPanel: React.FC<Props> = ({ state, selectedRayon, onSaveR
                 <div className="p-2.5 max-h-[75vh] overflow-y-auto">
                   <TkuBody entries={s.list} replyOf={replyOf} onSaveReply={onSaveReply} showToast={showToast} onCopyGroup={copyGroup} />
                 </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ===== PER TOPIK: catatan semua TKU dikelompokkan otomatis per topik ===== */}
+      {view === 'topik' && tkus.length > 0 && (
+        <div className="space-y-2">
+          {topikGroups.length === 0 && <p className="text-xs text-neutral-500">Belum ada catatan.</p>}
+          {topikGroups.map(g => {
+            const o = openTopik[g.id] ?? g.active > 0;
+            const title = g.c ? g.c.label : 'Tanpa topik';
+            return (
+              <section key={g.id} className="rounded-2xl border border-neutral-200 dark:border-neutral-800 overflow-hidden">
+                <button type="button" onClick={() => setOpenTopik(p => ({ ...p, [g.id]: !o }))} aria-expanded={o}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left bg-neutral-50 dark:bg-neutral-800/50 cursor-pointer">
+                  {o ? <ChevronDown className="w-4 h-4 shrink-0" /> : <ChevronRight className="w-4 h-4 shrink-0" />}
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-bold text-neutral-900 dark:text-neutral-100 break-words">{title}</span>
+                    <span className="block text-[11px] text-neutral-500 dark:text-neutral-400">
+                      {g.list.length} catatan • {g.tkuCount} TKU
+                      {g.c && g.c.variants.length > 1 && <> • ditulis: {g.c.variants.join(' / ')}</>}
+                    </span>
+                  </span>
+                  <span className={`shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold ${g.active > 0 ? 'bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'}`}>
+                    {g.active > 0 ? `${g.active} aktif` : 'Aman'}
+                  </span>
+                </button>
+                {o && (
+                  <div className="p-2.5 space-y-2.5">
+                    {[...g.list].sort(byLatest).map(e => (
+                      <EntryTable key={e.k} e={e} dim={e.n.st === 'selesai'} tkuName={tkuNameOf(e.id)} reply={replyOf(e.k)}
+                        onSaveReply={onSaveReply} showToast={showToast} onCopy={() => copyGroup([e])} copyCount={1} />
+                    ))}
+                  </div>
+                )}
               </section>
             );
           })}
