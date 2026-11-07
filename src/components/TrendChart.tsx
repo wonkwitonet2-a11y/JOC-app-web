@@ -33,7 +33,7 @@ const C = {
   bb: '#2563eb',
 };
 
-export const TrendChart: React.FC<Props> = ({ days, today, year, monthIndex, monthShort, salesUnit }) => {
+export const TrendChart: React.FC<Props> = ({ days: daysProp, today, year, monthIndex, monthShort, salesUnit }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(720);
   const [sel, setSel] = useState<number>(0);
@@ -52,6 +52,10 @@ export const TrendChart: React.FC<Props> = ({ days, today, year, monthIndex, mon
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Grafik berhenti di tanggal terakhir yang sudah ada input penjualannya (tanggal sesudahnya tidak ditampilkan)
+  const lastInputDay = daysProp.reduce((m, d) => (d.day <= today && d.sold > 0 ? Math.max(m, d.day) : m), 0);
+  const days = lastInputDay > 0 ? daysProp.filter(d => d.day <= lastInputDay) : daysProp;
 
   const n = days.length;
   const compact = width < 520;

@@ -89,6 +89,22 @@ const VIEW_DATA_KEYS = ['pjd', 'hjd', 'todayInputs', 'breakdown', 'breakdownPerV
 // Kolom tampilan saja (aman dipakai di mode lihat, tidak ikut disimpan).
 const VIEW_UI_KEYS = ['currentMenu', 'selectedRayon', 'activeTkuId', 'theme', 'activeArchiveKey', 'activeDate', 'currentDayNum', 'pembagiHari', 'pembagiHariMode', 'pembagiManual', 'pembagiBreakdown', 'pembagiBreakdownMode', 'pembagiKhususTku', 'pembagiKhususBreakdownTku'];
 
+// Pindah akun lewat dropdown (Admin <-> TKU): tetap di menu yang setara. Bila tidak ada padanannya -> Ringkasan / Dashboard.
+type TkuSubMenuId = 'ringkasan' | 'input' | 'breakdown' | 'realisasi' | 'stok' | 'kendala';
+const ADMIN_MENU_TO_TKU: Record<string, TkuSubMenuId> = {
+  'Penjualan Harian': 'input',
+  'Breakdown & Realisasi': 'breakdown',
+  'Kendala & Solusi': 'kendala',
+  'Sisa Stock': 'stok'
+};
+const TKU_MENU_TO_ADMIN: Record<string, string> = {
+  input: 'Penjualan Harian',
+  breakdown: 'Breakdown & Realisasi',
+  realisasi: 'Breakdown & Realisasi',
+  kendala: 'Kendala & Solusi',
+  stok: 'Sisa Stock'
+};
+
 interface ViewCtx {
   key: string;      // YYYY-MM bulan yang sedang dilihat
   editing: boolean;
@@ -1998,6 +2014,13 @@ export default function App() {
           }
           lastActiveRef.current = Date.now();
           saveAppSession('t', idx);
+          if (state.role === 'a') {
+            // dari Admin: ikut menu yang setara, bila tidak ada -> Ringkasan. (TKU ke TKU: menu tetap)
+            const target: TkuSubMenuId = ADMIN_MENU_TO_TKU[state.currentMenu] || 'ringkasan';
+            setTkuSubMenu(target);
+            try { localStorage.setItem('yk_active_tku_submenu', target); } catch (_) {}
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
           setState(prev => ({ ...prev, role: 't', activeTkuId: idx }));
           showToast(`Beralih ke akun ${state.tkus[idx]?.nama}`, 'info');
         }}
@@ -2008,7 +2031,7 @@ export default function App() {
           }
           lastActiveRef.current = Date.now();
           saveAppSession('a', state.activeTkuId);
-          setState(prev => ({ ...prev, role: 'a', currentMenu: 'Dashboard' }));
+          setState(prev => ({ ...prev, role: 'a', currentMenu: state.role === 't' ? (TKU_MENU_TO_ADMIN[tkuSubMenu] || 'Dashboard') : (prev.currentMenu || 'Dashboard') }));
           showToast('Beralih ke Mode Admin (Cabang)', 'info');
         }}
         onToggleDrawer={() => {
@@ -2050,7 +2073,7 @@ export default function App() {
               }
               lastActiveRef.current = Date.now();
               saveAppSession('a', state.activeTkuId);
-              setState(prev => ({ ...prev, role: 'a', currentMenu: 'Dashboard' }));
+              setState(prev => ({ ...prev, role: 'a', currentMenu: state.role === 't' ? (TKU_MENU_TO_ADMIN[tkuSubMenu] || 'Dashboard') : (prev.currentMenu || 'Dashboard') }));
               showToast('Beralih ke Mode Admin (Cabang)', 'info');
             }}
           />
@@ -2183,7 +2206,7 @@ export default function App() {
                 }
                 lastActiveRef.current = Date.now();
                 saveAppSession('a', state.activeTkuId);
-                setState(prev => ({ ...prev, role: 'a', currentMenu: 'Dashboard' }));
+                setState(prev => ({ ...prev, role: 'a', currentMenu: state.role === 't' ? (TKU_MENU_TO_ADMIN[tkuSubMenu] || 'Dashboard') : (prev.currentMenu || 'Dashboard') }));
                 showToast('Beralih ke Mode Admin (Cabang)', 'info');
               }}
             />

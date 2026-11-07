@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ClipboardList, BarChart3, Search, ChevronDown, ChevronRight, Copy, LayoutGrid, Rows3, CheckCircle2, Tags, X } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import { ClipboardList, BarChart3, Search, ChevronDown, ChevronRight, Copy, LayoutGrid, CheckCircle2, Tags, X } from 'lucide-react';
 import { AppState } from '../types';
 import { getPeriodInfo } from '../services/storage';
 import { buildWaText, copyText, fmtTgl, groupKey, listLog, LogEntry, normTopik, STATUS_SOLUSI } from '../services/weeklyNotes';
@@ -13,8 +13,7 @@ interface Props {
   showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-type ViewMode = 'papan' | 'dropdown' | 'topik';
-const VIEW_KEY = 'kendala-admin-view';
+type ViewMode = 'papan' | 'topik';
 
 const dash = <span className="text-neutral-400">—</span>;
 
@@ -140,15 +139,12 @@ const TkuBody: React.FC<{
 const selCls = 'text-xs font-semibold rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-100 px-2 py-1.5';
 
 // Panel admin: log Kendala & Solusi per TKU. "Papan" = tabel per TKU berjajar menyamping (geser);
-// "Dropdown" = satu bar per TKU yang bisa dibuka. Catatan terbaru diupdate di atas, yang selesai disembunyikan.
+// "Per Topik" = catatan dikelompokkan per topik. Catatan terbaru diupdate di atas, yang selesai disembunyikan.
+// Tampilan SELALU mulai dari Papan (tidak diingat): pindah menu / tutup aplikasi -> kembali ke Papan.
 export const KendalaLogPanel: React.FC<Props> = ({ state, selectedRayon, onSaveReply, showToast }) => {
   const period = getPeriodInfo(state).key;
   const [fText, setFText] = useState('');
-  const [view, setView] = useState<ViewMode>(() => {
-    try { const v = localStorage.getItem(VIEW_KEY); return v === 'dropdown' || v === 'topik' ? v : 'papan'; } catch { return 'papan'; }
-  });
-  useEffect(() => { try { localStorage.setItem(VIEW_KEY, view); } catch { /* abaikan */ } }, [view]);
-  const [open, setOpen] = useState<Record<number, boolean>>({});
+  const [view, setView] = useState<ViewMode>('papan');
 
   // Nomor tabel tetap (Tabel 1 = TKU aktif pertama), tidak berubah saat ganti rayon.
   const allActive = useMemo(() => state.tkus.filter(t => t.aktif), [state.tkus]);
@@ -248,8 +244,6 @@ export const KendalaLogPanel: React.FC<Props> = ({ state, selectedRayon, onSaveR
     const list = byTku.get(id) || [];
     return { total: list.length, active: list.filter(e => e.n.st !== 'selesai').length, list };
   };
-  // TKU yang punya masalah aktif ditaruh lebih dulu di mode dropdown; papan tetap urut nomor tabel.
-  const isOpen = (id: number) => open[id] ?? stat(id).active > 0;
 
   const tabBtn = (v: ViewMode, label: string, Icon: React.ElementType) => (
     <button type="button" onClick={() => setView(v)} aria-pressed={view === v}
@@ -307,7 +301,6 @@ export const KendalaLogPanel: React.FC<Props> = ({ state, selectedRayon, onSaveR
       <div ref={tabsRef} className="flex flex-wrap items-center gap-2 scroll-mt-28">
         <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl">
           {tabBtn('papan', 'Papan', LayoutGrid)}
-          {tabBtn('dropdown', 'Dropdown', Rows3)}
           {tabBtn('topik', 'Per Topik', Tags)}
         </div>
         <div className="relative flex-1 min-w-[160px]">
@@ -390,35 +383,6 @@ export const KendalaLogPanel: React.FC<Props> = ({ state, selectedRayon, onSaveR
         </div>
       )}
 
-      {/* ===== DROPDOWN: satu bar per TKU ===== */}
-      {view === 'dropdown' && tkus.length > 0 && (
-        <div className="space-y-2">
-          {tkus.map(t => {
-            const s = stat(t.id);
-            const o = isOpen(t.id);
-            return (
-              <section key={t.id} className="rounded-2xl border border-neutral-200 dark:border-neutral-800 overflow-hidden">
-                <button type="button" onClick={() => setOpen(p => ({ ...p, [t.id]: !o }))} aria-expanded={o}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left bg-neutral-50 dark:bg-neutral-800/50 cursor-pointer">
-                  {o ? <ChevronDown className="w-4 h-4 shrink-0" /> : <ChevronRight className="w-4 h-4 shrink-0" />}
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[10px] font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400">Tabel {numOf.get(t.id)}</span>
-                    <span className="block text-sm font-bold text-neutral-900 dark:text-neutral-100 truncate">{t.nama}</span>
-                  </span>
-                  <span className={`shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold ${s.active > 0 ? 'bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'}`}>
-                    {s.active > 0 ? `${s.active} aktif` : 'Aman'}
-                  </span>
-                </button>
-                {o && (
-                  <div className="p-2.5">
-                    <TkuBody entries={s.list} replyOf={replyOf} onSaveReply={onSaveReply} showToast={showToast} onCopyGroup={copyGroup} />
-                  </div>
-                )}
-              </section>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 };

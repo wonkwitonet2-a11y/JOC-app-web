@@ -145,20 +145,20 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   const PY = period.year;
   const PM0 = period.monthIndex;
 
-  // Tanggal input: default = tanggal update (hari ini), bisa dipilih mundur untuk mengisi tanggal yang terlewat
-  const [inputDate, setInputDate] = useState<string>(() => {
-    try {
-      const savedDate = localStorage.getItem('yk_active_input_date');
-      if (savedDate && savedDate >= `${period.key}-01` && savedDate <= state.activeDate) {
-        return savedDate;
-      }
-    } catch (_) {}
-    return state.activeDate;
-  });
+  // Tanggal input: otomatis = tanggal update (tidak lagi mengingat tanggal mundur dari sesi sebelumnya).
+  // Tetap bisa dipilih mundur untuk mengisi tanggal yang terlewat.
+  const [inputDate, setInputDate] = useState<string>(() => state.activeDate);
   useEffect(() => {
-    // Sinkronkan hanya jika activeDate bertambah dan inputDate belum diatur manual
-    if (!inputDate || inputDate > state.activeDate) {
+    try { localStorage.setItem('yk_active_input_date', inputDate); } catch (_) {}
+  }, []);
+  const prevActiveDateRef = useRef(state.activeDate);
+  useEffect(() => {
+    // Ikut maju bila tanggal update berganti, kecuali operator sedang sengaja memilih tanggal mundur
+    const prev = prevActiveDateRef.current;
+    prevActiveDateRef.current = state.activeDate;
+    if (!inputDate || inputDate > state.activeDate || inputDate === prev) {
       setInputDate(state.activeDate);
+      try { localStorage.setItem('yk_active_input_date', state.activeDate); } catch (_) {}
     }
   }, [state.activeDate]);
 

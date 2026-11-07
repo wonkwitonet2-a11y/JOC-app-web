@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { ArrowDown, ArrowLeftRight, ArrowUp, Calendar, ChevronDown, Download } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, ArrowDown, ArrowLeftRight, ArrowUp, Calendar, ChevronDown, Download } from 'lucide-react';
 import { AppState, VariantCode, DailySalesRecord } from '../types';
 import {
   formatNumber,
@@ -91,6 +91,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
   const [tab, setTab] = useState<DataTab>('breakdown');
   const [viewMode, setViewMode] = useState<ViewMode>('bulanan');
   const [showKondisiTku, setShowKondisiTku] = useState<boolean>(true);
+  const [showAnalisa, setShowAnalisa] = useState<boolean>(false);
   // Tombol panah: tampilkan rencana asli pada tanggal yang sudah tertutup realisasi (hanya lihat)
   const [showOrigPlan, setShowOrigPlan] = useState<boolean>(false);
   const isReal = tab === 'realisasi';
@@ -315,6 +316,254 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
     rows.push({ key: 'all', label: 'Total Cabang', kind: 'total', agg: build(allIdxs), idxs: allIdxs });
   }
 
+  // ---- Ringkasan vs Target / Bulan Lalu / Tahun Lalu (mengikuti Mingguan / Bulanan) ----
+  // Mingguan = hanya hari pada minggu yang dipilih; Bulanan = tgl 1 s/d tanggal pengali (sama dengan tabel).
+  // Selisih = total botol - (pembanding harian x jumlah hari), rata-rata = total / jumlah hari kalender.
+  // TKU yang breakdown-nya belum diisi:
+  //  - Mingguan: tidak ada rencana DAN tidak ada realisasi tersimpan di minggu terpilih.
+  //  - Bulanan : tidak ada rencana (atau realisasi tersimpan) untuk hari yang belum datang (setelah tanggal update).
+  const missingPlan = (() => {
+    const pf = viewMode === 'mingguan' ? week.start : updateDay + 1;
+    const pt = viewMode === 'mingguan' ? week.end : daysInMonth;
+    const set = new Set<number>();
+    if (pf > pt) return { set, pf, pt }; // tidak ada hari tersisa -> tidak ada yang dipermasalahkan
+    allIdxs.forEach(i => {
+      let ada = false;
+      for (let d = pf; d <= pt && !ada; d++) if (hasSavedSalesFor(d, i) || getPlan(i, d).some(x => x > 0)) ada = true;
+      if (!ada) set.add(i);
+    });
+    return { set, pf, pt };
+  })();
+
+  // ---- Keterangan "bd belum isi" per TKU (pintar, belajar dari riwayat) ----
+  // - Hari libur cabang (hampir semua TKU kosong, mis. tanggal merah) dilewati.
+  // - Pola hari kunjungan tiap TKU dipelajari dari minggu normal (tanpa libur & bukan minggu transisi sesudah libur).
+  // - Minggu normal: ditandai bila ada hari kunjungan biasa yang kosong.
+  // - Minggu libur / transisi / TKU tanpa pola: ditandai hanya bila kosong total di minggu itu.
+  // - Minggu pendek di akhir bulan yang tidak memuat hari kunjungan TKU tidak ditandai (mis. DP genap yang tutup Sabtu).
+  type BdGap = { key: string; nama: string; semua: boolean; minggu: number[] };
+  const bdGaps: BdGap[] = (() => {
+    const out: BdGap[] = [];
+    if (isReal) return out;
+    const aktifIdx = state.tkus.map((t, i) => (t.aktif ? i : -1)).filter(i => i >= 0);
+    if (aktifIdx.length === 0) return out;
+    const filled = (i: number, d: number): boolean => hasSavedSalesFor(d, i) || getPlan(i, d).some(x => x > 0);
+
+    // 1) Deteksi hari libur cabang: hampir semua TKU kosong, tetapi minggu itu punya hari lain yang ramai
+    const cnt: number[] = [0];
+    for (let d = 1; d <= daysInMonth; d++) cnt.push(aktifIdx.filter(i => filled(i, d)).length);
+    const isHoliday: boolean[] = new Array(daysInMonth + 1).fill(false);
+    weeks.forEach(w => {
+      const hari: number[] = [];
+      for (let d = w.start; d <= w.end; d++) if (dow(d) !== 0) hari.push(d);
+      if (!hari.some(d => cnt[d] > aktifIdx.length * 0.25)) return; // seluruh minggu kosong = belum diisi, bukan libur
+      hari.forEach(d => { if (cnt[d] <= aktifIdx.length * 0.1) isHoliday[d] = true; });
+    });
+    const weekHasHoliday = weeks.map(w => {
+      for (let d = w.start; d <= w.end; d++) if (isHoliday[d]) return true;
+      return false;
+    });
+    // Minggu libur + 1 minggu sesudahnya = transisi (jadwal ganjil/genap bisa bergeser)
+    const looseWeek = weeks.map((_w, k) => weekHasHoliday[k] || (k > 0 && weekHasHoliday[k - 1]));
+    const learnWeeks = weeks.map((w, k) => k).filter(k => !looseWeek[k] && weeks[k].end - weeks[k].start + 1 >= 6);
+
+    // 2) Pola hari kunjungan per TKU
+    const pm = month === 1 ? 12 : month - 1;
+    const py = month === 1 ? year - 1 : year;
+    const dimPrev = new Date(year, month - 1, 0).getDate();
+    const patternOf = (i: number): Set<number> => {
+      const pat = new Set<number>();
+      if (learnWeeks.length > 0) {
+        const c = [0, 0, 0, 0, 0, 0, 0];
+        learnWeeks.forEach(k => {
+          for (let d = weeks[k].start; d <= weeks[k].end; d++) if (dow(d) !== 0 && filled(i, d)) c[dow(d)]++;
+        });
+        const need = Math.ceil(learnWeeks.length / 2);
+        c.forEach((v, wd) => { if (wd !== 0 && v >= need && v > 0) pat.add(wd); });
+      }
+      if (pat.size === 0) { // cadangan: riwayat penjualan bulan lalu
+        const c = [0, 0, 0, 0, 0, 0, 0];
+        for (let d = 1; d <= dimPrev; d++) {
+          const rec = state.pjd?.[`${py}-${String(pm).padStart(2, '0')}-${String(d).padStart(2, '0')}`]?.[i];
+          if (rec && (rec.sold > 0 || (rec.v && rec.v.some(x => x > 0)))) c[new Date(py, pm - 1, d).getDay()]++;
+        }
+        c.forEach((v, wd) => { if (wd !== 0 && v >= 2) pat.add(wd); });
+      }
+      return pat;
+    };
+
+    // 3) Evaluasi tiap TKU yang tampil
+    const check = viewMode === 'mingguan' ? [weekIdx] : weeks.map((_w, k) => k);
+    allIdxs.forEach(i => {
+      const nama = state.tkus[i].nama;
+      let adaIsi = false;
+      for (let d = 1; d <= daysInMonth && !adaIsi; d++) if (dow(d) !== 0 && filled(i, d)) adaIsi = true;
+      if (!adaIsi) { out.push({ key: `g${i}`, nama, semua: true, minggu: [] }); return; }
+
+      const pat = patternOf(i);
+      const minggu: number[] = [];
+      check.forEach(k => {
+        const w = weeks[k];
+        const len = w.end - w.start + 1;
+        const cand: number[] = [];
+        for (let d = w.start; d <= w.end; d++) if (dow(d) !== 0 && !isHoliday[d]) cand.push(d);
+        if (cand.length === 0) return;
+        const loose = looseWeek[k] || pat.size === 0;
+        if (!loose) {
+          const exp = cand.filter(d => pat.has(dow(d)));
+          if (exp.some(d => !filled(i, d))) minggu.push(k + 1);
+          return;
+        }
+        if (cand.some(d => filled(i, d))) return;
+        if (pat.size === 0) { if (cand.length <= 2) return; }
+        else if (len < 7 && !cand.some(d => pat.has(dow(d)))) return;
+        minggu.push(k + 1);
+      });
+      if (minggu.length > 0) out.push({ key: `g${i}`, nama, semua: false, minggu });
+    });
+    return out;
+  })();
+
+  const fmtMinggu = (m: number[]): string => {
+    const grp: string[] = [];
+    let a = 0;
+    while (a < m.length) {
+      let b = a;
+      while (b + 1 < m.length && m[b + 1] === m[b] + 1) b++;
+      grp.push(b - a >= 2 ? `${m[a]}–${m[b]}` : m.slice(a, b + 1).join(' & '));
+      a = b + 1;
+    }
+    return `Mgg ${grp.length > 1 ? `${grp.slice(0, -1).join(', ')} & ${grp[grp.length - 1]}` : grp[0]}`;
+  };
+
+  // Keterangan detail untuk Analisa: Mingguan = "bd kosong"; Bulanan = "bd kosong Mgg ..." (atau "bd kosong" bila sebulan penuh)
+  const bdDetail = (nama: string): string | null => {
+    const g = bdGaps.find(x => x.nama === nama);
+    if (!g) return null;
+    return g.semua || viewMode === 'mingguan' ? 'bd kosong' : `bd kosong ${fmtMinggu(g.minggu)}`;
+  };
+
+  const summary = (() => {
+    const base = build(allIdxs);
+    const from = viewMode === 'mingguan' ? week.start : 1;
+    const to = viewMode === 'mingguan' ? (isReal ? Math.min(week.end, updateDay) : week.end) : n;
+    const days = Math.max(0, to - from + 1);
+    let total = 0;
+    for (let d = from; d <= to; d++) total += (base.daily[d] || [0, 0, 0, 0]).reduce((a, b) => a + b, 0);
+    const avg = days > 0 ? total / days : 0;
+    const mk = (label: string, c: number) => ({
+      label,
+      has: c > 0 && days > 0,
+      pct: c > 0 && days > 0 ? avg / c : null as number | null,
+      diff: total - c * days
+    });
+    return {
+      from, to, days, total, avg,
+      items: [mk('vs Target', base.cmp.tg), mk('vs Bulan Lalu', base.cmp.bl), mk('vs Tahun Lalu', base.cmp.ty)]
+    };
+  })();
+
+  // ---- Analisa: siapa yang mendekati / jauh dari Target & Th Lalu, dan berapa tambahan per YL per hari ----
+  // Proyeksi = realisasi (s/d tanggal update) + rencana breakdown untuk hari yang belum datang.
+  // Kekurangan = pembanding harian x jumlah hari periode - proyeksi. Mingguan = minggu terpilih; Bulanan = sebulan penuh.
+  // Tambahan per YL per hari = kekurangan / sisa hari kerja (Sen-Sab) / jumlah YL. Dianalisa hanya bila realistis.
+  // Mendekati (Mingguan & Bulanan sama): TKU biasa <= 2,5 btl/YL/hari; TKU dropping (DP) <= 5 btl/YL/kunjungan
+  const MAX_PER_YL_HARI = 2.5;
+  const MAX_PER_YL_KUNJ = 5;
+  const isDropping = (i: number) => /^DP\b/i.test(state.tkus[i].nama.trim());
+  const HEAVY_PCT = 0.10;   // tanda ⚠️ bila tambahan > 10% dari breakdown sisa
+  type AnRow = { nama: string; pct: number; gap: number; perDay?: number; perYl?: number; heavy?: number | null; belumBd?: boolean; kunj?: number };
+  const analisa = (() => {
+    const from = viewMode === 'mingguan' ? week.start : 1;
+    const to = viewMode === 'mingguan' ? week.end : daysInMonth;
+    const D = to - from + 1;
+    let rem = 0; // sisa hari kerja (Senin-Sabtu) setelah tanggal update
+    for (let d = Math.max(from, updateDay + 1); d <= to; d++) if (dow(d) !== 0) rem++;
+    const projDay = (i: number, d: number) =>
+      ((hasSavedSalesFor(d, i) || d <= updateDay) ? getSales(i, d) : getPlan(i, d)).reduce((a, b) => a + b, 0);
+
+    type Acc = { aman: number; dekat: AnRow[]; jauh: AnRow[]; tanpaBanding: number };
+    const newAcc = (): Acc => ({ aman: 0, dekat: [], jauh: [], tanpaBanding: 0 });
+    // Golongkan satu TKU: aman / mendekati / jauh (batas per YL: lihat MAX_PER_YL_HARI & MAX_PER_YL_KUNJ)
+    // need = kebutuhan pembanding, P = proyeksi TKU pada periode yang sama
+    const classify = (acc: Acc, i: number, need: number, P: number, planRem: number) => {
+      const gap = need - P;
+      const nama = state.tkus[i].nama;
+      const pct = P / need;
+      if (gap <= 0) { acc.aman++; return; }
+      if (missingPlan.set.has(i)) { acc.jauh.push({ nama, pct, gap, belumBd: true }); return; } // breakdown kosong -> dihitung jauh
+      const yl = state.tkus[i].jumlahYl || 10;
+      if (isDropping(i)) {
+        // TKU dropping (ganjil/genap): dihitung per KUNJUNGAN = jumlah tanggal sisa yang ada isi breakdown-nya
+        let kunj = 0;
+        for (let d = Math.max(from, updateDay + 1); d <= to; d++) if (projDay(i, d) > 0) kunj++;
+        if (kunj > 0) {
+          const perYl = gap / kunj / yl;
+          if (perYl <= MAX_PER_YL_KUNJ) {
+            acc.dekat.push({ nama, pct, gap, perYl, kunj, heavy: planRem > 0 ? gap / planRem : null });
+            return;
+          }
+        }
+      } else if (rem > 0) {
+        const perYl = gap / rem / yl;
+        if (perYl <= MAX_PER_YL_HARI) {
+          acc.dekat.push({ nama, pct, gap, perDay: gap / rem, perYl, heavy: planRem > 0 ? gap / planRem : null });
+          return;
+        }
+      }
+      acc.jauh.push({ nama, pct, gap });
+    };
+    const finish = (label: string, acc: Acc) => {
+      acc.dekat.sort((a, b) => a.gap - b.gap);
+      acc.jauh.sort((a, b) => a.pct - b.pct);
+      return { label, ...acc };
+    };
+    const planRemOf = (i: number) => {
+      let r = 0;
+      for (let d = Math.max(from, updateDay + 1); d <= to; d++) r += projDay(i, d);
+      return r;
+    };
+
+    // vs Target / vs Th Lalu: seluruh periode (minggu terpilih atau sebulan)
+    const make = (label: string, cOf: (i: number) => number) => {
+      const acc = newAcc();
+      allIdxs.forEach(i => {
+        const c = cOf(i);
+        if (c <= 0) { acc.tanpaBanding++; return; }
+        let P = 0;
+        for (let d = from; d <= to; d++) P += projDay(i, d);
+        classify(acc, i, c * D, P, planRemOf(i));
+      });
+      return finish(label, acc);
+    };
+
+    // vs Minggu Lalu (hanya tampilan Mingguan): hari yang sama minggu lalu (tanggal - 7), hari libur dilewati
+    const makeWeek = () => {
+      const acc = newAcc();
+      const aktifIdxs = state.tkus.map((t, i) => (t.aktif ? i : -1)).filter(i => i >= 0);
+      const holiday = (d: number) => aktifIdxs.every(i => projDay(i, d) === 0);
+      const pairDays: number[] = [];
+      for (let d = week.start; d <= week.end; d++) if (d > 7 && !holiday(d) && !holiday(d - 7)) pairDays.push(d);
+      allIdxs.forEach(i => {
+        let cur = 0, prev = 0;
+        pairDays.forEach(d => { cur += projDay(i, d); prev += projDay(i, d - 7); });
+        if (pairDays.length === 0 || prev <= 0) { acc.tanpaBanding++; return; }
+        classify(acc, i, prev, cur, planRemOf(i));
+      });
+      return finish('vs Minggu Lalu', acc);
+    };
+
+    return {
+      from, to, rem,
+      sets: [
+        ...(viewMode === 'mingguan' ? [makeWeek()] : []),
+        make('vs Target', i => state.tkus[i]?.targetHarian || 0),
+        make('vs Th Lalu', i => state.targetTahunLalu[i] || 0)
+      ]
+    };
+  })();
+  const fmt1 = (x: number) => (Math.ceil(x * 10 - 1e-9) / 10).toLocaleString('id-ID');
+
   // ---- Ekspor CSV ----
   const handleExportCsv = () => {
     const head: string[] = ['Nama TKU'];
@@ -434,6 +683,31 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
     if (!any) return { pct: null as number | null, diff: null as number | null };
     return { pct: prev > 0 ? cur / prev : null, diff: cur - prev };
   };
+  // Hari Minggu tanpa transaksi di semua TKU: kolomnya dipersempit (1 kolom, bukan 4 varian)
+  const collapsedDay = (d: number): boolean => dow(d) === 0 && isHoliday(d);
+
+  // Saat Mingguan: tabel otomatis bergeser ke hari pertama yang ada isinya
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (viewMode !== 'mingguan') return;
+    const box = tableScrollRef.current;
+    if (!box) return;
+    const first = shownDays.find(d => !collapsedDay(d));
+    if (first === undefined) return;
+    const dayTh = box.querySelector<HTMLElement>(`th[data-day="${first}"]`);
+    const nameTh = box.querySelector<HTMLElement>('thead th');
+    if (dayTh && nameTh) box.scrollTo({ left: Math.max(0, dayTh.offsetLeft - nameTh.offsetWidth), behavior: 'auto' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, weekIdx, tab, selectedRayon]);
+
+  // Ringkasan Breakdown Mingguan: total cabang/rayon vs hari yang sama minggu lalu
+  const wkSummary = showWeekCmp ? weekCmp(build(allIdxs)) : null;
+  const summaryItems = [
+    ...summary.items,
+    ...(wkSummary
+      ? [{ label: 'vs Minggu Lalu', has: wkSummary.pct !== null && wkSummary.diff !== null, pct: wkSummary.pct, diff: wkSummary.diff ?? 0 }]
+      : [])
+  ];
   const toneText = (t: Tone, kind: TableRow['kind']) =>
     t === 'none'
       ? 'text-neutral-400'
@@ -460,7 +734,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
         : null;
 
   const blocks = [
-    { title: isReal ? 'Realisasi per Tanggal' : 'Rencana Breakdown per Tanggal', span: shownDays.length * 4, tone: 'text-neutral-700 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800' },
+    { title: isReal ? 'Realisasi per Tanggal' : 'Rencana Breakdown per Tanggal', span: shownDays.reduce((sum, d) => sum + (collapsedDay(d) ? 1 : 4), 0), tone: 'text-neutral-700 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800' },
     { title: 'Akumulasi', span: 5, tone: 'text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-950/30' },
     { title: 'Rata-rata', span: 5, tone: 'text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/30' },
     ...(showWeekCmp
@@ -584,29 +858,103 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
         )}
       </div>
 
-      {/* Keterangan warna */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1 text-xs font-medium text-neutral-600 dark:text-neutral-300">
-        {(isReal
-          ? [
-              ['bg-emerald-500', '≥ 100% / di atas pembanding'],
-              ['bg-red-500', '< 100% / di bawah pembanding'],
-              ['bg-red-200 dark:bg-red-900', 'Hari Minggu'],
-              ['bg-sky-500', 'Rayon 1'],
-              ['bg-violet-500', 'Rayon 2']
-            ]
-          : [
-              ['bg-neutral-800 dark:bg-neutral-200', 'Realisasi (tanggal sudah lewat)'],
-              ['bg-sky-500', 'Rencana target (tanggal belum datang)'],
-              ['bg-emerald-500', 'Naik / di atas pembanding'],
-              ['bg-red-500', 'Turun / di bawah pembanding'],
-              ['bg-red-200 dark:bg-red-900', 'Hari Minggu']
-            ]
-        ).map(([c, l]) => (
-          <span key={l} className="inline-flex items-center gap-1.5">
-            <span className={`w-2.5 h-2.5 rounded-sm ${c}`} />
-            {l}
+      {/* Ringkasan: peringatan breakdown kosong (paling atas), kartu vs Target / Bulan Lalu / Tahun Lalu, lalu Analisa */}
+      <div className="space-y-2">
+        {bdGaps.length > 0 && (
+          <p className="flex items-start gap-1.5 px-1 text-xs font-semibold text-amber-700 dark:text-amber-400">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>Bd belum lengkap ({bdGaps.length} TKU): {bdGaps.map(g => g.nama).join(', ')}. Detail di Analisa.</span>
+          </p>
+        )}
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-1">
+          <span className="text-xs font-bold text-neutral-700 dark:text-neutral-200">
+            {isReal ? 'Realisasi' : 'Breakdown'}{' '}
+            {viewMode === 'mingguan' ? `Mgg ${weekIdx + 1} (${week.start}–${summary.to >= week.start ? summary.to : week.end})` : `${monthName}${isReal ? ` (s/d tgl ${updateDay})` : ''}`}
           </span>
-        ))}
+          <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
+            {summary.days > 0 ? `Rata-rata ${formatNumber(summary.avg)} btl/hr • ${summary.days} hari` : 'Belum ada data'}
+          </span>
+        </div>
+        <div className={`grid gap-1.5 ${summaryItems.length > 3 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+          {summaryItems.map(it => {
+            const up = it.pct !== null && it.pct >= 1;
+            const tone = it.pct === null ? 'text-neutral-400' : up ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
+            const short = it.label.replace('Bulan', 'Bln').replace('Tahun', 'Thn').replace('Minggu', 'Mgg');
+            return (
+              <div key={it.label} className="min-w-0 rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-2 py-1.5">
+                <div className="text-[10px] font-semibold text-neutral-500 dark:text-neutral-400 leading-tight truncate">{short}</div>
+                <div className={`font-mono text-sm font-extrabold leading-tight ${tone}`}>{it.has ? formatPercent(it.pct) : '—'}</div>
+                <div className={`font-mono text-[10px] font-bold leading-tight truncate ${it.has ? getStatusClass(it.diff) : 'text-neutral-400'}`}>
+                  {it.has ? formatDiff(it.diff) : 'Belum ada'}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Analisa (tutup / buka) */}
+        <button type="button" onClick={() => setShowAnalisa(v => !v)} aria-expanded={showAnalisa}
+          className="w-full flex items-center justify-between gap-2 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-3 py-2 text-xs font-bold text-neutral-800 dark:text-neutral-100 cursor-pointer">
+          <span className="flex items-center gap-1.5 min-w-0">
+            <span>📊</span>
+            <span className="truncate">Analisa {viewMode === 'mingguan' ? `Mgg ${weekIdx + 1}` : 'Bulan Ini'}</span>
+          </span>
+          <span className="flex items-center gap-1.5 shrink-0">
+            {analisa.sets.reduce((n, st) => n + st.dekat.length, 0) > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300">
+                🎯 {analisa.sets.reduce((n, st) => n + st.dekat.length, 0)}
+              </span>
+            )}
+            <ChevronDown className={`w-4 h-4 transition-transform ${showAnalisa ? 'rotate-180' : ''}`} />
+          </span>
+        </button>
+        {showAnalisa && (
+          <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-3 space-y-3">
+            {analisa.sets.map(st => (
+              <div key={st.label} className="space-y-1.5 pt-2 border-t border-neutral-100 dark:border-neutral-800 first-of-type:border-0 first-of-type:pt-0">
+                <span className="inline-block px-2 py-0.5 rounded-md bg-brand-50 dark:bg-brand-950/40 text-xs font-bold text-brand-700 dark:text-brand-300">{st.label}</span>
+                <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">🟢 Aman: {st.aman} TKU</div>
+                <div className="space-y-0.5">
+                  <div className="text-xs font-semibold text-red-600 dark:text-red-400">🔴 Jauh: {st.jauh.length} TKU</div>
+                  {st.jauh.map(r => (
+                    <div key={r.nama} className="flex items-center justify-between gap-2 text-xs pl-4">
+                      <span className="min-w-0 flex items-baseline gap-1.5 font-semibold text-neutral-800 dark:text-neutral-200">
+                        <span className="truncate">{r.nama}</span>
+                        {bdDetail(r.nama) && <span className="shrink-0 whitespace-nowrap text-[10px] font-medium text-amber-600 dark:text-amber-400">{bdDetail(r.nama)}</span>}
+                      </span>
+                      <span className="shrink-0 font-mono font-bold text-red-600 dark:text-red-400">{formatPercent(r.pct)} • −{formatNumber(r.gap)}</span>
+                    </div>
+                  ))}
+                </div>
+                {st.dekat.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="text-xs font-semibold text-amber-700 dark:text-amber-400">🟡 Mendekati: {st.dekat.length} TKU</div>
+                    {st.dekat.map(r => (
+                      <div key={r.nama} className="rounded-lg bg-amber-50/70 dark:bg-amber-950/20 px-2.5 py-1.5">
+                        <div className="flex items-center justify-between gap-2 text-xs font-bold">
+                          <span className="min-w-0 flex items-baseline gap-1.5 text-neutral-900 dark:text-neutral-100">
+                            <span className="truncate">{r.nama}</span>
+                            {bdDetail(r.nama) && <span className="shrink-0 whitespace-nowrap text-[10px] font-medium text-amber-600 dark:text-amber-400">{bdDetail(r.nama)}</span>}
+                          </span>
+                          <span className="shrink-0 font-mono text-amber-700 dark:text-amber-400">−{formatNumber(r.gap)} btl</span>
+                        </div>
+                        <div className="text-[11px] leading-snug text-neutral-700 dark:text-neutral-300">
+                          {r.kunj
+                            ? <>➜ {r.kunj} kunjungan • <b>+{fmt1(r.perYl || 0)} btl/YL/kunjungan</b></>
+                            : <>➜ {analisa.rem} hr • <b>+{fmt1(r.perYl || 0)} btl/YL/hr</b></>}
+                          {r.heavy !== null && r.heavy !== undefined && <> ({Math.round(r.heavy * 100)}% bd){r.heavy > HEAVY_PCT ? ' ⚠️' : ''}</>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {st.tanpaBanding > 0 && (
+                  <div className="text-[11px] text-neutral-500 dark:text-neutral-400">⚪ {st.tanpaBanding} TKU belum ada pembanding</div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {showPlanPast && (
@@ -617,12 +965,13 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
 
       {/* Tabel */}
       <div className={`bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 border-t-4 ${isReal ? 'border-t-emerald-500' : 'border-t-sky-500'} shadow-sm overflow-hidden`}>
-        <div className="overflow-x-auto">
+        <div ref={tableScrollRef} className="overflow-x-auto">
           <table className="text-xs border-collapse w-max min-w-full">
             <thead>
               <tr className="border-b border-neutral-200 dark:border-neutral-800">
                 <th rowSpan={3} className="sticky left-0 z-20 px-3 py-2 text-left font-semibold bg-neutral-50 dark:bg-neutral-800 border-r border-neutral-200 dark:border-neutral-700 min-w-[130px] text-neutral-600 dark:text-neutral-300">
                   Nama TKU
+                  <span className="block text-[10px] font-normal text-neutral-400 dark:text-neutral-500">% vs Tgt · Th lalu{showWeekCmp ? ' · Mgg lalu' : ''}</span>
                 </th>
                 {blocks.map(b => (
                   <th key={b.title} colSpan={b.span} className={`px-2 py-1.5 text-center font-bold border-l border-neutral-200 dark:border-neutral-800 ${b.tone}`}>
@@ -636,8 +985,9 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                   return (
                     <th
                       key={d}
-                      colSpan={4}
-                      className={`${th} ${w === 0 ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20' : ''}`}
+                      data-day={d}
+                      colSpan={collapsedDay(d) ? 1 : 4}
+                      className={`${th} ${collapsedDay(d) ? '!px-1' : ''} ${w === 0 ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20' : ''}`}
                     >
                       <div className="flex items-center justify-center gap-1">
                         <span>{DAY_NAMES[w]} {d}</span>
@@ -665,7 +1015,9 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                 ))}
               </tr>
               <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/40 text-neutral-500">
-                {shownDays.map(d =>
+                {shownDays.map(d => collapsedDay(d) ? (
+                  <th key={`${d}libur`} className="px-1 py-1 text-center font-semibold text-[10px] text-neutral-400 border-l border-neutral-200 dark:border-neutral-800 bg-red-50 dark:bg-red-950/20">libur</th>
+                ) :
                   VCODES.map((v, vi) => (
                     <th
                       key={`${d}${v}`}
@@ -681,15 +1033,34 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
               {rows.map(r => {
                 const a = r.agg;
+                const wc = showWeekCmp ? weekCmp(a) : null;
                 const sep = 'border-l border-neutral-200 dark:border-neutral-700';
                 return (
                   <tr key={r.key} className={rowBg(r.kind)}>
-                    <td className={`sticky left-0 z-10 px-3 py-2 font-semibold whitespace-nowrap border-r border-neutral-200 dark:border-neutral-700 ${stickyBg(r.kind)} ${accentCls(r)} ${labelTone(r)}`}>
+                    <td className={`sticky left-0 z-10 px-3 py-1.5 font-semibold whitespace-nowrap border-r border-neutral-200 dark:border-neutral-700 ${stickyBg(r.kind)} ${accentCls(r)} ${labelTone(r)}`}>
                       {r.label}
+                      {(a.pct.tg !== null || a.pct.ty !== null) && (
+                        <span className="block mt-0.5 font-mono text-[10px] font-bold leading-tight">
+                          {a.pct.tg !== null && (
+                            <span className={pctClass(a.pct.tg, r.kind)}><span className="font-sans font-medium opacity-70">Tgt </span>{formatPercent(a.pct.tg)}</span>
+                          )}
+                          {a.pct.tg !== null && a.pct.ty !== null && <span className="opacity-40"> · </span>}
+                          {a.pct.ty !== null && (
+                            <span className={pctClass(a.pct.ty, r.kind)}><span className="font-sans font-medium opacity-70">Th </span>{formatPercent(a.pct.ty)}</span>
+                          )}
+                        </span>
+                      )}
+                      {wc && wc.pct !== null && wc.diff !== null && (
+                        <span className={`block font-mono text-[10px] font-bold leading-tight ${pctClass(wc.pct, r.kind)}`}>
+                          <span className="font-sans font-medium opacity-70">Mgg lalu </span>{formatPercent(wc.pct)} • {formatDiff(wc.diff)}
+                        </span>
+                      )}
                     </td>
 
                     {/* 1. Transaksi per tanggal */}
-                    {shownDays.map(d =>
+                    {shownDays.map(d => collapsedDay(d) ? (
+                      <td key={`${d}libur`} className={`px-1 py-2 text-center font-mono text-xs text-neutral-300 dark:text-neutral-600 ${sep} ${dayTint(d, r.kind)}`}>-</td>
+                    ) :
                       VCODES.map((v, vi) => {
                         const future = isReal && d > updateDay;
                         // Mode rencana asli: tanggal yang sudah tertutup realisasi menampilkan rencana aslinya
