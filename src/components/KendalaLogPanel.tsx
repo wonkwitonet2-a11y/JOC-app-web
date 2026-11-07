@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ClipboardList, BarChart3, Search, ChevronDown, ChevronRight, Copy, LayoutGrid, Rows3, CheckCircle2, Tags } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ClipboardList, BarChart3, Search, ChevronDown, ChevronRight, Copy, LayoutGrid, Rows3, CheckCircle2, Tags, X } from 'lucide-react';
 import { AppState } from '../types';
 import { getPeriodInfo } from '../services/storage';
 import { buildWaText, copyText, fmtTgl, groupKey, listLog, LogEntry, normTopik, STATUS_SOLUSI } from '../services/weeklyNotes';
@@ -163,16 +163,30 @@ export const KendalaLogPanel: React.FC<Props> = ({ state, selectedRayon, onSaveR
     return listLog(state, { periode: period }).filter(e => ids.has(e.id));
   }, [state, period, tkus]);
 
+  // Topik yang maknanya sama (beda tulisan antar TKU) otomatis digabung jadi satu.
+  const clusters = useMemo(() => clusterTopik(base.map(e => e.v.tp)), [base]);
+
+  // Filter topik dari diagram "Topik terbanyak" (ketuk batang -> hanya catatan topik itu).
+  const [fTopik, setFTopik] = useState<string | null>(null);
+  const prevView = useRef<ViewMode | null>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const topikAktif = useMemo(() => {
+    if (!fTopik) return null;
+    for (const c of clusters.values()) if (c.id === fTopik) return c;
+    return null; // topiknya sudah tidak ada di pilihan ini -> filter diabaikan
+  }, [fTopik, clusters]);
+
   const filtered = useMemo(() => {
     const q = normTopik(fText);
-    if (!q) return base;
+    const baseT = topikAktif ? base.filter(e => topikClusterOf(clusters, e.v.tp) === topikAktif) : base;
+    if (!q) return baseT;
     const qc = canonTopik(fText);
-    return base.filter(e => {
+    return baseT.filter(e => {
       if (normTopik([e.v.tp, e.v.ar, e.v.a, e.v.s, e.v.h].join(' ')).includes(q)) return true;
       // "kurang dr 250" juga menemukan topik "YL < 250"
       return !!qc && canonTopik(e.v.tp).includes(qc);
     });
-  }, [base, fText]);
+  }, [base, fText, topikAktif, clusters]);
 
   const byTku = useMemo(() => {
     const m = new Map<number, LogEntry[]>();
@@ -180,14 +194,12 @@ export const KendalaLogPanel: React.FC<Props> = ({ state, selectedRayon, onSaveR
     return m;
   }, [filtered]);
 
-  // Topik yang maknanya sama (beda tulisan antar TKU) otomatis digabung jadi satu.
-  const clusters = useMemo(() => clusterTopik(base.map(e => e.v.tp)), [base]);
   const rekap = useMemo(() => {
     const seen = new Set<TopikCluster>();
-    const list: { label: string; count: number; variants: string[] }[] = [];
+    const list: { id: string; label: string; count: number; variants: string[] }[] = [];
     base.forEach(e => {
       const c = topikClusterOf(clusters, e.v.tp);
-      if (c && !seen.has(c)) { seen.add(c); list.push({ label: c.label, count: c.count, variants: c.variants }); }
+      if (c && !seen.has(c)) { seen.add(c); list.push({ id: c.id, label: c.label, count: c.count, variants: c.variants }); }
     });
     return list.sort((a, b) => b.count - a.count);
   }, [base, clusters]);
@@ -208,6 +220,18 @@ export const KendalaLogPanel: React.FC<Props> = ({ state, selectedRayon, onSaveR
   const tkuNameOf = (id: number) => state.tkus.find(t => t.id === id)?.nama || `TKU ${id}`;
   const [openTopik, setOpenTopik] = useState<Record<string, boolean>>({});
   const [showAllRekap, setShowAllRekap] = useState(false);
+  const pilihTopik = (id: string) => {
+    if (topikAktif && topikAktif.id === id) { hapusFilterTopik(); return; }
+    if (!topikAktif) prevView.current = view;
+    setFTopik(id);
+    setOpenTopik(p => ({ ...p, [id]: true }));
+    setView('topik');
+    setTimeout(() => tabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+  };
+  function hapusFilterTopik() {
+    setFTopik(null);
+    if (prevView.current) { setView(prevView.current); prevView.current = null; }
+  }
   const REKAP_AWAL = 6;
   const maxCount = rekap.reduce((m, r) => Math.max(m, r.count), 0) || 1;
   const belum = base.filter(e => e.n.st !== 'selesai').length;
@@ -256,17 +280,19 @@ export const KendalaLogPanel: React.FC<Props> = ({ state, selectedRayon, onSaveR
 
       {rekap.length > 0 && (
         <div className="space-y-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1"><BarChart3 className="w-3 h-3" />Topik terbanyak</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1"><BarChart3 className="w-3 h-3" />Topik terbanyak <span className="normal-case font-medium tracking-normal">• ketuk untuk lihat catatan</span></span>
           {(showAllRekap ? rekap : rekap.slice(0, REKAP_AWAL)).map(r => (
-            <div key={r.label} className="text-xs" title={r.variants.length > 1 ? `Digabung dari: ${r.variants.join(' | ')}` : undefined}>
+            <button key={r.id} type="button" onClick={() => pilihTopik(r.id)} aria-pressed={topikAktif?.id === r.id}
+              title={r.variants.length > 1 ? `Digabung dari: ${r.variants.join(' | ')}` : 'Ketuk untuk melihat catatannya'}
+              className={`block w-full text-left text-xs rounded-lg px-1.5 py-1 -mx-1.5 cursor-pointer transition-colors ${topikAktif?.id === r.id ? 'bg-brand-50 dark:bg-brand-950/40 ring-1 ring-brand-500/40' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/60'}`}>
               <span className="block font-semibold text-neutral-700 dark:text-neutral-300 break-words leading-snug">{r.label}</span>
-              <div className="flex items-center gap-2 mt-0.5">
-                <div className="flex-1 h-2 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
-                  <div className="h-full rounded-full bg-brand-600" style={{ width: `${(r.count / maxCount) * 100}%` }} />
-                </div>
+              <span className="flex items-center gap-2 mt-0.5">
+                <span className="flex-1 h-2 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
+                  <span className="block h-full rounded-full bg-brand-600" style={{ width: `${(r.count / maxCount) * 100}%` }} />
+                </span>
                 <span className="w-6 text-right font-mono font-bold text-neutral-700 dark:text-neutral-300">{r.count}</span>
-              </div>
-            </div>
+              </span>
+            </button>
           ))}
           {rekap.length > REKAP_AWAL && (
             <button type="button" onClick={() => setShowAllRekap(v => !v)} aria-expanded={showAllRekap}
@@ -278,7 +304,7 @@ export const KendalaLogPanel: React.FC<Props> = ({ state, selectedRayon, onSaveR
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div ref={tabsRef} className="flex flex-wrap items-center gap-2 scroll-mt-28">
         <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl">
           {tabBtn('papan', 'Papan', LayoutGrid)}
           {tabBtn('dropdown', 'Dropdown', Rows3)}
@@ -290,6 +316,14 @@ export const KendalaLogPanel: React.FC<Props> = ({ state, selectedRayon, onSaveR
             className="w-full text-xs rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 pl-8 pr-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40" />
         </div>
       </div>
+
+      {topikAktif && (
+        <button type="button" onClick={hapusFilterTopik}
+          className="inline-flex items-center gap-1.5 max-w-full text-xs font-bold rounded-full px-3 py-1.5 bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 border border-brand-500/30 cursor-pointer">
+          <span className="min-w-0 break-words text-left">Topik: {topikAktif.label}</span>
+          <X className="w-3.5 h-3.5 shrink-0" aria-label="Hapus filter topik" />
+        </button>
+      )}
 
       {tkus.length === 0 && <p className="text-xs text-neutral-500">Tidak ada TKU aktif pada pilihan ini.</p>}
 

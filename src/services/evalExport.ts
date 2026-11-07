@@ -120,7 +120,7 @@ export function buildNotes(ev: ProgressEval, units: EvalUnit[], total: EvalUnit)
       const warn = bottom.s < PLAN_WARN;
       notes.push({
         tone: warn ? 'warn' : 'info',
-        text: `${label}: ${fmtPlan([bottom])}${warn ? ' — warning (di bawah 95%)' : ' — sesuai rencana'}.`
+        text: `${label}: ${fmtPlan([bottom])}${warn ? ' — warning (di bawah 95%)' : ''}.`
       });
     }
   }
