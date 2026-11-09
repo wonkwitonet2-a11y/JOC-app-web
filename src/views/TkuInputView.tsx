@@ -1656,101 +1656,78 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
 
   // Card Kondisi & Parameter Operasional (Dipindah dari menu Realisasi ke menu Input Penjualan Harian setelah PDM)
   // Disimpan lewat tombol "Simpan Kondisi TKU" sendiri (terpisah dari tombol simpan penjualan)
-  const renderOpsCard = () => (
-    <div className="p-4 md:p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-      <div className="space-y-0.5">
-        <h2 className="text-base font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
-          <SlidersHorizontal className="w-5 h-5 text-emerald-600" />
-          Kondisi TKU
-          {opsDirty && (
-            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-              belum disimpan
+  const renderOpsCard = () => {
+    const opsFields = [
+    { key: 'jwp', label: 'JWP', value: jwpCustom, patch: (n: number) => ({ jwp: n }), tone: 'sky', title: 'JWP diisi manual: akumulasi hari kerja semua YL sampai tanggal ini' },
+    { key: 'absen', label: 'Absen', value: absen, patch: (n: number) => ({ absen: n }), tone: 'purple', title: 'Jumlah absen' },
+    { key: 'frek', label: 'Freq Absen', value: frek, patch: (n: number) => ({ frek: n }), tone: 'indigo', title: 'Frekuensi absen' },
+    { key: 'l250', label: 'YL < 250', value: l250, patch: (n: number) => ({ l250: n }), tone: 'red', title: 'Jumlah YL dengan penjualan < 250' },
+    { key: 'l300', label: 'YL < 300', value: l300, patch: (n: number) => ({ l300: n }), tone: 'amber', title: 'Jumlah YL dengan penjualan < 300' }
+  ];
+    const opsTones: Record<string, { box: string; label: string; input: string }> = {
+    sky: { box: 'bg-sky-50/70 dark:bg-sky-950/30 border-sky-200 dark:border-sky-900/50', label: 'text-sky-700 dark:text-sky-400', input: 'text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-700 focus:ring-sky-500' },
+    purple: { box: 'bg-purple-50/70 dark:bg-purple-950/30 border-purple-200 dark:border-purple-900/50', label: 'text-purple-700 dark:text-purple-400', input: 'text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-700 focus:ring-purple-500' },
+    indigo: { box: 'bg-indigo-50/70 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-900/50', label: 'text-indigo-700 dark:text-indigo-400', input: 'text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700 focus:ring-indigo-500' },
+    red: { box: 'bg-red-50/70 dark:bg-red-950/30 border-red-200 dark:border-red-900/50', label: 'text-red-700 dark:text-red-400', input: 'text-red-700 dark:text-red-300 border-red-300 dark:border-red-700 focus:ring-red-500' },
+    amber: { box: 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/50', label: 'text-amber-700 dark:text-amber-400', input: 'text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700 focus:ring-amber-500' }
+  };
+    return (
+      <div className="rounded-3xl border-2 border-emerald-300 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/10 p-4 md:p-5 shadow-sm space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h2 className="text-base font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+              <SlidersHorizontal className="w-5 h-5 text-emerald-600" />
+              Kondisi TKU
+              {opsDirty && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                  belum disimpan
+                </span>
+              )}
+            </h2>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+              Diisi tiap hari &bull; tanggal {formatDateIndo(inputDate)} &bull; disimpan terpisah dari penjualan
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="px-2.5 py-1 rounded-xl border bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700" title="Jumlah YL (diatur di menu Profil TKU)">
+              <span className="text-neutral-500 font-medium">Jml YL: </span>
+              <span className="font-mono font-bold text-neutral-900 dark:text-neutral-100">{cYl}</span>
             </span>
-          )}
-        </h2>
-      </div>
-      
-      {/* Bar Parameter Operasional */}
-      <div className="flex flex-wrap items-center gap-2 pt-2 lg:pt-0 border-t lg:border-t-0 border-neutral-100 dark:border-neutral-800">
-        {/* 1. Jml YL (Tampilan Saja) */}
-        <div className="px-2.5 py-1 rounded-xl border flex items-center gap-1.5 text-xs bg-neutral-50 dark:bg-neutral-800 border-neutral-200/60 dark:border-neutral-700" title="Jumlah YL (diatur di menu Profil TKU)">
-          <span className="text-neutral-500 font-medium">Jml YL:</span>
-          <span className="font-mono font-bold text-neutral-900 dark:text-neutral-100">{cYl}</span>
+            <span className="px-2.5 py-1 rounded-xl border bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700" title="Jumlah Area (diatur di menu Profil TKU)">
+              <span className="text-neutral-500 font-medium">Area: </span>
+              <span className="font-mono font-bold text-neutral-900 dark:text-neutral-100">{cAr}</span>
+            </span>
+          </div>
         </div>
 
-        {/* 2. Area (Tampilan Saja) */}
-        <div className="px-2.5 py-1 rounded-xl border flex items-center gap-1.5 text-xs bg-neutral-50 dark:bg-neutral-800 border-neutral-200/60 dark:border-neutral-700" title="Jumlah Area (diatur di menu Profil TKU)">
-          <span className="text-neutral-500 font-medium">Area:</span>
-          <span className="font-mono font-bold text-neutral-900 dark:text-neutral-100">{cAr}</span>
+        <div className="grid grid-cols-2 @2xl:grid-cols-5 gap-3">
+          {opsFields.map(f => {
+            const t = opsTones[f.tone];
+            return (
+              <div key={f.key} title={f.title} className={`p-3 rounded-2xl border min-w-0 ${t.box}`}>
+                <label className={`block text-xs font-bold leading-tight mb-1.5 ${t.label}`}>{f.label}</label>
+                <OpsNumberField
+                  value={f.value}
+                  min={0}
+                  onCommit={(n) => editOps(f.patch(n))}
+                  className={`w-full px-2 py-2 rounded-xl border font-mono font-bold text-center text-base bg-white dark:bg-neutral-900 ${t.input}`}
+                />
+              </div>
+            );
+          })}
         </div>
 
-        {/* 3. JWP (diisi manual oleh TKU: total hari kerja semua YL sampai hari ini) */}
-        <div className="px-2.5 py-1 rounded-xl border flex items-center gap-1.5 text-xs bg-sky-50/60 dark:bg-sky-950/30 border-sky-200/60 dark:border-sky-900/40" title="JWP diisi manual: akumulasi hari kerja semua YL sampai tanggal ini (YL lama × hari berjalan, YL baru × hari ia mulai berjualan)">
-          <span className="text-sky-700 dark:text-sky-400 font-semibold">JWP:</span>
-          <OpsNumberField
-            value={jwpCustom}
-            min={0}
-            onCommit={(n) => editOps({ jwp: n })}
-            className="w-16 px-1.5 py-0.5 rounded-lg border font-mono font-bold text-center text-xs bg-white dark:bg-neutral-900 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-700 focus:ring-sky-500"
-          />
-        </div>
-
-        {/* 4. Absen (Memperbarui nilai) */}
-        <div className="px-2.5 py-1 rounded-xl border flex items-center gap-1.5 text-xs bg-purple-50/60 dark:bg-purple-950/30 border-purple-200/60 dark:border-purple-900/40">
-          <span className="text-purple-700 dark:text-purple-400 font-semibold">Absen:</span>
-          <OpsNumberField
-            value={absen}
-            min={0}
-            onCommit={(n) => editOps({ absen: n })}
-            className="w-14 px-1.5 py-0.5 rounded-lg border font-mono font-bold text-center text-xs bg-white dark:bg-neutral-900 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-700 focus:ring-purple-500"
-          />
-        </div>
-
-        {/* 5. Freq Absen (Memperbarui nilai) */}
-        <div className="px-2.5 py-1 rounded-xl border flex items-center gap-1.5 text-xs bg-indigo-50/60 dark:bg-indigo-950/30 border-indigo-200/60 dark:border-indigo-900/40">
-          <span className="text-indigo-700 dark:text-indigo-400 font-semibold">Freq:</span>
-          <OpsNumberField
-            value={frek}
-            min={0}
-            onCommit={(n) => editOps({ frek: n })}
-            className="w-14 px-1.5 py-0.5 rounded-lg border font-mono font-bold text-center text-xs bg-white dark:bg-neutral-900 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700 focus:ring-indigo-500"
-          />
-        </div>
-
-        {/* 6. YL < 250 (Memperbarui nilai) */}
-        <div className="px-2.5 py-1 rounded-xl border flex items-center gap-1.5 text-xs bg-red-50/60 dark:bg-red-950/30 border-red-200/60 dark:border-red-900/40">
-          <span className="text-red-700 dark:text-red-400 font-semibold">YL &lt; 250:</span>
-          <OpsNumberField
-            value={l250}
-            min={0}
-            onCommit={(n) => editOps({ l250: n })}
-            className="w-14 px-1.5 py-0.5 rounded-lg border font-mono font-bold text-center text-xs bg-white dark:bg-neutral-900 text-red-700 dark:text-red-300 border-red-300 dark:border-red-700 focus:ring-red-500"
-          />
-        </div>
-
-        {/* 7. YL < 300 (Memperbarui nilai) */}
-        <div className="px-2.5 py-1 rounded-xl border flex items-center gap-1.5 text-xs bg-amber-50/60 dark:bg-amber-950/30 border-amber-200/60 dark:border-amber-900/40">
-          <span className="text-amber-700 dark:text-amber-400 font-semibold">YL &lt; 300:</span>
-          <OpsNumberField
-            value={l300}
-            min={0}
-            onCommit={(n) => editOps({ l300: n })}
-            className="w-14 px-1.5 py-0.5 rounded-lg border font-mono font-bold text-center text-xs bg-white dark:bg-neutral-900 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700 focus:ring-amber-500"
-          />
-        </div>
-
-        {/* 8. Tombol simpan kondisi TKU (terpisah dari simpan penjualan) */}
         <button
           type="button"
           onClick={handleSaveOps}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-transform active:scale-95 ${opsDirty ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-700'}`}
+          className="w-full px-6 py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm shadow-md shadow-brand-600/20 flex items-center justify-center gap-2 transition-transform active:scale-95"
         >
-          <Save className="w-3.5 h-3.5" />
-          <span>{isBackdate ? `Simpan Kondisi Tgl ${inputDay}` : 'Simpan Kondisi TKU'}</span>
+          <Save className="w-4 h-4" />
+          <span>{isBackdate ? `Simpan Kondisi Tgl ${inputDay}` : 'Simpan Kondisi TKU Hari Ini'}</span>
         </button>
       </div>
-    </div>
-  );
+    );
+  };
 
   // Render Tabel Realisasi Penjualan & Operasional TKU (Khusus tabel detail di menu Realisasi)
   const renderRealisasiSection = () => {
@@ -2728,9 +2705,6 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
             </div>
           </div>
 
-          {/* Card Kondisi & Parameter Operasional (Dipindah dari menu Realisasi ke setelah PDM, tidak ikut simpan harian) */}
-          {renderOpsCard()}
-
           {/* Section 4: Live Summary Preview */}
           <div className="p-5 bg-gradient-to-r from-brand-50 to-brand-100/50 dark:from-brand-950/30 dark:to-neutral-900 rounded-3xl border border-brand-200 dark:border-brand-900/60 shadow-sm space-y-3">
             <div className="flex items-center gap-2">
@@ -2790,6 +2764,9 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
               <span>{isBackdate ? `Simpan Data Tgl ${inputDay} ${period.namaBulanPendek}` : 'Simpan Data Penjualan Hari Ini'}</span>
             </button>
           </div>
+
+          {/* Kondisi TKU: di bawah tombol simpan penjualan, kartu terpisah, tetap diisi tiap hari */}
+          {renderOpsCard()}
         </div>
       )}
 
@@ -2947,45 +2924,51 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                 const wIdx = WEEKS.indexOf(wk);
                 const cw = getCumPlanUpToDay(wk.end);
                 const wDiv = Math.max(1, wk.end);
-                const avgV = [cw.cumYo, cw.cumOm, cw.cumOs, cw.cumYt].map(x => Math.floor(x / wDiv));
-                const avgT = Math.floor(cw.cumTotal / wDiv);
+                                const avgT = Math.floor(cw.cumTotal / wDiv);
                 const prevWk = wIdx > 0 ? WEEKS[wIdx - 1] : null;
-                let wkInfo: React.ReactNode = <span className="text-neutral-400">vs mgg lalu: —</span>;
+                // Metrik ringkas per minggu: vs mgg lalu, vs Tgt, vs Bln lalu, vs TH (pct = rata2 / pembanding, selisih = akm - pembanding x hari)
+                const mkMetric = (label: string, base: number) => {
+                  if (!(base > 0)) return { label, pct: null as number | null, diff: 0 };
+                  return { label, pct: avgT / base, diff: cw.cumTotal - base * wDiv };
+                };
+                let prevBase = 0;
                 if (prevWk) {
                   const cp = getCumPlanUpToDay(prevWk.end);
-                  const avgPrev = Math.floor(cp.cumTotal / Math.max(1, prevWk.end));
-                  if (avgPrev > 0) {
-                    const pct = avgT / avgPrev;
-                    // Selisih AKUMULASI: akm minggu ini (tgl 1 s/d Sabtu) dikurangi akm bila memakai rata-rata minggu lalu
-                    // pada jumlah hari yang sama (cara yang sama dengan selisih vs Target di tabel lain).
-                    const akmDiff = cw.cumTotal - avgPrev * wDiv;
-                    wkInfo = (
-                      <span className={akmDiff >= 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-red-600 dark:text-red-400 font-bold'}>
-                        vs mgg lalu: {formatPercent(pct)} ({formatDiff(akmDiff)})
-                      </span>
-                    );
-                  }
+                  prevBase = Math.floor(cp.cumTotal / Math.max(1, prevWk.end));
                 }
+                const mBl = mkMetric('vs BL', blHarian);
+                const mTh = mkMetric('vs TH', tyHarian);
+                const mMgg = mkMetric('vs Mgg lalu', prevBase);
+                const mTgt = mkMetric('vs Tgt', targetHarian);
+                const metricCell = (m: { label: string; pct: number | null; diff: number }) => (
+                  <div className="flex items-baseline gap-1 whitespace-nowrap">
+                    <span className="text-neutral-500 dark:text-neutral-400">{m.label}</span>
+                    {m.pct === null ? (
+                      <span className="text-neutral-400">—</span>
+                    ) : (
+                      <span className={`font-bold ${m.diff >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {formatPercent(m.pct)} ({formatDiff(m.diff)})
+                      </span>
+                    )}
+                  </div>
+                );
                 rows.push(
-                  <tr key={`wh${wk.id}`} className="bg-neutral-100 dark:bg-neutral-800 font-sans">
-                    <td colSpan={5} className="pt-2 pb-1 px-2.5 text-xs text-neutral-700 dark:text-neutral-200">
-                      <div className="flex flex-wrap items-center justify-between gap-x-3">
-                        <span><span className="font-bold">Minggu {wk.id}</span><span className="text-neutral-500 dark:text-neutral-400"> · Tgl {wk.start}–{wk.end}</span></span>
-                        <span className="text-xs">{wkInfo}</span>
-                      </div>
+                  <tr key={`wh${wk.id}`} className="bg-neutral-100 dark:bg-neutral-800 font-sans text-[10px] leading-tight">
+                    <td className="pt-1.5 pb-0 px-2.5 whitespace-nowrap font-bold text-neutral-800 dark:text-neutral-100">Minggu {wk.id}</td>
+                    <td colSpan={2} className="pt-1.5 pb-0 px-1">{metricCell(mMgg)}</td>
+                    <td colSpan={2} className="pt-1.5 pb-0 px-1">{metricCell(mBl)}</td>
+                    <td className={`pt-1.5 pb-0 px-1.5 text-right whitespace-nowrap ${TOTAL_FRAME}`}>
+                      <span className="text-neutral-500 dark:text-neutral-400">Akm = </span>
+                      <span className="font-bold text-neutral-900 dark:text-white">{formatNumber(cw.cumTotal)}</span>
                     </td>
-                    <td className={`${TOTAL_FRAME}`} />
                   </tr>,
-                  <tr key={`wa${wk.id}`} className="bg-neutral-100 dark:bg-neutral-800 font-mono">
-                    <td className="pb-2 pt-0 px-2.5 text-xs leading-tight text-neutral-500 dark:text-neutral-400 font-sans whitespace-nowrap">
-                      Rata2<span className="block">÷ {wDiv}</span>
-                    </td>
-                    {avgV.map((x, k) => (
-                      <td key={k} className="pb-2 pt-0 px-1 text-center font-bold" style={{ color: VARIANTS[k].color }}>{formatNumber(x)}</td>
-                    ))}
-                    <td className={`pb-2 pt-0 px-2.5 text-right font-bold text-neutral-900 dark:text-white ${TOTAL_FRAME}`}>
-                      {formatNumber(avgT)}
-                      <span className="block text-xs font-normal font-sans text-neutral-500 dark:text-neutral-400">Akm {formatNumber(cw.cumTotal)}</span>
+                  <tr key={`wa${wk.id}`} className="bg-neutral-100 dark:bg-neutral-800 font-sans text-[10px] leading-tight">
+                    <td className="pt-0 pb-1.5 px-2.5 whitespace-nowrap text-neutral-500 dark:text-neutral-400">Tgl {wk.start}–{wk.end}</td>
+                    <td colSpan={2} className="pt-0.5 pb-1.5 px-1">{metricCell(mTgt)}</td>
+                    <td colSpan={2} className="pt-0.5 pb-1.5 px-1">{metricCell(mTh)}</td>
+                    <td className={`pt-0.5 pb-1.5 px-1.5 text-right whitespace-nowrap ${TOTAL_FRAME}`}>
+                      <span className="text-neutral-500 dark:text-neutral-400">Rata2 = </span>
+                      <span className="font-bold text-neutral-900 dark:text-white">{formatNumber(avgT)}</span>
                     </td>
                   </tr>
                 );
