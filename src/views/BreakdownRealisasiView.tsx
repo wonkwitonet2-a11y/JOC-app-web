@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ArrowDown, ArrowLeftRight, ArrowUp, Calendar, ChevronDown, Download } from 'lucide-react';
 import { AppState, VariantCode, DailySalesRecord } from '../types';
+import { weekCompareRange, compareWeek, dateKeyOf } from '../services/weekCompare';
 import {
   formatNumber,
   formatPercent,
@@ -111,6 +112,14 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
 
   const isoDate = (d: number) => `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   const dow = (d: number) => new Date(year, month - 1, d).getDay();
+
+  // Total penjualan riil (hari bulan lalu, d <= 0) untuk beberapa TKU — dipakai perbandingan vs Minggu lalu
+  const prevMonthTotal = (idxs: number[], d: number): number =>
+    idxs.reduce((sum, i) => {
+      if (!state.tkus[i]?.aktif) return sum;
+      const rec = state.pjd?.[dateKeyOf(year, month - 1, d)]?.[i];
+      return sum + (rec ? (rec.sold || (rec.v ? rec.v.reduce((x, y) => x + (y || 0), 0) : 0)) : 0);
+    }, 0);
 
   // Minggu berakhir di hari Sabtu; minggu terakhir berakhir di tanggal terakhir bulan.
   const weeks = useMemo(() => getWeeksOfMonth(state), [state.activePeriod, state.activeDate]);
@@ -445,7 +454,8 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
 
   const summary = (() => {
     const base = build(allIdxs);
-    const from = viewMode === 'mingguan' ? week.start : 1;
+    // Kartu ringkasan = AKUMULASI tgl 1 s/d akhir minggu terpilih (sama dengan tabel, Analisa & menu TKU)
+    const from = 1;
     const to = viewMode === 'mingguan' ? (isReal ? Math.min(week.end, updateDay) : week.end) : n;
     const days = Math.max(0, to - from + 1);
     let total = 0;
@@ -476,7 +486,6 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
   const analisa = (() => {
     const from = viewMode === 'mingguan' ? week.start : 1;
     const to = viewMode === 'mingguan' ? week.end : daysInMonth;
-    const D = to - from + 1;
     let rem = 0; // sisa hari kerja (Senin-Sabtu) setelah tanggal update
     for (let d = Math.max(from, updateDay + 1); d <= to; d++) if (dow(d) !== 0) rem++;
     const projDay = (i: number, d: number) =>
@@ -524,31 +533,30 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
       return r;
     };
 
-    // vs Target / vs Th Lalu: seluruh periode (minggu terpilih atau sebulan)
+    // vs Target / vs Th Lalu: AKUMULASI tgl 1 s/d akhir periode (Sabtu minggu terpilih, atau akhir bulan).
+    // Target itu bulanan, jadi minus minggu-minggu sebelumnya ikut dihitung (sama dengan tabel & menu TKU).
     const make = (label: string, cOf: (i: number) => number) => {
       const acc = newAcc();
+      const DA = to; // jumlah hari akumulasi = tgl 1 s/d `to`
       allIdxs.forEach(i => {
         const c = cOf(i);
         if (c <= 0) { acc.tanpaBanding++; return; }
         let P = 0;
-        for (let d = from; d <= to; d++) P += projDay(i, d);
-        classify(acc, i, c * D, P, planRemOf(i));
+        for (let d = 1; d <= to; d++) P += projDay(i, d);
+        classify(acc, i, c * DA, P, planRemOf(i));
       });
       return finish(label, acc);
     };
 
-    // vs Minggu Lalu (hanya tampilan Mingguan): hari yang sama minggu lalu (tanggal - 7), hari libur dilewati
+    // vs Minggu Lalu (hanya tampilan Mingguan): akm minggu ini (Min s/d Sabtu) dibanding akm minggu lalu (jumlah hari sama).
+    // Sama dengan tabel & menu TKU. Hari bulan lalu ikut bila minggu 1 tidak mulai hari Minggu.
     const makeWeek = () => {
       const acc = newAcc();
-      const aktifIdxs = state.tkus.map((t, i) => (t.aktif ? i : -1)).filter(i => i >= 0);
-      const holiday = (d: number) => aktifIdxs.every(i => projDay(i, d) === 0);
-      const pairDays: number[] = [];
-      for (let d = week.start; d <= week.end; d++) if (d > 7 && !holiday(d) && !holiday(d - 7)) pairDays.push(d);
+      const rg = weekCompareRange(year, month - 1, week.start, week.end);
       allIdxs.forEach(i => {
-        let cur = 0, prev = 0;
-        pairDays.forEach(d => { cur += projDay(i, d); prev += projDay(i, d - 7); });
-        if (pairDays.length === 0 || prev <= 0) { acc.tanpaBanding++; return; }
-        classify(acc, i, prev, cur, planRemOf(i));
+        const r = compareWeek(rg, (d) => (d >= 1 ? projDay(i, d) : prevMonthTotal([i], d)));
+        if (r.prev <= 0) { acc.tanpaBanding++; return; }
+        classify(acc, i, r.prev, r.cur, planRemOf(i));
       });
       return finish('vs Minggu Lalu', acc);
     };
@@ -586,7 +594,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
       r.agg.avg.forEach(x => line.push(Math.floor(x)));
       line.push(Math.floor(r.agg.avgTotal));
       if (showWeekCmp) {
-        const wc = weekCmp(r.agg);
+        const wc = weekCmp(r.agg, r.idxs);
         line.push(wc.pct === null ? '' : truncFixed((wc.pct * 100), 1) + '%', wc.diff === null ? '' : Math.trunc(wc.diff));
       }
       line.push(...[r.agg.pct.tg, r.agg.pct.bl, r.agg.pct.ty].map(p => (p === null ? '' : truncFixed((p * 100), 1) + '%')));
@@ -658,7 +666,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
   // Warna teks aman untuk baris gelap (Total Cabang)
   const hue = (kind: TableRow['kind'], light: string, dark: string) => (kind === 'total' ? dark : light);
 
-  // ---- Perbandingan dengan Minggu lalu (hari yang sama = tanggal - 7) ----
+  // ---- Perbandingan dengan Minggu lalu (akumulasi tgl 1 s/d Sabtu, rata-rata per hari) ----
   // Hanya tab Breakdown & tampilan Mingguan. Tanggal 1-7 belum punya pembanding.
   const showWeekCmp = !isReal && viewMode === 'mingguan';
   const dayTotal = (a: Agg, d: number) => a.daily[d].reduce((x, y) => x + y, 0);
@@ -674,14 +682,15 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
   // Selisih satu tanggal vs tanggal yang sama minggu lalu (null jika salah satunya libur)
   const dayDiff = (a: Agg, d: number): number | null =>
     d > 7 && !isHoliday(d) && !isHoliday(d - 7) ? dayTotal(a, d) - dayTotal(a, d - 7) : null;
-  // Total minggu yang ditampilkan vs hari-hari yang sama minggu lalu (hari libur dilewati)
-  const weekCmp = (a: Agg) => {
-    let cur = 0, prev = 0, any = false;
-    shownDays.forEach(d => {
-      if (d > 7 && !isHoliday(d) && !isHoliday(d - 7)) { any = true; cur += dayTotal(a, d); prev += dayTotal(a, d - 7); }
-    });
-    if (!any) return { pct: null as number | null, diff: null as number | null };
-    return { pct: prev > 0 ? cur / prev : null, diff: cur - prev };
+  // vs Minggu lalu: akm minggu ini (Min s/d Sabtu, realisasi + breakdown) dibanding akm minggu lalu (jumlah hari sama).
+  // Persen = akm / akm, selisih = akm - akm. Bila minggu 1 tidak mulai hari Minggu, hari bulan lalu ikut (penjualan riil tersimpan).
+  // (Sama dengan menu TKU, lihat services/weekCompare.ts)
+  const weekCmp = (a: Agg, idxs: number[]) => {
+    const r = compareWeek(
+      weekCompareRange(year, month - 1, week.start, week.end),
+      (d) => (d >= 1 ? dayTotal(a, d) : prevMonthTotal(idxs, d))
+    );
+    return { pct: r.pct, diff: r.diff };
   };
   // Hari Minggu tanpa transaksi di semua TKU: kolomnya dipersempit (1 kolom, bukan 4 varian)
   const collapsedDay = (d: number): boolean => dow(d) === 0 && isHoliday(d);
@@ -700,8 +709,8 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode, weekIdx, tab, selectedRayon]);
 
-  // Ringkasan Breakdown Mingguan: total cabang/rayon vs hari yang sama minggu lalu
-  const wkSummary = showWeekCmp ? weekCmp(build(allIdxs)) : null;
+  // Ringkasan Breakdown Mingguan: total cabang/rayon vs minggu lalu (rata2 akumulasi)
+  const wkSummary = showWeekCmp ? weekCmp(build(allIdxs), allIdxs) : null;
   const summaryItems = [
     ...summary.items,
     ...(wkSummary
@@ -851,7 +860,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                     : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
                 }`}
               >
-                Mgg {i + 1} <span className="font-normal opacity-70">({w.start}–{w.end})</span>
+                Minggu {i + 1}
               </button>
             ))}
           </div>
@@ -869,7 +878,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-1">
           <span className="text-xs font-bold text-neutral-700 dark:text-neutral-200">
             {isReal ? 'Realisasi' : 'Breakdown'}{' '}
-            {viewMode === 'mingguan' ? `Mgg ${weekIdx + 1} (${week.start}–${summary.to >= week.start ? summary.to : week.end})` : `${monthName}${isReal ? ` (s/d tgl ${updateDay})` : ''}`}
+            {viewMode === 'mingguan' ? `Minggu ${weekIdx + 1}` : `${monthName}${isReal ? ` (s/d tgl ${updateDay})` : ''}`}
           </span>
           <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
             {summary.days > 0 ? `Rata-rata ${formatNumber(summary.avg)} btl/hr • ${summary.days} hari` : 'Belum ada data'}
@@ -897,7 +906,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
           className="w-full flex items-center justify-between gap-2 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-3 py-2 text-xs font-bold text-neutral-800 dark:text-neutral-100 cursor-pointer">
           <span className="flex items-center gap-1.5 min-w-0">
             <span>📊</span>
-            <span className="truncate">Analisa {viewMode === 'mingguan' ? `Mgg ${weekIdx + 1}` : 'Bulan Ini'}</span>
+            <span className="truncate">Analisa {viewMode === 'mingguan' ? `Minggu ${weekIdx + 1}` : 'Bulan Ini'}</span>
           </span>
           <span className="flex items-center gap-1.5 shrink-0">
             {analisa.sets.reduce((n, st) => n + st.dekat.length, 0) > 0 && (
@@ -942,7 +951,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                           {r.kunj
                             ? <>➜ {r.kunj} kunjungan • <b>+{fmt1(r.perYl || 0)} btl/YL/kunjungan</b></>
                             : <>➜ {analisa.rem} hr • <b>+{fmt1(r.perYl || 0)} btl/YL/hr</b></>}
-                          {r.heavy !== null && r.heavy !== undefined && <> ({Math.round(r.heavy * 100)}% bd){r.heavy > HEAVY_PCT ? ' ⚠️' : ''}</>}
+                          {r.heavy !== null && r.heavy !== undefined && r.heavy > HEAVY_PCT && <> ⚠️</>}
                         </div>
                       </div>
                     ))}
@@ -1033,7 +1042,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
               {rows.map(r => {
                 const a = r.agg;
-                const wc = showWeekCmp ? weekCmp(a) : null;
+                const wc = showWeekCmp ? weekCmp(a, r.idxs) : null;
                 const sep = 'border-l border-neutral-200 dark:border-neutral-700';
                 return (
                   <tr key={r.key} className={rowBg(r.kind)}>
@@ -1106,7 +1115,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
 
                     {/* 4. Vs Minggu lalu (hanya mingguan, tab Breakdown) */}
                     {showWeekCmp && (() => {
-                      const wc = weekCmp(a);
+                      const wc = weekCmp(a, r.idxs);
                       const toneDiff = toneOf(wc.diff);
                       const tonePct: Tone = wc.pct === null ? 'none' : toneDiff;
                       return (

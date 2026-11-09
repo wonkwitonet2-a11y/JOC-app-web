@@ -52,6 +52,7 @@ import {
 import { useConfirm } from '../components/ConfirmDialog';
 import { REAL_TKU_DAILY_SALES } from '../data/realSalesSeptember2026';
 import { saveTkuInputDraft, loadTkuInputDraft, clearTkuInputDraft } from '../services/inputDraft';
+import { weekCompareRange, compareWeek, dateKeyOf } from '../services/weekCompare';
 
 interface TkuInputViewProps {
   state: AppState;
@@ -628,6 +629,12 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       return found.v[vIdx] || 0;
     }
     return 0;
+  };
+
+  // Penjualan riil TKU ini pada tanggal d (d <= 0 = bulan lalu). Dipakai untuk "vs Mgg lalu" bila minggu 1 tidak mulai hari Minggu.
+  const getPrevMonthSold = (d: number): number => {
+    const rec = state.pjd[dateKeyOf(PY, PM0, d)]?.[tkuIdx];
+    return rec ? (rec.sold || (rec.v ? rec.v.reduce((a, b) => a + (b || 0), 0) : 0)) : 0;
   };
 
   // Helper: Cek apakah pada tanggal d sudah tersimpan transaksi penjualan riil
@@ -1788,7 +1795,6 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
 
     // Baris ringkasan mingguan realisasi: rata-rata = akumulasi tgl 1 s/d (Sabtu, maks. tanggal update) ÷ tanggal itu.
     const weekRowsFor = (wk: { id: number; start: number; end: number }): React.ReactNode[] => {
-      const wIdx = WEEKS.findIndex(w => w.id === wk.id);
       const started = wk.start <= upd;
       const cut = Math.min(wk.end, upd);
       let avgV: number[] = [0, 0, 0, 0];
@@ -1800,20 +1806,16 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
         avgV = [cw.cumYo, cw.cumOm, cw.cumOs, cw.cumYt].map(x => Math.floor(x / cut));
         avgT = Math.floor(cw.cumTotal / cut);
         akmT = cw.cumTotal;
-        const prevWk = wIdx > 0 ? WEEKS[wIdx - 1] : null;
-        if (prevWk) {
-          const pc = Math.min(prevWk.end, upd);
-          const cp = getCumActualUpToDay(pc);
-          const avgPrev = Math.floor(cp.cumTotal / Math.max(1, pc));
-          if (avgPrev > 0) {
-            const pct = avgT / avgPrev;
-            const akmDiff = cw.cumTotal - avgPrev * cut;
-            wkInfo = (
-              <span className={akmDiff >= 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-red-600 dark:text-red-400 font-bold'}>
-                vs mgg lalu: {formatPercent(pct)} ({formatDiff(akmDiff)})
-              </span>
-            );
-          }
+        // vs Mgg lalu: akm minggu ini (Min s/d hari terakhir realisasi) vs akm minggu lalu dengan jumlah hari yang sama.
+        const rg0 = weekCompareRange(PY, PM0, wk.start, wk.end);
+        const rg = { ...rg0, curTo: cut, prevTo: cut - 7 };
+        const wcm = compareWeek(rg, (dd) => (dd >= 1 ? getActualSalesForDay(dd, 'ALL') : getPrevMonthSold(dd)));
+        if (wcm.pct !== null && wcm.diff !== null) {
+          wkInfo = (
+            <span className={wcm.diff >= 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-red-600 dark:text-red-400 font-bold'}>
+              vs mgg lalu: {formatPercent(wcm.pct)} ({formatDiff(wcm.diff)})
+            </span>
+          );
         }
       }
       const dash = <span className="text-neutral-300 dark:text-neutral-600 font-normal">—</span>;
@@ -2925,20 +2927,20 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                 const cw = getCumPlanUpToDay(wk.end);
                 const wDiv = Math.max(1, wk.end);
                                 const avgT = Math.floor(cw.cumTotal / wDiv);
-                const prevWk = wIdx > 0 ? WEEKS[wIdx - 1] : null;
                 // Metrik ringkas per minggu: vs mgg lalu, vs Tgt, vs Bln lalu, vs TH (pct = rata2 / pembanding, selisih = akm - pembanding x hari)
                 const mkMetric = (label: string, base: number) => {
                   if (!(base > 0)) return { label, pct: null as number | null, diff: 0 };
                   return { label, pct: avgT / base, diff: cw.cumTotal - base * wDiv };
                 };
-                let prevBase = 0;
-                if (prevWk) {
-                  const cp = getCumPlanUpToDay(prevWk.end);
-                  prevBase = Math.floor(cp.cumTotal / Math.max(1, prevWk.end));
-                }
+                // vs Mgg lalu: akm minggu ini (Min s/d Sabtu, realisasi + breakdown) vs akm minggu lalu (jumlah hari sama).
+                // Persen = akm / akm, selisih = akm - akm. Hari bulan lalu ikut bila minggu 1 tidak mulai hari Minggu.
+                const wcm = compareWeek(
+                  weekCompareRange(PY, PM0, wk.start, wk.end),
+                  (dd) => (dd >= 1 ? getPlannedTargetForDay(dd, 'ALL') : getPrevMonthSold(dd))
+                );
+                const mMgg = { label: 'vs Mgg lalu', pct: wcm.pct, diff: wcm.diff ?? 0 };
                 const mBl = mkMetric('vs BL', blHarian);
                 const mTh = mkMetric('vs TH', tyHarian);
-                const mMgg = mkMetric('vs Mgg lalu', prevBase);
                 const mTgt = mkMetric('vs Tgt', targetHarian);
                 const metricCell = (m: { label: string; pct: number | null; diff: number }) => (
                   <div className="flex items-baseline gap-1 whitespace-nowrap">
