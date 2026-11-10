@@ -137,8 +137,8 @@ const buildViewSnapshot = (real: AppState, key: string): MonthSnapshot => {
     const fields = ['targetHarian', 'jumlahYl', 'jumlahArea', 'coverageArea', 'absenYl', 'frekuensiAbsen', 'akmJwp', 'sYl', 'l250', 'l300'] as const;
     fields.forEach(f => { const val = (row as any)[f]; if (typeof val === 'number') m[f] = val; });
     snap.tkuMonthly[i] = m;
-    if (typeof row.bulanLalu === 'number') snap.targetBulanLalu[i] = row.bulanLalu;
-    if (typeof row.tahunLalu === 'number') snap.targetTahunLalu[i] = row.tahunLalu;
+    if (typeof row.bulanLalu === 'number') snap.targetBulanLalu[i] = Math.floor(row.bulanLalu);
+    if (typeof row.tahunLalu === 'number') snap.targetTahunLalu[i] = Math.floor(row.tahunLalu);
     const tg = Number(m.targetHarian) || 0;
     codes.forEach(c => { snap.targetPerVariant[c][i] = { ...snap.targetPerVariant[c][i], tg: Math.floor(tg * VIEW_VARIANT_SHARE[c]) }; });
   });
@@ -172,6 +172,31 @@ export default function App() {
   // state     = yang dilihat/diubah menu: data asli, atau salinan bulan lama saat mode lihat aktif.
   const [realState, setRealState] = useState<AppState>(() => loadAppState());
   const [view, setView] = useState<ViewCtx | null>(null);
+  // Data target lama yang masih berdesimal (dari HP, server, atau arsip) dibulatkan ke bawah sekali saja.
+  useEffect(() => {
+    const isInt = (n: any) => typeof n !== 'number' || Number.isInteger(n);
+    const arrOk = (a: any) => !Array.isArray(a) || a.every(isInt);
+    const pv: any = realState.targetPerVariant || {};
+    const pvOk = Object.values(pv).every((m: any) => Object.values(m || {}).every((r: any) => isInt(r?.tg) && isInt(r?.bl) && isInt(r?.ty)));
+    const tkuOk = (realState.tkus || []).every(t => isInt(t.targetHarian));
+    if (arrOk(realState.targetBulanLalu) && arrOk(realState.targetTahunLalu) && pvOk && tkuOk) return;
+    const fl = (n: any) => (typeof n === 'number' ? Math.floor(n) : n);
+    setRealState(prev => {
+      const nextPv: any = {};
+      Object.entries((prev.targetPerVariant || {}) as any).forEach(([v, m]: [string, any]) => {
+        const mm: any = {};
+        Object.entries(m || {}).forEach(([k, r]: [string, any]) => { mm[k] = { ...r, tg: fl(r?.tg), bl: fl(r?.bl), ty: fl(r?.ty) }; });
+        nextPv[v] = mm;
+      });
+      return {
+        ...prev,
+        targetBulanLalu: Array.isArray(prev.targetBulanLalu) ? prev.targetBulanLalu.map(fl) : prev.targetBulanLalu,
+        targetTahunLalu: Array.isArray(prev.targetTahunLalu) ? prev.targetTahunLalu.map(fl) : prev.targetTahunLalu,
+        targetPerVariant: nextPv,
+        tkus: (prev.tkus || []).map(t => ({ ...t, targetHarian: fl(t.targetHarian) }))
+      };
+    });
+  }, [realState.targetBulanLalu, realState.targetTahunLalu, realState.targetPerVariant, realState.tkus]);
   // true = penyimpanan di HP ini gagal (memori penuh/diblokir): tampilkan peringatan merah sampai berhasil lagi.
   const [localSaveFailed, setLocalSaveFailed] = useState(false);
   useEffect(() => {
@@ -875,7 +900,7 @@ export default function App() {
   const handleUpdateTargetHarian = (tkuIdx: number, newTg: number) => {
     setState(prev => {
       const nextTkus = [...prev.tkus];
-      nextTkus[tkuIdx] = { ...nextTkus[tkuIdx], targetHarian: newTg };
+      nextTkus[tkuIdx] = { ...nextTkus[tkuIdx], targetHarian: Math.floor(Number(newTg) || 0) };
       return { ...prev, tkus: nextTkus };
     });
   };
@@ -883,7 +908,7 @@ export default function App() {
   const handleUpdateTargetBl = (tkuIdx: number, newBl: number) => {
     setState(prev => {
       const nextBl = [...prev.targetBulanLalu];
-      nextBl[tkuIdx] = newBl;
+      nextBl[tkuIdx] = Math.floor(Number(newBl) || 0);
       return { ...prev, targetBulanLalu: nextBl };
     });
   };
@@ -891,7 +916,7 @@ export default function App() {
   const handleUpdateTargetTy = (tkuIdx: number, newTy: number) => {
     setState(prev => {
       const nextTy = [...prev.targetTahunLalu];
-      nextTy[tkuIdx] = newTy;
+      nextTy[tkuIdx] = Math.floor(Number(newTy) || 0);
       return { ...prev, targetTahunLalu: nextTy };
     });
   };
@@ -900,7 +925,7 @@ export default function App() {
     setState(prev => {
       const nextMap = { ...prev.targetPerVariant };
       const varMap = { ...(nextMap[variant] || {}) };
-      varMap[tkuIdx] = { ...(varMap[tkuIdx] || {}), [field]: val };
+      varMap[tkuIdx] = { ...(varMap[tkuIdx] || {}), [field]: Math.floor(Number(val) || 0) };
       nextMap[variant] = varMap;
 
       // Auto sum across all 4 variants for this tku

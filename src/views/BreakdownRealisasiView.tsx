@@ -344,12 +344,9 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
     return { set, pf, pt };
   })();
 
-  // ---- Keterangan "bd belum isi" per TKU (pintar, belajar dari riwayat) ----
-  // - Hari libur cabang (hampir semua TKU kosong, mis. tanggal merah) dilewati.
-  // - Pola hari kunjungan tiap TKU dipelajari dari minggu normal (tanpa libur & bukan minggu transisi sesudah libur).
-  // - Minggu normal: ditandai bila ada hari kunjungan biasa yang kosong.
-  // - Minggu libur / transisi / TKU tanpa pola: ditandai hanya bila kosong total di minggu itu.
-  // - Minggu pendek di akhir bulan yang tidak memuat hari kunjungan TKU tidak ditandai (mis. DP genap yang tutup Sabtu).
+  // ---- Keterangan "bd belum isi" per TKU ----
+  // - Libur: Minggu (kecuali ada center yang isi) dan hari Sen-Sab di mana semua center kosong.
+  // - Center: wajib terisi tiap hari kerja. DP: wajib terisi di hari jadwal ganjil/genap; 2 hari bila ada libur di minggu itu.
   type BdGap = { key: string; nama: string; semua: boolean; minggu: number[] };
   const bdGaps: BdGap[] = (() => {
     const out: BdGap[] = [];
@@ -358,75 +355,62 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
     if (aktifIdx.length === 0) return out;
     const filled = (i: number, d: number): boolean => hasSavedSalesFor(d, i) || getPlan(i, d).some(x => x > 0);
 
-    // 1) Deteksi hari libur cabang: hampir semua TKU kosong, tetapi minggu itu punya hari lain yang ramai
+    // Aturan:
+    // - Hari Minggu = libur, kecuali ada salah satu center yang mengisi (berarti Minggu itu masuk).
+    // - Senin-Sabtu = hari kerja, kecuali SEMUA center kosong pada tanggal itu (libur) di minggu yang sudah berisi.
+    //   Minggu yang kosong seluruhnya = belum diisi, bukan libur.
+    // - Center: wajib terisi setiap hari kerja.
+    // - Dropping: ganjil (DP 1, 3...) kunjungan Sen-Rab-Jum, genap (DP 2, 4...) Sel-Kam-Sab; semua hari jadwal wajib terisi.
+    //   Penjualan staf di hari lain boleh (tidak dinilai salah). Bila minggu itu ada libur nasional, jadwal kunjungan berubah:
+    //   cukup 2 hari terisi (hari apa saja).
+    const isDp = (i: number) => /^DP\b/i.test(state.tkus[i].nama.trim());
+    const centerIdx = aktifIdx.filter(i => !isDp(i));
     const cnt: number[] = [0];
-    for (let d = 1; d <= daysInMonth; d++) cnt.push(aktifIdx.filter(i => filled(i, d)).length);
+    for (let d = 1; d <= daysInMonth; d++) cnt.push(centerIdx.filter(i => filled(i, d)).length);
     const isHoliday: boolean[] = new Array(daysInMonth + 1).fill(false);
-    weeks.forEach(w => {
-      const hari: number[] = [];
-      for (let d = w.start; d <= w.end; d++) if (dow(d) !== 0) hari.push(d);
-      if (!hari.some(d => cnt[d] > aktifIdx.length * 0.25)) return; // seluruh minggu kosong = belum diisi, bukan libur
-      hari.forEach(d => { if (cnt[d] <= aktifIdx.length * 0.1) isHoliday[d] = true; });
-    });
-    const weekHasHoliday = weeks.map(w => {
-      for (let d = w.start; d <= w.end; d++) if (isHoliday[d]) return true;
-      return false;
-    });
-    // Minggu libur + 1 minggu sesudahnya = transisi (jadwal ganjil/genap bisa bergeser)
-    const looseWeek = weeks.map((_w, k) => weekHasHoliday[k] || (k > 0 && weekHasHoliday[k - 1]));
-    const learnWeeks = weeks.map((w, k) => k).filter(k => !looseWeek[k] && weeks[k].end - weeks[k].start + 1 >= 6);
-
-    // 2) Pola hari kunjungan per TKU
-    const pm = month === 1 ? 12 : month - 1;
-    const py = month === 1 ? year - 1 : year;
-    const dimPrev = new Date(year, month - 1, 0).getDate();
-    const patternOf = (i: number): Set<number> => {
-      const pat = new Set<number>();
-      if (learnWeeks.length > 0) {
-        const c = [0, 0, 0, 0, 0, 0, 0];
-        learnWeeks.forEach(k => {
-          for (let d = weeks[k].start; d <= weeks[k].end; d++) if (dow(d) !== 0 && filled(i, d)) c[dow(d)]++;
-        });
-        const need = Math.ceil(learnWeeks.length / 2);
-        c.forEach((v, wd) => { if (wd !== 0 && v >= need && v > 0) pat.add(wd); });
+    const weekHasHoliday: boolean[] = weeks.map(() => false);
+    weeks.forEach((w, k) => {
+      let weekHasData = false;
+      for (let d = w.start; d <= w.end; d++) if (cnt[d] > 0) weekHasData = true;
+      for (let d = w.start; d <= w.end; d++) {
+        if (dow(d) === 0) { isHoliday[d] = cnt[d] === 0; continue; } // Minggu: masuk hanya bila ada center yang isi
+        if (weekHasData && cnt[d] === 0) { isHoliday[d] = true; weekHasHoliday[k] = true; }
       }
-      if (pat.size === 0) { // cadangan: riwayat penjualan bulan lalu
-        const c = [0, 0, 0, 0, 0, 0, 0];
-        for (let d = 1; d <= dimPrev; d++) {
-          const rec = state.pjd?.[`${py}-${String(pm).padStart(2, '0')}-${String(d).padStart(2, '0')}`]?.[i];
-          if (rec && (rec.sold > 0 || (rec.v && rec.v.some(x => x > 0)))) c[new Date(py, pm - 1, d).getDay()]++;
-        }
-        c.forEach((v, wd) => { if (wd !== 0 && v >= 2) pat.add(wd); });
-      }
-      return pat;
+    });
+    // Jadwal kunjungan DP: nomor ganjil = Sen/Rab/Jum, nomor genap = Sel/Kam/Sab (tanpa nomor: tanpa jadwal tetap)
+    const jadwalDp = (i: number): number[] | null => {
+      const m = state.tkus[i].nama.trim().match(/(\d+)\s*$/);
+      if (!m) return null;
+      return Number(m[1]) % 2 === 1 ? [1, 3, 5] : [2, 4, 6];
     };
 
-    // 3) Evaluasi tiap TKU yang tampil
+    // Evaluasi tiap TKU yang tampil
     const check = viewMode === 'mingguan' ? [weekIdx] : weeks.map((_w, k) => k);
     allIdxs.forEach(i => {
       const nama = state.tkus[i].nama;
       let adaIsi = false;
-      for (let d = 1; d <= daysInMonth && !adaIsi; d++) if (dow(d) !== 0 && filled(i, d)) adaIsi = true;
+      for (let d = 1; d <= daysInMonth && !adaIsi; d++) if (filled(i, d)) adaIsi = true;
       if (!adaIsi) { out.push({ key: `g${i}`, nama, semua: true, minggu: [] }); return; }
 
-      const pat = patternOf(i);
       const minggu: number[] = [];
       check.forEach(k => {
         const w = weeks[k];
-        const len = w.end - w.start + 1;
         const cand: number[] = [];
-        for (let d = w.start; d <= w.end; d++) if (dow(d) !== 0 && !isHoliday[d]) cand.push(d);
+        for (let d = w.start; d <= w.end; d++) if (!isHoliday[d]) cand.push(d);
         if (cand.length === 0) return;
-        const loose = looseWeek[k] || pat.size === 0;
-        if (!loose) {
-          const exp = cand.filter(d => pat.has(dow(d)));
-          if (exp.some(d => !filled(i, d))) minggu.push(k + 1);
-          return;
+        if (isDp(i)) {
+          const terisi = cand.filter(d => filled(i, d)).length;
+          if (weekHasHoliday[k]) {
+            if (terisi < Math.min(2, cand.length)) minggu.push(k + 1);
+            return;
+          }
+          const jd = jadwalDp(i);
+          if (jd) {
+            if (cand.some(d => jd.includes(dow(d)) && !filled(i, d))) minggu.push(k + 1);
+          } else if (terisi < Math.min(3, cand.length)) minggu.push(k + 1);
+        } else {
+          if (cand.some(d => !filled(i, d))) minggu.push(k + 1);
         }
-        if (cand.some(d => filled(i, d))) return;
-        if (pat.size === 0) { if (cand.length <= 2) return; }
-        else if (len < 7 && !cand.some(d => pat.has(dow(d)))) return;
-        minggu.push(k + 1);
       });
       if (minggu.length > 0) out.push({ key: `g${i}`, nama, semua: false, minggu });
     });

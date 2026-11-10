@@ -8,7 +8,7 @@ import {
   BarChart3
 } from 'lucide-react';
 import { AppState, VariantCode } from '../types';
-import { formatDecimal, formatNumber, formatPercent, getPeriodInfo } from '../services/storage';
+import { formatNumber, formatPercent, getPeriodInfo } from '../services/storage';
 
 interface TargetViewProps {
   state: AppState;
@@ -23,27 +23,25 @@ interface TargetViewProps {
 type TargetViewCategory = 'target_harian' | 'bulan_lalu' | 'tahun_lalu' | 'komparasi';
 
 
-// Kolom isian angka desimal (2 angka di belakang koma). Saat diketik, boleh pakai titik atau koma;
-// saat tidak dipilih, tampil rapi 2 desimal (mis. 300,98 tersimpan sebagai 300.98).
-// hideDecimals: angka hanya TAMPIL tanpa desimal (dibulatkan ke bawah). Nilai yang tersimpan tetap utuh
-// dengan desimalnya; saat kolom diketuk/diedit, angka lengkap (dengan desimal) tampil kembali.
-const DecimalInput: React.FC<{ value: number; onCommit: (v: number) => void; className?: string; hideDecimals?: boolean }> = ({ value, onCommit, className, hideDecimals }) => {
+// Kolom isian angka BULAT (tanpa desimal). Hanya angka yang diterima; saat diketik, titik/koma dan
+// angka di belakangnya diabaikan. Nilai yang tersimpan selalu bilangan bulat.
+// (prop hideDecimals dipertahankan agar pemanggil lama tetap jalan, tapi tidak berpengaruh lagi)
+const DecimalInput: React.FC<{ value: number; onCommit: (v: number) => void; className?: string; hideDecimals?: boolean }> = ({ value, onCommit, className }) => {
   const [focused, setFocused] = useState(false);
   const [text, setText] = useState('');
-  const shown = focused ? text : (value ? (hideDecimals ? formatNumber(value) : formatDecimal(value)) : '');
+  const shown = focused ? text : (value ? formatNumber(Math.floor(value)) : '');
   return (
     <input
       type="text"
-      inputMode="decimal"
+      inputMode="numeric"
       value={shown}
-      placeholder="0,00"
-      onFocus={() => { setText(value ? String(value).replace('.', ',') : ''); setFocused(true); }}
+      placeholder="0"
+      onFocus={() => { setText(value ? String(Math.floor(value)) : ''); setFocused(true); }}
       onBlur={() => setFocused(false)}
       onChange={(e) => {
-        const raw = e.target.value.replace(/\./g, ',');
-        if (!/^\d*,?\d{0,2}$/.test(raw)) return;
+        const raw = e.target.value.split(/[.,]/)[0].replace(/\D/g, '');
         setText(raw);
-        onCommit(Number(raw.replace(',', '.')) || 0);
+        onCommit(Math.floor(Number(raw)) || 0);
       }}
       className={className}
     />
@@ -93,7 +91,7 @@ export const TargetView: React.FC<TargetViewProps> = ({
   const handleVariantFieldChange = (variant: VariantCode, tkuIdx: number, field: 'tg' | 'bl' | 'ty', value: number) => {
     onUpdateVariantTarget(variant, tkuIdx, field, value);
     const label = variant === 'YO' ? 'ORI' : variant;
-    showToast(`Target ${label} ${state.tkus[tkuIdx]?.nama} disetel ke ${formatDecimal(value)} btl`, 'success');
+    showToast(`Target ${label} ${state.tkus[tkuIdx]?.nama} disetel ke ${formatNumber(value)} btl`, 'success');
   };
 
   return (
@@ -132,14 +130,14 @@ export const TargetView: React.FC<TargetViewProps> = ({
               <Calendar className="w-4 h-4 text-brand-500 shrink-0" />
             </div>
             <div className="text-lg sm:text-xl lg:text-2xl font-bold font-mono text-brand-600 dark:text-brand-400 mt-2 break-words">
-              {formatDecimal(totalTgCabang)} <span className="block text-xs font-sans font-normal text-neutral-500">btl/hari</span>
+              {formatNumber(totalTgCabang)} <span className="block text-xs font-sans font-normal text-neutral-500">btl/hari</span>
             </div>
           </div>
           <div className="mt-3 pt-3 border-t border-brand-100 dark:border-brand-900/40 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs font-mono [&>div]:min-w-0 [&>div]:flex [&>div]:items-baseline [&>div]:justify-between [&>div]:gap-1">
-            <div><span className="text-neutral-400 block text-xs">ORI</span><span className="font-bold text-neutral-800 dark:text-neutral-200">{formatDecimal(totalOriTg)}</span></div>
-            <div><span className="text-amber-500 block text-xs">OM</span><span className="font-bold text-amber-600 dark:text-amber-400">{formatDecimal(totalOmTg)}</span></div>
-            <div><span className="text-pink-400 block text-xs">OS</span><span className="font-bold text-pink-600 dark:text-pink-400">{formatDecimal(totalOsTg)}</span></div>
-            <div><span className="text-sky-500 block text-xs">YT</span><span className="font-bold text-sky-600 dark:text-sky-400">{formatDecimal(totalYtTg)}</span></div>
+            <div><span className="text-neutral-400 block text-xs">ORI</span><span className="font-bold text-neutral-800 dark:text-neutral-200">{formatNumber(totalOriTg)}</span></div>
+            <div><span className="text-amber-500 block text-xs">OM</span><span className="font-bold text-amber-600 dark:text-amber-400">{formatNumber(totalOmTg)}</span></div>
+            <div><span className="text-pink-400 block text-xs">OS</span><span className="font-bold text-pink-600 dark:text-pink-400">{formatNumber(totalOsTg)}</span></div>
+            <div><span className="text-sky-500 block text-xs">YT</span><span className="font-bold text-sky-600 dark:text-sky-400">{formatNumber(totalYtTg)}</span></div>
           </div>
         </div>
 
@@ -313,7 +311,7 @@ export const TargetView: React.FC<TargetViewProps> = ({
                           <DecimalInput value={yt} onCommit={(v) => handleVariantFieldChange('YT', idx, 'tg', v)} className="w-20 px-2 py-1 text-right rounded border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 font-bold text-sky-700 dark:text-sky-400 focus:ring-1 focus:ring-sky-500 focus:outline-none text-xs" />
                         </td>
                         <td className="py-2.5 px-4 text-right font-bold text-brand-600 dark:text-brand-400 bg-brand-50/30 dark:bg-brand-950/10">
-                          {formatDecimal(rowSum)}
+                          {formatNumber(rowSum)}
                         </td>
                       </tr>
                     );
@@ -333,11 +331,11 @@ export const TargetView: React.FC<TargetViewProps> = ({
                         <td colSpan={3} className="py-2 px-3 font-sans text-neutral-800 dark:text-neutral-200">
                           Total Rayon 1
                         </td>
-                        <td className="py-2 px-3 text-right text-neutral-800 dark:text-neutral-200">{formatDecimal(r1Ori)}</td>
-                        <td className="py-2 px-3 text-right text-amber-600 dark:text-amber-400">{formatDecimal(r1Om)}</td>
-                        <td className="py-2 px-3 text-right text-pink-600 dark:text-pink-400">{formatDecimal(r1Os)}</td>
-                        <td className="py-2 px-3 text-right text-sky-600 dark:text-sky-400">{formatDecimal(r1Yt)}</td>
-                        <td className="py-2 px-4 text-right text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-950/20 font-extrabold">{formatDecimal(r1Total)}</td>
+                        <td className="py-2 px-3 text-right text-neutral-800 dark:text-neutral-200">{formatNumber(r1Ori)}</td>
+                        <td className="py-2 px-3 text-right text-amber-600 dark:text-amber-400">{formatNumber(r1Om)}</td>
+                        <td className="py-2 px-3 text-right text-pink-600 dark:text-pink-400">{formatNumber(r1Os)}</td>
+                        <td className="py-2 px-3 text-right text-sky-600 dark:text-sky-400">{formatNumber(r1Yt)}</td>
+                        <td className="py-2 px-4 text-right text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-950/20 font-extrabold">{formatNumber(r1Total)}</td>
                       </tr>
                     );
                   })()}
@@ -374,7 +372,7 @@ export const TargetView: React.FC<TargetViewProps> = ({
                           <DecimalInput value={yt} onCommit={(v) => handleVariantFieldChange('YT', idx, 'tg', v)} className="w-20 px-2 py-1 text-right rounded border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 font-bold text-sky-700 dark:text-sky-400 focus:ring-1 focus:ring-sky-500 focus:outline-none text-xs" />
                         </td>
                         <td className="py-2.5 px-4 text-right font-bold text-brand-600 dark:text-brand-400 bg-brand-50/30 dark:bg-brand-950/10">
-                          {formatDecimal(rowSum)}
+                          {formatNumber(rowSum)}
                         </td>
                       </tr>
                     );
@@ -394,11 +392,11 @@ export const TargetView: React.FC<TargetViewProps> = ({
                         <td colSpan={3} className="py-2 px-3 font-sans text-neutral-800 dark:text-neutral-200">
                           Total Rayon 2
                         </td>
-                        <td className="py-2 px-3 text-right text-neutral-800 dark:text-neutral-200">{formatDecimal(r2Ori)}</td>
-                        <td className="py-2 px-3 text-right text-amber-600 dark:text-amber-400">{formatDecimal(r2Om)}</td>
-                        <td className="py-2 px-3 text-right text-pink-600 dark:text-pink-400">{formatDecimal(r2Os)}</td>
-                        <td className="py-2 px-3 text-right text-sky-600 dark:text-sky-400">{formatDecimal(r2Yt)}</td>
-                        <td className="py-2 px-4 text-right text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-950/20 font-extrabold">{formatDecimal(r2Total)}</td>
+                        <td className="py-2 px-3 text-right text-neutral-800 dark:text-neutral-200">{formatNumber(r2Ori)}</td>
+                        <td className="py-2 px-3 text-right text-amber-600 dark:text-amber-400">{formatNumber(r2Om)}</td>
+                        <td className="py-2 px-3 text-right text-pink-600 dark:text-pink-400">{formatNumber(r2Os)}</td>
+                        <td className="py-2 px-3 text-right text-sky-600 dark:text-sky-400">{formatNumber(r2Yt)}</td>
+                        <td className="py-2 px-4 text-right text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-950/20 font-extrabold">{formatNumber(r2Total)}</td>
                       </tr>
                     );
                   })()}
@@ -408,12 +406,12 @@ export const TargetView: React.FC<TargetViewProps> = ({
                     <td colSpan={3} className="py-3 px-3 font-sans text-brand-800 dark:text-brand-300 text-xs">
                       TOTAL CABANG JEMBER
                     </td>
-                    <td className="py-3 px-3 text-right text-neutral-900 dark:text-white">{formatDecimal(totalOriTg)}</td>
-                    <td className="py-3 px-3 text-right text-amber-700 dark:text-amber-300">{formatDecimal(totalOmTg)}</td>
-                    <td className="py-3 px-3 text-right text-pink-700 dark:text-pink-300">{formatDecimal(totalOsTg)}</td>
-                    <td className="py-3 px-3 text-right text-sky-700 dark:text-sky-300">{formatDecimal(totalYtTg)}</td>
+                    <td className="py-3 px-3 text-right text-neutral-900 dark:text-white">{formatNumber(totalOriTg)}</td>
+                    <td className="py-3 px-3 text-right text-amber-700 dark:text-amber-300">{formatNumber(totalOmTg)}</td>
+                    <td className="py-3 px-3 text-right text-pink-700 dark:text-pink-300">{formatNumber(totalOsTg)}</td>
+                    <td className="py-3 px-3 text-right text-sky-700 dark:text-sky-300">{formatNumber(totalYtTg)}</td>
                     <td className="py-3 px-4 text-right text-brand-700 dark:text-brand-300 bg-brand-100/70 dark:bg-brand-900/40 text-sm">
-                      {formatDecimal(totalTgCabang)}
+                      {formatNumber(totalTgCabang)}
                     </td>
                   </tr>
                 </tbody>
@@ -806,7 +804,7 @@ export const TargetView: React.FC<TargetViewProps> = ({
                         <td className="py-2.5 px-3 font-sans font-semibold text-neutral-900 dark:text-neutral-100">{t.nama}</td>
                         <td className="py-2.5 px-2 text-center text-neutral-500 font-sans">R{t.rayon}</td>
                         <td className="py-2.5 px-3 text-right font-bold text-brand-600 dark:text-brand-400 bg-brand-50/30 dark:bg-brand-950/10">
-                          {formatDecimal(tg)}
+                          {formatNumber(tg)}
                         </td>
                         <td className="py-2.5 px-3 text-right text-neutral-700 dark:text-neutral-300">
                           {formatNumber(bl)}
@@ -830,7 +828,7 @@ export const TargetView: React.FC<TargetViewProps> = ({
                       TOTAL CABANG JEMBER
                     </td>
                     <td className="py-3 px-3 text-right text-brand-700 dark:text-brand-300 bg-brand-100/70 dark:bg-brand-900/40 text-sm">
-                      {formatDecimal(totalTgCabang)}
+                      {formatNumber(totalTgCabang)}
                     </td>
                     <td className="py-3 px-3 text-right text-sm">
                       {formatNumber(totalBlCabang)}
