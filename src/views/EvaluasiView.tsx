@@ -16,7 +16,8 @@ import {
   UserCheck,
   MapPin,
   CheckCircle2,
-  Bookmark
+  Bookmark,
+  ChevronDown
 } from 'lucide-react';
 import { AppState } from '../types';
 import { buildEvaluasiData, EvaluasiHighlights } from '../services/evaluasi';
@@ -303,6 +304,35 @@ const RingkasanPrestasiPanel: React.FC<RingkasanPrestasiPanelProps> = ({
   );
 };
 
+// Dropdown ringkas (select bawaan, ikon panah sendiri). disabled = redup, posisinya tetap (tidak hilang)
+const PillSelect: React.FC<{
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  icon?: React.ReactNode;
+  disabled?: boolean;
+  ariaLabel: string;
+  className?: string;
+}> = ({ value, onChange, options, icon, disabled = false, ariaLabel, className = '' }) => (
+  <div className={`relative min-w-0 ${className}`}>
+    {icon && <span className={`pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 ${disabled ? 'text-neutral-400' : 'text-brand-600 dark:text-brand-400'}`}>{icon}</span>}
+    <select
+      aria-label={ariaLabel}
+      value={value}
+      disabled={disabled}
+      onChange={e => onChange(e.target.value)}
+      className={`w-full h-9 appearance-none rounded-[10px] border pr-7 text-xs font-semibold outline-none transition-colors focus:ring-2 focus:ring-brand-500/40 ${icon ? 'pl-8' : 'pl-3'} ${
+        disabled
+          ? 'cursor-not-allowed bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-400 dark:text-neutral-500'
+          : 'cursor-pointer bg-brand-50 dark:bg-brand-950/40 border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-300'
+      }`}
+    >
+      {options.map(o => <option key={o.value} value={o.value} className="bg-white text-neutral-900">{o.label}</option>)}
+    </select>
+    <ChevronDown className={`pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 ${disabled ? 'text-neutral-400' : 'text-brand-600 dark:text-brand-400'}`} />
+  </div>
+);
+
 export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon, showToast }) => {
   const [evalMode, setEvalMode] = useState<'mini' | 'full' | 'analisa'>('mini');
   const [mobileMiniMode, setMobileMiniMode] = useState<'table' | 'matrix'>('table');
@@ -333,118 +363,81 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
 
   return (
     <div className="space-y-6">
-      {/* 1. Header & Controls Bar */}
-      <div className="p-4 sm:p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 min-w-0">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+      {/* 1. Header & Controls Bar (ringkas: judul + dropdown) */}
+      <div className="p-3 sm:p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm space-y-3 min-w-0">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
+            <h1 className="text-lg sm:text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-brand-600 shrink-0" />
               <span>Evaluasi</span>
             </h1>
-            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 dark:bg-brand-950/40 dark:text-brand-400 border border-brand-200 dark:border-brand-800 font-semibold">
-              {period.label} (÷{divider}hr)
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 dark:bg-brand-950/40 dark:text-brand-400 border border-brand-200 dark:border-brand-800 font-semibold whitespace-nowrap">
+              {period.label} (÷{divider} hari)
             </span>
           </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full">
-          {/* Rayon Filter */}
-          <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl shrink-0">
-            {[
-              { id: 0, label: 'Cabang' },
-              { id: 1, label: 'Rayon 1' },
-              { id: 2, label: 'Rayon 2' },
-            ].map(r => (
-              <button
-                key={r.id}
-                onClick={() => onUpdateRayon(r.id)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                  selectedRayon === r.id
-                    ? 'bg-brand-600 text-white shadow-xs'
-                    : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-                }`}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-
-          {/* View Mode Switcher: Mini Table (HP) vs Full Table vs Analisa */}
-          <div className="inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl shrink-0 overflow-x-auto max-w-full">
-            <button
-              onClick={() => setEvalMode('mini')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                evalMode === 'mini'
-                  ? 'bg-brand-600 text-white shadow-xs'
-                  : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-              }`}
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>Tabel Mini</span>
-            </button>
-            <button
-              onClick={() => setEvalMode('full')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                evalMode === 'full'
-                  ? 'bg-brand-600 text-white shadow-xs'
-                  : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-              }`}
-            >
-              <TableIcon className="w-3.5 h-3.5" />
-              <span>Tabel Utuh</span>
-            </button>
-            <button
-              onClick={() => setEvalMode('analisa')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                evalMode === 'analisa'
-                  ? 'bg-brand-600 text-white shadow-xs'
-                  : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-              }`}
-            >
-              <TrendingUp className="w-3.5 h-3.5" />
-              <span>Evaluasi Mingguan</span>
-            </button>
-          </div>
-
-          {/* Tombol Gabungan Khusus Mode Mini di Layar HP: Tabel Geser vs Matriks HP */}
-          {evalMode === 'mini' && (
-            <div className="sm:hidden inline-flex p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl shrink-0 border border-neutral-200/80 dark:border-neutral-700">
-              <button
-                type="button"
-                onClick={() => setMobileMiniMode('table')}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  mobileMiniMode === 'table'
-                    ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-2xs'
-                    : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
-                }`}
-              >
-                <Table className="w-3 h-3 text-brand-500" />
-                <span>Geser</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setMobileMiniMode('matrix')}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  mobileMiniMode === 'matrix'
-                    ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-2xs'
-                    : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
-                }`}
-              >
-                <LayoutGrid className="w-3 h-3 text-brand-500" />
-                <span>Matriks</span>
-              </button>
-            </div>
-          )}
-
           {/* Tombol Mode Layar Penuh (Fullscreen) */}
           <button
             onClick={() => setIsFullscreen(true)}
             title="Tampilkan slide tabel dan 9 kartu ringkasan dalam 1 frame layar penuh"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 hover:bg-neutral-800 dark:hover:bg-neutral-200 transition-all cursor-pointer shadow-xs"
+            aria-label="Layar penuh"
+            className="shrink-0 flex items-center gap-1.5 h-9 px-3 text-xs font-semibold rounded-[10px] border bg-brand-50 dark:bg-brand-950/40 border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900/40 transition-colors cursor-pointer"
           >
-            <Maximize2 className="w-3.5 h-3.5 text-brand-400 dark:text-brand-600" />
-            <span>Mode Slide</span>
+            <Maximize2 className="w-3.5 h-3.5" />
+            <span>Layar Penuh</span>
           </button>
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
+        {/* Tab utama: selalu 3 tombol sama lebar, hanya warna aktif yang berpindah */}
+        <div role="tablist" aria-label="Jenis tampilan evaluasi" className="grid grid-cols-[1fr_1fr_1.9fr] gap-1 p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl sm:w-[26rem] sm:shrink-0">
+          {([
+            { id: 'mini', label: 'Mini' },
+            { id: 'full', label: 'Lengkap' },
+            { id: 'analisa', label: 'Evaluasi Mingguan' },
+          ] as const).map(t => (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={evalMode === t.id}
+              onClick={() => setEvalMode(t.id)}
+              className={`h-9 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                evalMode === t.id
+                  ? 'bg-brand-600 text-white shadow-xs'
+                  : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Dropdown: selalu tampil di tempat yang sama; Geser/Matriks redup bila bukan Tabel Mini */}
+        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 min-w-0">
+          <PillSelect
+            ariaLabel="Pilih cabang atau rayon"
+            value={String(selectedRayon)}
+            onChange={v => onUpdateRayon(Number(v))}
+            icon={<MapPin className="w-3.5 h-3.5" />}
+            options={[
+              { value: '0', label: 'Semua Rayon' },
+              { value: '1', label: 'Rayon 1' },
+              { value: '2', label: 'Rayon 2' },
+            ]}
+            className="sm:w-44"
+          />
+          <PillSelect
+            ariaLabel="Pilih tampilan tabel mini"
+            value={mobileMiniMode}
+            onChange={v => setMobileMiniMode(v as 'table' | 'matrix')}
+            disabled={evalMode !== 'mini'}
+            icon={mobileMiniMode === 'matrix' ? <LayoutGrid className="w-3.5 h-3.5" /> : <Table className="w-3.5 h-3.5" />}
+            options={[
+              { value: 'table', label: 'Geser' },
+              { value: 'matrix', label: 'Matriks' },
+            ]}
+            className="sm:hidden"
+          />
+        </div>
         </div>
       </div>
 
@@ -455,13 +448,6 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
       {/* MODE 1: TABEL MINI */}
       {evalMode === 'mini' && (
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-            <h2 className="text-sm font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5">
-              <FileSpreadsheet className="w-4 h-4 text-brand-600" />
-              <span>Tabel Ringkas</span>
-            </h2>
-          </div>
-
           {/* Grid Responsif: Landscape Samping, Portrait / Tab Mode Bawah */}
           <div className="flex flex-col landscape:grid landscape:grid-cols-12 gap-3 items-stretch">
             {/* Tabel Mini di Kiri (Landscape) / Atas (Portrait) */}
@@ -505,39 +491,38 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
         </div>
       )}
 
-      {/* MODE 2: TABEL UTUH / FULL */}
+      {/* MODE 2: TABEL LENGKAP: kartu & ukuran sama dengan Mini, hanya kolom bertambah ke samping */}
       {evalMode === 'full' && (
-        <div className="space-y-6">
-          {/* TABEL FULL DI ATAS */}
-          <div className="space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-              <h2 className="text-sm font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5">
-                <TableIcon className="w-4 h-4 text-emerald-600" />
-                <span>Tabel Lengkap</span>
-              </h2>
-              <span className="text-xs text-neutral-500 font-mono">
-                Total {displayedRows.length} Unit TKU &bull; Pembagi {divider} Hari
-              </span>
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 items-stretch">
+            <div className="min-w-0 flex flex-col justify-between bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 p-3 sm:p-4 shadow-sm">
+              <div className="flex-1 min-h-0">
+                <EvalFullTable
+                  rows={displayedRows}
+                  r1Rows={r1Rows}
+                  r2Rows={r2Rows}
+                  r1Total={r1Total}
+                  r2Total={r2Total}
+                  cabangTotal={cabangTotal}
+                  selectedRayon={selectedRayon}
+                  divider={divider}
+                />
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-neutral-500 pt-2.5 shrink-0 border-t border-neutral-100 dark:border-neutral-800 mt-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded bg-emerald-100 dark:bg-emerald-900/50 border border-emerald-500 inline-block shrink-0" />
+                  <span><strong className="text-emerald-700 dark:text-emerald-400">Sel hijau</strong> = Performa terbaik unit TKU</span>
+                </div>
+                <span className="font-mono">{displayedRows.length} Unit TKU &bull; Pembagi {divider} Hari</span>
+              </div>
             </div>
 
-            <EvalFullTable
-              rows={displayedRows}
-              r1Rows={r1Rows}
-              r2Rows={r2Rows}
-              r1Total={r1Total}
-              r2Total={r2Total}
-              cabangTotal={cabangTotal}
-              selectedRayon={selectedRayon}
-              divider={divider}
-            />
-          </div>
-
-          {/* 9 KARTU RINGKASAN DI BAWAH TABEL */}
-          <div className="space-y-2.5">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-              Ringkasan 9 Metrik Performa Kunci
-            </h3>
-            <RingkasanPrestasiPanel highlights={highlights} layout="row" />
+            <div className="min-w-0">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 mb-2">
+                Ringkasan Metrik
+              </h3>
+              <RingkasanPrestasiPanel highlights={highlights} layout="row" />
+            </div>
           </div>
         </div>
       )}
@@ -596,28 +581,28 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
       {isFullscreen && (
         <div className="fixed inset-0 z-50 bg-neutral-950/95 backdrop-blur-md p-1.5 sm:p-2.5 flex flex-col gap-1.5 overflow-hidden animate-in fade-in duration-150">
           {/* Header Bar Layar Penuh Super Ringkas & Tipis (Hemat Ruang Vertikal) */}
-          <div className="px-2 py-0.5 bg-neutral-900 text-white rounded-md border border-neutral-800 flex items-center justify-between gap-1 shrink-0 min-w-0 h-6 sm:h-7">
+          <div className="px-2 py-1 bg-neutral-900 text-white rounded-lg border border-neutral-800 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 shrink-0 min-w-0">
             {/* Kiri: Judul + Periode + Rayon Filter */}
-            <div className="flex items-center gap-1 min-w-0">
-              <TrendingUp className="w-3 h-3 text-brand-400 shrink-0" />
-              <h2 className="text-xs font-bold tracking-tight text-white uppercase truncate max-w-[100px] sm:max-w-[180px]">
+            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+              <TrendingUp className="w-3.5 h-3.5 text-brand-400 shrink-0" />
+              <h2 className="text-xs font-bold tracking-tight text-white uppercase truncate max-w-[130px] sm:max-w-[180px]">
                 EVALUASI TKU
               </h2>
               <span className="text-xs font-mono px-1 py-0 rounded bg-neutral-800 text-brand-300 font-semibold shrink-0">
-                {period.label} (÷{divider}hr)
+                {period.label} (÷{divider} hari)
               </span>
 
               {/* Rayon Selector */}
-              <div className="inline-flex p-0.2 bg-neutral-800 rounded shrink-0">
+              <div className="inline-flex p-0.5 bg-neutral-800 rounded-md shrink-0">
                 {[
-                  { id: 0, label: 'Cabang' },
+                  { id: 0, label: 'Semua' },
                   { id: 1, label: 'R1' },
                   { id: 2, label: 'R2' },
                 ].map(r => (
                   <button
                     key={r.id}
                     onClick={() => onUpdateRayon(r.id)}
-                    className={`px-2 py-1 text-xs font-bold rounded transition-all cursor-pointer ${
+                    className={`px-2.5 py-1.5 text-xs font-bold rounded transition-all cursor-pointer ${
                       selectedRayon === r.id
                         ? 'bg-brand-600 text-white shadow-2xs'
                         : 'text-neutral-400 hover:text-white'
@@ -632,48 +617,48 @@ export const EvaluasiView: React.FC<EvaluasiViewProps> = ({ state, onUpdateRayon
             {/* Kanan: Mode Switcher & Tombol Keluar */}
             <div className="flex items-center gap-1 shrink-0">
               {/* Mini vs Utuh vs Mingguan Selector */}
-              <div className="inline-flex p-0.2 bg-neutral-800 rounded">
+              <div className="inline-flex p-0.5 bg-neutral-800 rounded-md">
                 <button
                   onClick={() => setEvalMode('mini')}
-                  className={`flex items-center gap-0.5 px-2 py-1 text-xs font-bold rounded transition-all cursor-pointer ${
+                  className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold rounded transition-all cursor-pointer ${
                     evalMode === 'mini'
                       ? 'bg-emerald-600 text-white shadow-2xs'
                       : 'text-neutral-400 hover:text-white'
                   }`}
                 >
-                  <FileSpreadsheet className="w-2.5 h-2.5" />
-                  <span>Slide</span>
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <span>Mini</span>
                 </button>
                 <button
                   onClick={() => setEvalMode('full')}
-                  className={`flex items-center gap-0.5 px-2 py-1 text-xs font-bold rounded transition-all cursor-pointer ${
+                  className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold rounded transition-all cursor-pointer ${
                     evalMode === 'full'
                       ? 'bg-brand-600 text-white shadow-2xs'
                       : 'text-neutral-400 hover:text-white'
                   }`}
                 >
-                  <TableIcon className="w-2.5 h-2.5" />
+                  <TableIcon className="w-3.5 h-3.5" />
                   <span>Lengkap</span>
                 </button>
                 <button
                   onClick={() => setEvalMode('analisa')}
-                  className={`flex items-center gap-0.5 px-2 py-1 text-xs font-bold rounded transition-all cursor-pointer ${
+                  className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold rounded transition-all cursor-pointer ${
                     evalMode === 'analisa'
                       ? 'bg-brand-600 text-white shadow-2xs'
                       : 'text-neutral-400 hover:text-white'
                   }`}
                 >
-                  <TrendingUp className="w-2.5 h-2.5" />
-                  <span>Mingguan</span>
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  <span>Evaluasi Mingguan</span>
                 </button>
               </div>
 
               {/* Tombol Tutup Layar Penuh */}
               <button
                 onClick={() => setIsFullscreen(false)}
-                className="flex items-center gap-0.5 px-2 py-1 text-xs font-bold rounded bg-brand-600 hover:bg-brand-700 text-white transition-all cursor-pointer shadow-2xs shrink-0"
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold rounded-md bg-brand-600 hover:bg-brand-700 text-white transition-all cursor-pointer shadow-2xs shrink-0"
               >
-                <Minimize2 className="w-2.5 h-2.5" />
+                <Minimize2 className="w-3.5 h-3.5" />
                 <span>Keluar</span>
               </button>
             </div>

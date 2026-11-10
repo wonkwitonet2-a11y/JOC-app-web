@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Link2,
   CalendarDays,
+  Settings,
   X
 } from 'lucide-react';
 import { AppState } from '../types';
@@ -273,9 +274,10 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Top Banner */}
-      <div className="p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
-        <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
-          Pengaturan
+      <div className="p-3 sm:p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
+        <h1 className="text-lg sm:text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+          <Settings className="w-5 h-5 text-brand-600 shrink-0" />
+          <span>Pengaturan</span>
         </h1>
       </div>
 
@@ -380,7 +382,7 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
                 <button
                   onClick={handleBackupAndInspect}
                   disabled={isBackingUp || isSyncing}
-                  className="px-3 py-2 rounded-lg bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-xs font-semibold hover:opacity-90 transition-opacity"
+                  className="inline-flex items-center justify-center h-9 px-3.5 rounded-[10px] bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold transition-colors disabled:opacity-60"
                 >
                   {isBackingUp ? 'Mengirim...' : 'Cadangkan sekarang'}
                 </button>
@@ -508,7 +510,7 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
           <div className="sm:col-span-2">
             <button
               type="submit"
-              className="px-4 py-2 rounded-xl bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-xs font-semibold hover:opacity-90 transition-opacity"
+              className="inline-flex items-center justify-center h-9 px-4 rounded-[10px] bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold transition-colors"
             >
               Simpan Perubahan PIN
             </button>
@@ -652,7 +654,7 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
                 <button
                   type="button"
                   onClick={handleSaveSbUnlocked}
-                  className="px-3.5 py-2 rounded-xl bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 font-semibold hover:opacity-90 transition-opacity cursor-pointer"
+                  className="inline-flex items-center justify-center h-9 px-3.5 rounded-[10px] bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold transition-colors cursor-pointer"
                 >
                   Simpan Saja
                 </button>
@@ -857,7 +859,7 @@ create policy "Allow anon read write" on app_store for all using (true) with che
         <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={onExportJson}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-xs font-semibold hover:opacity-90 transition-opacity"
+            className="inline-flex items-center justify-center gap-2 h-9 px-4 rounded-[10px] bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold transition-colors"
           >
             <Download className="w-4 h-4" />
             <span>Unduh Cadangan JSON</span>

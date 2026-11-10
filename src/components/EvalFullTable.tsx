@@ -2,6 +2,7 @@ import React from 'react';
 import { EvaluasiRow } from '../services/evaluasi';
 import { formatNumber, formatDecimal, formatPercent, getStatusClass, getBbStatusClass } from '../services/storage';
 import { VARIANTS } from '../types';
+import { ArrowRightLeft } from 'lucide-react';
 import { buildBestLookup, BEST_CELL_CLASS, BestKey } from '../services/evalBest';
 
 interface EvalFullTableProps {
@@ -30,29 +31,37 @@ export const EvalFullTable: React.FC<EvalFullTableProps> = ({
     ...(selectedRayon === 0 || selectedRayon === 1 ? r1Rows : []),
     ...(selectedRayon === 0 || selectedRayon === 2 ? r2Rows : []),
   ]);
-  const thCls = "py-1.5 px-1 text-right font-bold whitespace-nowrap text-xs";
-  const tdCls = "py-1.25 sm:py-1.5 px-1 text-right whitespace-nowrap tabular-nums font-mono text-xs";
+  // Ukuran sel SAMA PERSIS dengan Tabel Mini (EvalMiniTable): normal = longgar, layar penuh = rapat.
+  const thCls = fullscreen
+    ? "py-1.5 px-1 text-right font-bold whitespace-nowrap text-xs border-b border-neutral-200 dark:border-neutral-700"
+    : "py-2 px-1.5 text-right font-bold whitespace-nowrap text-xs border-b border-neutral-200 dark:border-neutral-700";
+  const tdCls = fullscreen
+    ? "py-1.25 sm:py-1.5 px-1 text-right whitespace-nowrap tabular-nums font-mono text-xs"
+    : "py-1.5 sm:py-2 px-1.5 text-right whitespace-nowrap tabular-nums font-mono text-xs";
+  const nameYCls = fullscreen ? 'py-1.25 sm:py-1.5' : 'py-1.5 sm:py-2';
 
   const renderRow = (r: EvaluasiRow, isSubtotal = false, isTotal = false) => {
     const b = (k: BestKey) => (!isSubtotal && !isTotal && bestOf(k, r) ? ` ${BEST_CELL_CLASS}` : '');
     const rowBg = isTotal
-      ? 'bg-neutral-900 text-white dark:bg-neutral-950 font-bold border-t-2 border-neutral-700'
+      ? 'bg-neutral-200 text-neutral-900 dark:bg-neutral-950 dark:text-white font-bold'
       : isSubtotal
-      ? 'bg-neutral-100 dark:bg-neutral-800/80 font-bold text-neutral-800 dark:text-neutral-200'
-      : 'hover:bg-neutral-50/80 dark:hover:bg-neutral-800/40 text-neutral-800 dark:text-neutral-200 font-medium';
+      ? 'bg-neutral-100 dark:bg-neutral-800 font-bold text-neutral-800 dark:text-neutral-200'
+      : 'hover:bg-neutral-50/90 dark:hover:bg-neutral-800/50 text-neutral-800 dark:text-neutral-200 font-medium';
 
     const stickyBg = isTotal
-      ? 'bg-neutral-900 text-white dark:bg-neutral-950 font-bold'
+      ? 'bg-neutral-200 text-neutral-900 dark:bg-neutral-950 dark:text-white font-bold'
       : isSubtotal
       ? 'bg-neutral-100 dark:bg-neutral-800'
-      : 'bg-white dark:bg-neutral-900';
+      : 'bg-white dark:bg-neutral-900 group-hover:bg-neutral-50 dark:group-hover:bg-neutral-800/50';
+
+    const borderB = isTotal ? 'border-t-2 border-neutral-400 dark:border-neutral-700' : 'border-b border-neutral-100 dark:border-neutral-800';
 
     return (
-      <tr key={`${r.tku.id}-${r.tku.nama}-${isSubtotal ? 'sub' : ''}${isTotal ? 'tot' : ''}`} className={`transition-colors font-mono text-xs ${rowBg}`}>
+      <tr key={`${r.tku.id}-${r.tku.nama}-${isSubtotal ? 'sub' : ''}${isTotal ? 'tot' : ''}`} className={`group transition-colors font-mono text-xs ${rowBg} ${borderB}`}>
         {/* Sticky Unit Name: Mepet ke huruf terakhir */}
-        <td className={`sticky left-0 z-10 pl-1.5 pr-0.5 py-1.25 sm:py-1.5 text-left font-sans font-semibold whitespace-nowrap border-r border-neutral-200 dark:border-neutral-700 shadow-[1px_0_3px_rgba(0,0,0,0.06)] ${stickyBg}`}>
+        <td className={`sticky left-0 z-10 pl-1.5 pr-0.5 ${nameYCls} text-xs text-left font-sans font-semibold whitespace-nowrap border-r border-neutral-200 dark:border-neutral-700 shadow-[1px_0_3px_rgba(0,0,0,0.06)] ${stickyBg}`}>
           <div className="flex items-center gap-0.5 w-max">
-            <span className="text-xs font-bold">{r.tku.nama}</span>
+            <span className="font-bold text-neutral-900 dark:text-neutral-100">{r.tku.nama}</span>
           </div>
         </td>
 
@@ -100,7 +109,7 @@ export const EvalFullTable: React.FC<EvalFullTableProps> = ({
 
         {/* Balik Botol & PDM */}
         <td className={`${tdCls} text-amber-600 dark:text-amber-400 border-l border-neutral-200 dark:border-neutral-700`}>{formatNumber(r.akmBb)}</td>
-        <td className={`${tdCls} font-semibold ${getBbStatusClass(r.pctBb)}${b('pctBb')}`}>{formatPercent(r.pctBb)}</td>
+        <td className={`${tdCls} font-bold ${getBbStatusClass(r.pctBb)}${b('pctBb')}`}>{formatPercent(r.pctBb)}</td>
         <td className={`${tdCls} font-bold text-sky-600 dark:text-sky-400`}>{formatNumber(r.akmPdm)}</td>
 
         {/* JWP & s/YL */}
@@ -108,14 +117,14 @@ export const EvalFullTable: React.FC<EvalFullTableProps> = ({
         <td className={`${tdCls} font-bold text-brand-600 dark:text-brand-400${b('syl')}`}>{formatNumber(r.syl)}</td>
 
         {/* Absen & Frek */}
-        <td className={`${tdCls} border-l border-neutral-200 dark:border-neutral-700${b('absen')}`}>
+        <td className={`${tdCls} border-l border-neutral-200 dark:border-neutral-700 text-center${b('absen')}`}>
           {r.absen > 0 ? (
             <span className="text-red-600 dark:text-red-400 font-bold">{r.absen}</span>
           ) : (
             <span className="text-neutral-400">0</span>
           )}
         </td>
-        <td className={`${tdCls}${b('frek')}`}>
+        <td className={`${tdCls} text-center${b('frek')}`}>
           {r.frek > 0 ? (
             <span className="text-red-600 dark:text-red-400 font-bold">{r.frek}</span>
           ) : (
@@ -140,12 +149,20 @@ export const EvalFullTable: React.FC<EvalFullTableProps> = ({
   };
 
   return (
-    <div className={`overflow-auto border border-neutral-200 dark:border-neutral-800 shadow-sm bg-white dark:bg-neutral-900 ${fullscreen ? 'h-full rounded-lg' : 'max-h-[700px] rounded-2xl'}`}>
+    <div className={`rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-sm overflow-hidden flex flex-col min-h-0 ${fullscreen ? 'h-full' : ''}`}>
+      {/* Petunjuk geser horizontal di HP (sama seperti Tabel Mini) */}
+      <div className="sm:hidden px-2 py-0.5 bg-neutral-50 dark:bg-neutral-800/70 border-b border-neutral-200/80 dark:border-neutral-800 flex items-center justify-between text-xs text-neutral-600 dark:text-neutral-400 shrink-0">
+        <span className="flex items-center gap-1 font-medium text-brand-600 dark:text-brand-400">
+          <ArrowRightLeft className="w-3 h-3 shrink-0" /> Geser tabel jika diperlukan
+        </span>
+        <span className="font-mono text-xs text-neutral-400">25 Kolom</span>
+      </div>
+      <div className="overflow-auto w-full flex-1 min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
       <table className="w-full text-xs text-left border-collapse min-w-[1100px]">
-        <thead className="sticky top-0 z-20 bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200 shadow-2xs border-b border-neutral-200 dark:border-neutral-700">
-          <tr className="text-xs">
-            <th className="sticky left-0 z-30 pl-2 pr-0.5 py-2 text-left font-bold bg-neutral-100 dark:bg-neutral-800 border-r border-neutral-200 dark:border-neutral-700">
-              Nama TKU
+        <thead className="sticky top-0 z-20 bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200 text-xs shadow-2xs">
+          <tr>
+            <th className="pl-1.5 pr-0.5 py-1 text-left sticky left-0 z-30 bg-neutral-100 dark:bg-neutral-800 border-r border-b border-neutral-200 dark:border-neutral-700 font-bold">
+              TKU
             </th>
             {/* Varian */}
             <th className={`${thCls} border-l border-neutral-200 dark:border-neutral-700`} style={{ color: VARIANTS[0].color }}>YO</th>
@@ -154,7 +171,7 @@ export const EvalFullTable: React.FC<EvalFullTableProps> = ({
             <th className={thCls} style={{ color: VARIANTS[3].color }}>YT</th>
             {/* Penjualan */}
             <th className={`${thCls} border-l border-neutral-200 dark:border-neutral-700`}>Akm Pjl</th>
-            <th className={thCls}>Rata2</th>
+            <th className={`${thCls} text-neutral-900 dark:text-neutral-100`}>Rata2</th>
             {/* Waktu */}
             <th className={`${thCls} border-l border-neutral-200 dark:border-neutral-700`}>vs LW</th>
             <th className={thCls}>vs Tgt</th>
@@ -162,27 +179,27 @@ export const EvalFullTable: React.FC<EvalFullTableProps> = ({
             <th className={thCls}>vs LY</th>
             {/* BB & PDM */}
             <th className={`${thCls} border-l border-neutral-200 dark:border-neutral-700`}>Akm BB</th>
-            <th className={thCls}>% BB</th>
+            <th className={`${thCls} text-amber-600 dark:text-amber-400`}>% BB</th>
             <th className={`${thCls} text-sky-600 dark:text-sky-400 font-bold`}>PDM</th>
             {/* Produktivitas */}
             <th className={`${thCls} border-l border-neutral-200 dark:border-neutral-700`}>JWP</th>
-            <th className={thCls}>s/YL</th>
+            <th className={`${thCls} text-brand-600 dark:text-brand-400`}>s/YL</th>
             {/* Presensi */}
-            <th className={`${thCls} border-l border-neutral-200 dark:border-neutral-700`}>Abs</th>
-            <th className={thCls}>Frk</th>
+            <th className={`${thCls} border-l border-neutral-200 dark:border-neutral-700 text-center`}>Abs</th>
+            <th className={`${thCls} text-center`}>Frk</th>
             {/* Area */}
             <th className={`${thCls} border-l border-neutral-200 dark:border-neutral-700`}>Area</th>
             <th className={thCls}>YL</th>
-            <th className={thCls}>% CA</th>
+            <th className={`${thCls} text-emerald-600 dark:text-emerald-400`}>% CA</th>
             {/* YL < 250 */}
-            <th className={`${thCls} border-l border-neutral-200 dark:border-neutral-700`}>&lt;250</th>
-            <th className={thCls}>%&lt;250</th>
+            <th className={`${thCls} border-l border-neutral-200 dark:border-neutral-700 text-red-600 dark:text-red-400`}>&lt;250</th>
+            <th className={`${thCls} text-red-600 dark:text-red-400`}>%&lt;250</th>
             {/* YL < 300 */}
-            <th className={`${thCls} border-l border-neutral-200 dark:border-neutral-700`}>&lt;300</th>
-            <th className={thCls}>%&lt;300</th>
+            <th className={`${thCls} border-l border-neutral-200 dark:border-neutral-700 text-amber-600 dark:text-amber-400`}>&lt;300</th>
+            <th className={`${thCls} text-amber-600 dark:text-amber-400`}>%&lt;300</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+        <tbody>
           {/* Rayon 1 */}
           {(selectedRayon === 0 || selectedRayon === 1) && (
             <>
@@ -205,6 +222,7 @@ export const EvalFullTable: React.FC<EvalFullTableProps> = ({
           </tfoot>
         )}
       </table>
+      </div>
     </div>
   );
 };

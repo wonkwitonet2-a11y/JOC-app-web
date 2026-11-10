@@ -3,6 +3,7 @@ import {
   TrendingUp, 
   Award, 
   Calendar, 
+  LayoutDashboard,
   Target
 } from 'lucide-react';
 import { AppState, VARIANTS, DailySalesRecord } from '../types';
@@ -487,10 +488,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   return (
     <div className="space-y-6 min-w-0 max-w-full">
       {/* Top Bar with Segmented Rayon Controls & Pemilih Akun */}
-      <div className="flex flex-col @2xl:flex-row @2xl:items-center @2xl:justify-between gap-4 p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
+      <div className="flex flex-col @2xl:flex-row @2xl:items-center @2xl:justify-between gap-3 p-3 sm:p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
         <div>
-          <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
-            Dashboard
+          <h1 className="text-lg sm:text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+            <LayoutDashboard className="w-5 h-5 text-brand-600 shrink-0" />
+            <span>Dashboard</span>
           </h1>
           <p className="text-xs text-neutral-700 dark:text-neutral-300 mt-0.5">
             {formatDateIndo(state.activeDate)} &bull; Cabang Jember
@@ -543,7 +545,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <button
                 key={r.id}
                 onClick={() => onUpdateRayon(r.id)}
-                className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
+                className={`px-3.5 h-9 inline-flex items-center text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
                   selectedRayon === r.id
                     ? 'bg-brand-600 text-white shadow-sm shadow-brand-600/20'
                     : 'text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
@@ -881,9 +883,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <button
                   key={id}
                   onClick={() => setRekapTab(id)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                  className={`px-3 h-9 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                     rekapTab === id
-                      ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-sm'
+                      ? 'bg-brand-600 text-white shadow-sm'
                       : 'text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
                   }`}
                 >

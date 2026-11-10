@@ -1,6 +1,6 @@
 import { useConfirm } from '../components/ConfirmDialog';
 import React, { useState } from 'react';
-import { Pencil, Save, X } from 'lucide-react';
+import { Pencil, Save, X, Users } from 'lucide-react';
 import {
   Plus,
   Trash2,
@@ -104,10 +104,11 @@ export const ProfilTkuView: React.FC<ProfilTkuViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 sm:p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
         <div>
-          <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
-            Profil TKU
+          <h1 className="text-lg sm:text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+            <Users className="w-5 h-5 text-brand-600 shrink-0" />
+            <span>Profil TKU</span>
           </h1>
         </div>
 
@@ -116,14 +117,14 @@ export const ProfilTkuView: React.FC<ProfilTkuViewProps> = ({
             <>
               <button
                 onClick={cancelEdit}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl border border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                className="inline-flex items-center gap-1.5 h-9 px-4 text-xs font-semibold rounded-[10px] border border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
               >
                 <X className="w-4 h-4" />
                 <span>Batal</span>
               </button>
               <button
                 onClick={saveEdit}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all"
+                className="inline-flex items-center gap-1.5 h-9 px-4 text-xs font-semibold rounded-[10px] bg-brand-600 hover:bg-brand-700 text-white transition-colors"
               >
                 <Save className="w-4 h-4" />
                 <span>Simpan</span>
@@ -133,14 +134,14 @@ export const ProfilTkuView: React.FC<ProfilTkuViewProps> = ({
             <>
               <button
                 onClick={startEdit}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                className="inline-flex items-center gap-1.5 h-9 px-4 text-xs font-semibold rounded-[10px] border bg-brand-50 dark:bg-brand-950/40 border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900/40 transition-colors"
               >
                 <Pencil className="w-4 h-4" />
                 <span>Edit</span>
               </button>
               <button
                 onClick={() => setShowAddForm(!showAddForm)}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl bg-brand-600 hover:bg-brand-700 text-white shadow-sm shadow-brand-600/20 transition-all"
+                className="inline-flex items-center gap-1.5 h-9 px-4 text-xs font-semibold rounded-[10px] bg-brand-600 hover:bg-brand-700 text-white transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 <span>{showAddForm ? 'Tutup Form' : 'Tambah TKU'}</span>

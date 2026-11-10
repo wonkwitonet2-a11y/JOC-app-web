@@ -263,12 +263,12 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
     <div className="flex flex-wrap items-center gap-2 px-1 pb-3">
       {editVarian ? (
         <>
-          <button type="button" onClick={saveEditVarian} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">Simpan</button>
-          <button type="button" onClick={() => setEditVarian(false)} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200">Batal</button>
+          <button type="button" onClick={saveEditVarian} className="inline-flex items-center h-9 px-3.5 rounded-[10px] text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 transition-colors">Simpan</button>
+          <button type="button" onClick={() => setEditVarian(false)} className="inline-flex items-center h-9 px-3.5 rounded-[10px] text-xs font-semibold bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors">Batal</button>
           <span className="text-xs text-neutral-500">Ubah akumulasi YO, OM, OS, YT tiap TKU. Total, rata-rata, dan persentase ikut dihitung ulang.</span>
         </>
       ) : canEditVarian ? (
-        <button type="button" onClick={startEditVarian} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-600 text-white hover:bg-brand-700">Edit Akumulasi Penjualan per Varian</button>
+        <button type="button" onClick={startEditVarian} className="inline-flex items-center h-9 px-3.5 rounded-[10px] text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 transition-colors">Edit Akumulasi Penjualan per Varian</button>
       ) : (
         <span className="text-xs text-neutral-500">
           {INITIAL_ARCHIVES[activeKey]
@@ -353,12 +353,12 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
     <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-neutral-100 dark:border-neutral-800">
       {editAbsen ? (
         <>
-          <button type="button" onClick={saveEditAbsen} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700">Simpan</button>
-          <button type="button" onClick={() => setEditAbsen(false)} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200">Batal</button>
+          <button type="button" onClick={saveEditAbsen} className="inline-flex items-center h-9 px-3.5 rounded-[10px] text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 transition-colors">Simpan</button>
+          <button type="button" onClick={() => setEditAbsen(false)} className="inline-flex items-center h-9 px-3.5 rounded-[10px] text-xs font-semibold bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors">Batal</button>
           <span className="text-xs text-neutral-500">Ubah Akm BB, Akm JWP, Absen, Frekuensi, Jml Area, Jml YL, YL &lt; 250, YL &lt; 300, atau Tahun Lalu tiap TKU. % BB, s/YL, dan Coverage dihitung ulang.</span>
         </>
       ) : canEditAbsen ? (
-        <button type="button" onClick={startEditAbsen} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-600 text-white hover:bg-brand-700">Edit Data Operasional &amp; Tahun Lalu</button>
+        <button type="button" onClick={startEditAbsen} className="inline-flex items-center h-9 px-3.5 rounded-[10px] text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 transition-colors">Edit Data Operasional &amp; Tahun Lalu</button>
       ) : (
         <span className="text-xs text-neutral-500">
           {INITIAL_ARCHIVES[activeKey]
@@ -648,19 +648,15 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
       )}
 
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-4 p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm relative">
-        <div className="flex items-center gap-3 min-w-0">
-          <span className="p-2.5 rounded-xl bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400">
-            <Archive className="w-5 h-5" />
-          </span>
-          <div>
-            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
-              Arsip Penjualan
-            </h1>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              Rekapitulasi tutup buku bulanan &amp; perbandingan kinerja
-            </p>
-          </div>
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 p-3 sm:p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm relative">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+            <Archive className="w-5 h-5 text-brand-600 shrink-0" />
+            <span>Arsip Penjualan</span>
+          </h1>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+            Rekapitulasi tutup buku bulanan &amp; perbandingan kinerja
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 max-w-full">
@@ -668,7 +664,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
           <button
             type="button"
             onClick={() => setShowConfirmSaveMonth(true)}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold rounded-xl bg-brand-600 hover:bg-brand-700 active:scale-[0.99] text-white shadow-sm shadow-brand-600/20 transition-all cursor-pointer"
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 h-9 text-xs font-semibold rounded-[10px] bg-brand-600 hover:bg-brand-700 active:scale-[0.99] text-white shadow-sm shadow-brand-600/20 transition-all cursor-pointer"
           >
             <Save className="w-4 h-4" />
             <span>Simpan Bulan Ini</span>
@@ -680,13 +676,13 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
               type="button"
               onClick={() => setShowActionsMenu(prev => !prev)}
               aria-label="Opsi Pengelolaan Arsip"
-              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold rounded-xl border transition-colors cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 h-9 text-xs font-semibold rounded-[10px] border transition-colors cursor-pointer ${
                 showActionsMenu
                   ? 'bg-neutral-200 dark:bg-neutral-700 border-neutral-400 dark:border-neutral-600 text-neutral-900 dark:text-white'
-                  : 'bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+                  : 'bg-brand-50 dark:bg-brand-950/40 border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900/40'
               }`}
             >
-              <Settings2 className="w-3.5 h-3.5 text-neutral-500 dark:text-neutral-400" />
+              <Settings2 className="w-3.5 h-3.5" />
               <span>Opsi</span>
               <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showActionsMenu ? 'rotate-180' : ''}`} />
             </button>

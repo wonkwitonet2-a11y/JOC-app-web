@@ -97,9 +97,9 @@ export const TargetView: React.FC<TargetViewProps> = ({
   return (
     <div className="space-y-6 pb-8">
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 sm:p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
         <div>
-          <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+          <h1 className="text-lg sm:text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
             <Target className="w-5 h-5 text-brand-600 shrink-0" />
             <span>Target</span>
           </h1>
@@ -111,9 +111,9 @@ export const TargetView: React.FC<TargetViewProps> = ({
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <button
             onClick={onTarikDariArsip}
-            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 transition-colors shadow-sm"
+            className="inline-flex items-center gap-2 h-9 px-3.5 text-xs font-semibold rounded-[10px] border bg-brand-50 dark:bg-brand-950/40 border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900/40 transition-colors"
           >
-            <History className="w-3.5 h-3.5 text-neutral-500" />
+            <History className="w-3.5 h-3.5" />
             <span>Tarik Dari Arsip</span>
           </button>
         </div>
@@ -189,7 +189,7 @@ export const TargetView: React.FC<TargetViewProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setActiveCategory('target_harian')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center gap-2 px-3.5 h-9 rounded-[10px] text-xs font-semibold transition-all ${
                 activeCategory === 'target_harian'
                   ? 'bg-brand-600 text-white shadow-sm ring-1 ring-brand-600'
                   : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'
@@ -201,7 +201,7 @@ export const TargetView: React.FC<TargetViewProps> = ({
 
             <button
               onClick={() => setActiveCategory('bulan_lalu')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center gap-2 px-3.5 h-9 rounded-[10px] text-xs font-semibold transition-all ${
                 activeCategory === 'bulan_lalu'
                   ? 'bg-brand-600 text-white shadow-sm ring-1 ring-brand-600'
                   : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'
@@ -213,7 +213,7 @@ export const TargetView: React.FC<TargetViewProps> = ({
 
             <button
               onClick={() => setActiveCategory('tahun_lalu')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center gap-2 px-3.5 h-9 rounded-[10px] text-xs font-semibold transition-all ${
                 activeCategory === 'tahun_lalu'
                   ? 'bg-brand-600 text-white shadow-sm ring-1 ring-brand-600'
                   : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'
@@ -225,7 +225,7 @@ export const TargetView: React.FC<TargetViewProps> = ({
 
             <button
               onClick={() => setActiveCategory('komparasi')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center gap-2 px-3.5 h-9 rounded-[10px] text-xs font-semibold transition-all ${
                 activeCategory === 'komparasi'
                   ? 'bg-brand-600 text-white shadow-sm ring-1 ring-brand-600'
                   : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'

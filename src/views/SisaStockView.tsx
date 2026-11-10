@@ -399,19 +399,15 @@ export const SisaStockView: React.FC<SisaStockViewProps> = ({ state, mode, onSav
 
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
-      <div className="p-4 sm:p-5 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xs">
-        <div className="flex items-center gap-3 min-w-0">
-          <span className="p-2.5 rounded-xl bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 shrink-0">
-            <PackageSearch className="w-5 h-5" />
-          </span>
-          <div className="min-w-0">
-            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
-              Sisa Stock
-            </h1>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              Pantau stok &amp; tanggal kedaluwarsa seluruh TKU
-            </p>
-          </div>
+      <div className="p-3 sm:p-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+            <PackageSearch className="w-5 h-5 text-brand-600 shrink-0" />
+            <span>Sisa Stock</span>
+          </h1>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+            Pantau stok &amp; tanggal kedaluwarsa seluruh TKU
+          </p>
         </div>
       </div>
 

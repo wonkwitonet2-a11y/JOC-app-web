@@ -100,18 +100,18 @@ export const EvalMiniTable: React.FC<EvalMiniTableProps> = ({
     const b = (k: BestKey) => (!isSubtotal && !isTotal && bestOf(k, r) ? ` ${BEST_CELL_CLASS}` : '');
 
     const rowBg = isTotal
-      ? 'bg-neutral-900 text-white dark:bg-neutral-950 font-bold'
+      ? 'bg-neutral-200 text-neutral-900 dark:bg-neutral-950 dark:text-white font-bold'
       : isSubtotal
       ? 'bg-neutral-100 dark:bg-neutral-800 font-bold text-neutral-800 dark:text-neutral-200'
       : 'hover:bg-neutral-50/90 dark:hover:bg-neutral-800/50 text-neutral-800 dark:text-neutral-200 font-medium';
 
     const stickyBg = isTotal
-      ? 'bg-neutral-900 text-white dark:bg-neutral-950'
+      ? 'bg-neutral-200 text-neutral-900 dark:bg-neutral-950 dark:text-white'
       : isSubtotal
       ? 'bg-neutral-100 dark:bg-neutral-800'
       : 'bg-white dark:bg-neutral-900 group-hover:bg-neutral-50 dark:group-hover:bg-neutral-800/50';
 
-    const borderB = isTotal ? 'border-t-2 border-neutral-700' : 'border-b border-neutral-100 dark:border-neutral-800';
+    const borderB = isTotal ? 'border-t-2 border-neutral-400 dark:border-neutral-700' : 'border-b border-neutral-100 dark:border-neutral-800';
 
     return (
       <tr 
@@ -262,7 +262,7 @@ export const EvalMiniTable: React.FC<EvalMiniTableProps> = ({
                   <th style={fitCellStyle} className={`${thSubCls} border-l border-neutral-200 dark:border-neutral-700 text-center`}>Abs</th>
                   <th style={fitCellStyle} className={`${thSubCls} text-center`}>Frk</th>
                   <th style={fitCellStyle} className={`${thSubCls} border-l border-neutral-200 dark:border-neutral-700 text-emerald-600 dark:text-emerald-400`}>% CA</th>
-                  <th style={fitCellStyle} className={`${thSubCls} border-l border-neutral-200 dark:border-neutral-700 text-red-600 dark:text-red-400`}>&lt;250</th>
+                  <th style={fitCellStyle} className={`${thSubCls} border-l border-neutral-200 dark:border-neutral-700 text-red-600 dark:text-red-400`}>%&lt;250</th>
                 </tr>
               </thead>
               <tbody>

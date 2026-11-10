@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowDown, ArrowLeftRight, ArrowUp, Calendar, ChevronDown, Download } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowLeftRight, ArrowUp, Calendar, ChevronDown, Download, Layers } from 'lucide-react';
 import { AppState, VariantCode, DailySalesRecord } from '../types';
 import { weekCompareRange, compareWeek, dateKeyOf } from '../services/weekCompare';
 import {
@@ -754,11 +754,14 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="p-4 sm:p-5 space-y-4 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
+      <div className="p-3 sm:p-4 space-y-3 bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
         {/* Baris 1: judul (kiri) + ekspor (kanan) */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">{isReal ? 'Realisasi' : 'Breakdown'}</h1>
+            <h1 className="text-lg sm:text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+              <Layers className="w-5 h-5 text-brand-600 shrink-0" />
+              <span>{isReal ? 'Realisasi' : 'Breakdown'}</span>
+            </h1>
             <p className="text-xs text-neutral-500 truncate">
               {monthName}{isReal ? ` • s/d Tgl ${updateDay}` : ''}
             </p>
@@ -770,7 +773,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
               onClick={() => setShowOrigPlan(v => !v)}
               aria-pressed={showOrigPlan}
               title={showOrigPlan ? 'Kembali menampilkan realisasi' : 'Lihat rencana asli pada tanggal yang sudah tertutup realisasi'}
-              className={`inline-flex items-center justify-center gap-1.5 h-9 px-2.5 sm:px-3.5 text-xs font-semibold rounded-xl border transition-colors ${
+              className={`inline-flex items-center justify-center gap-1.5 h-9 px-2.5 sm:px-3.5 text-xs font-semibold rounded-[10px] border transition-colors ${
                 showOrigPlan
                   ? 'bg-sky-50 dark:bg-sky-950/40 border-sky-300 dark:border-sky-700 text-sky-700 dark:text-sky-300'
                   : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-800'
@@ -782,7 +785,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
           )}
           <button
             onClick={handleExportCsv}
-            className="shrink-0 inline-flex items-center justify-center gap-1.5 h-9 px-2.5 sm:px-3.5 text-xs font-semibold rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-200 transition-colors"
+            className="shrink-0 inline-flex items-center justify-center gap-1.5 h-9 px-2.5 sm:px-3.5 text-xs font-semibold rounded-[10px] border bg-brand-50 dark:bg-brand-950/40 border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900/40 transition-colors"
             title="Unduh tabel format CSV"
             aria-label="Ekspor CSV"
           >
@@ -852,7 +855,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
               <button
                 key={i}
                 onClick={() => setSelectedWeek(i)}
-                className={`px-3 h-8 rounded-lg text-xs font-semibold whitespace-nowrap border transition-all ${
+                className={`px-3 h-9 rounded-[10px] text-xs font-semibold whitespace-nowrap border transition-all ${
                   i === weekIdx
                     ? 'bg-brand-50 dark:bg-brand-950/40 border-brand-200 dark:border-brand-700 text-brand-700 dark:text-brand-200'
                     : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
