@@ -465,6 +465,12 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
   const MAX_PER_YL_HARI = 2.5;
   const MAX_PER_YL_KUNJ = 5;
   const isDropping = (i: number) => /^DP\b/i.test(state.tkus[i].nama.trim());
+  // Jadwal kunjungan DP dari angka di nama: ganjil = Sen/Rab/Jum, genap = Sel/Kam/Sab (tanpa angka = tidak diketahui)
+  const jadwalDpOf = (i: number): number[] | null => {
+    const m = state.tkus[i].nama.trim().match(/(\d+)\s*$/);
+    if (!m) return null;
+    return Number(m[1]) % 2 === 1 ? [1, 3, 5] : [2, 4, 6];
+  };
   const HEAVY_PCT = 0.10;   // tanda ⚠️ bila tambahan > 10% dari breakdown sisa
   type AnRow = { nama: string; pct: number; gap: number; perDay?: number; perYl?: number; heavy?: number | null; belumBd?: boolean; kunj?: number };
   const analisa = (() => {
@@ -484,23 +490,27 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
       const nama = state.tkus[i].nama;
       const pct = P / need;
       if (gap <= 0) { acc.aman++; return; }
-      if (missingPlan.set.has(i)) { acc.jauh.push({ nama, pct, gap, belumBd: true }); return; } // breakdown kosong -> dihitung jauh
+      if (!isReal && missingPlan.set.has(i)) { acc.jauh.push({ nama, pct, gap, belumBd: true }); return; } // breakdown kosong -> dihitung jauh (hanya tab Breakdown)
       const yl = state.tkus[i].jumlahYl || 10;
       if (isDropping(i)) {
         // TKU dropping (ganjil/genap): dihitung per KUNJUNGAN = jumlah tanggal sisa yang ada isi breakdown-nya
         let kunj = 0;
-        for (let d = Math.max(from, updateDay + 1); d <= to; d++) if (projDay(i, d) > 0) kunj++;
+        const jd = isReal ? jadwalDpOf(i) : null; // Realisasi: kunjungan sisa dari jadwal ganjil/genap, bukan dari rencana
+        for (let d = Math.max(from, updateDay + 1); d <= to; d++) {
+          if (jd) { if (jd.includes(dow(d))) kunj++; }
+          else if (projDay(i, d) > 0) kunj++;
+        }
         if (kunj > 0) {
           const perYl = gap / kunj / yl;
           if (perYl <= MAX_PER_YL_KUNJ) {
-            acc.dekat.push({ nama, pct, gap, perYl, kunj, heavy: planRem > 0 ? gap / planRem : null });
+            acc.dekat.push({ nama, pct, gap, perYl, kunj, heavy: !isReal && planRem > 0 ? gap / planRem : null });
             return;
           }
         }
       } else if (rem > 0) {
         const perYl = gap / rem / yl;
         if (perYl <= MAX_PER_YL_HARI) {
-          acc.dekat.push({ nama, pct, gap, perDay: gap / rem, perYl, heavy: planRem > 0 ? gap / planRem : null });
+          acc.dekat.push({ nama, pct, gap, perDay: gap / rem, perYl, heavy: !isReal && planRem > 0 ? gap / planRem : null });
           return;
         }
       }
@@ -521,12 +531,13 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
     // Target itu bulanan, jadi minus minggu-minggu sebelumnya ikut dihitung (sama dengan tabel & menu TKU).
     const make = (label: string, cOf: (i: number) => number) => {
       const acc = newAcc();
-      const DA = to; // jumlah hari akumulasi = tgl 1 s/d `to`
+      // Tab Realisasi: hanya hasil nyata s/d tgl update (sama dengan kartu ringkasan). Tab Breakdown: proyeksi s/d akhir periode.
+      const DA = isReal ? Math.min(to, updateDay) : to; // jumlah hari akumulasi = tgl 1 s/d DA
       allIdxs.forEach(i => {
         const c = cOf(i);
         if (c <= 0) { acc.tanpaBanding++; return; }
         let P = 0;
-        for (let d = 1; d <= to; d++) P += projDay(i, d);
+        for (let d = 1; d <= DA; d++) P += projDay(i, d);
         classify(acc, i, c * DA, P, planRemOf(i));
       });
       return finish(label, acc);
@@ -545,10 +556,13 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
       return finish('vs Minggu Lalu', acc);
     };
 
+    // Realisasi Mingguan: minggu yang belum datang = belum ada data; minggu yang sudah lewat = hasil akhir minggu itu
+    const belumAda = isReal && viewMode === 'mingguan' && week.start > updateDay;
+    const sudahLewat = isReal && viewMode === 'mingguan' && week.end < updateDay;
     return {
-      from, to, rem,
-      sets: [
-        ...(viewMode === 'mingguan' ? [makeWeek()] : []),
+      from, to, rem, belumAda, sudahLewat,
+      sets: belumAda ? [] : [
+        ...(viewMode === 'mingguan' && !isReal ? [makeWeek()] : []),
         make('vs Target', i => state.tkus[i]?.targetHarian || 0),
         make('vs Th Lalu', i => state.targetTahunLalu[i] || 0)
       ]
@@ -903,6 +917,12 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
         </button>
         {showAnalisa && (
           <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-3 space-y-3">
+            {analisa.belumAda && (
+              <div className="text-xs text-neutral-500 dark:text-neutral-400">Belum ada realisasi untuk Minggu {weekIdx + 1} (data baru sampai tgl {updateDay}).</div>
+            )}
+            {analisa.sudahLewat && (
+              <div className="text-xs text-neutral-500 dark:text-neutral-400">Minggu sudah lewat: hasil akhir s/d tgl {analisa.to}.</div>
+            )}
             {analisa.sets.map(st => (
               <div key={st.label} className="space-y-1.5 pt-2 border-t border-neutral-100 dark:border-neutral-800 first-of-type:border-0 first-of-type:pt-0">
                 <span className="inline-block px-2 py-0.5 rounded-md bg-brand-50 dark:bg-brand-950/40 text-xs font-bold text-brand-700 dark:text-brand-300">{st.label}</span>
