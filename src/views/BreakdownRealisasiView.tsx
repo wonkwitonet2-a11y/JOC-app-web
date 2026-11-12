@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowDown, ArrowLeftRight, ArrowUp, Calendar, ChevronDown, Download, Layers } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowLeftRight, ArrowUp, Calendar, ChevronDown, ChevronRight, Download, Layers } from 'lucide-react';
 import { AppState, VariantCode, DailySalesRecord } from '../types';
 import { weekCompareRange, compareWeek, dateKeyOf } from '../services/weekCompare';
 import {
@@ -89,7 +89,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
   showToast,
   onNavigateMenu
 }) => {
-  const [tab, setTab] = useState<DataTab>('breakdown');
+  const [tab, setTab] = useState<DataTab>('realisasi');
   const [viewMode, setViewMode] = useState<ViewMode>('bulanan');
   const [showKondisiTku, setShowKondisiTku] = useState<boolean>(true);
   const [showAnalisa, setShowAnalisa] = useState<boolean>(false);
@@ -98,6 +98,8 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
   const isReal = tab === 'realisasi';
   const showPlanPast = !isReal && showOrigPlan;
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
+  // Tanggal yang sedang dibuka per varian (YO/OM/OS/YT). Default kosong = semua tanggal tampil sebagai TOTAL per hari.
+  const [openDays, setOpenDays] = useState<Set<number>>(() => new Set());
 
   const selectedRayon = state.selectedRayon; // 0: Cabang, 1: Rayon 1, 2: Rayon 2
 
@@ -619,30 +621,28 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
   // ---- Tampilan ----
   const stickyBg = (kind: TableRow['kind']) =>
     kind === 'total'
-      ? 'bg-neutral-900 dark:bg-neutral-950'
+      ? 'bg-brand-50 dark:bg-brand-950/40' // sama dengan Total Cabang di menu Target (biru muda)
       : kind === 'rayon'
-        ? 'bg-neutral-100 dark:bg-neutral-800'
+        ? 'bg-neutral-200 dark:bg-neutral-950' // sama dengan total di menu Evaluasi (abu)
         : 'bg-white dark:bg-neutral-900';
   const rowBg = (kind: TableRow['kind']) =>
     kind === 'total'
-      ? 'bg-neutral-900 text-white dark:bg-neutral-950 font-bold'
+      ? 'bg-brand-50 dark:bg-brand-950/40 text-neutral-900 dark:text-white font-extrabold border-t-2 border-brand-400 dark:border-brand-800'
       : kind === 'rayon'
-        ? 'bg-neutral-100 dark:bg-neutral-800 font-bold'
+        ? 'bg-neutral-200 text-neutral-900 dark:bg-neutral-950 dark:text-white font-bold border-t-2 border-neutral-400 dark:border-neutral-700'
         : 'bg-white dark:bg-neutral-900 hover:bg-neutral-50 dark:hover:bg-neutral-800/50';
   const pctClass = (p: number | null, kind: TableRow['kind']) =>
     p === null
       ? 'text-neutral-400'
-      : kind === 'total'
-        ? p >= 1 ? 'text-emerald-300' : 'text-red-300'
-        : p >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
+      : p >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
   const diffClass = (x: number, kind: TableRow['kind']) =>
-    kind === 'total' ? (x >= 0 ? 'text-emerald-300' : 'text-red-300') : getStatusClass(x);
+    getStatusClass(x);
 
   const th = 'px-2 py-1.5 text-center font-semibold whitespace-nowrap border-l border-neutral-200 dark:border-neutral-800';
   // Semua sel angka: ukuran & ketebalan sama
   const td = 'px-2 py-2 text-right font-mono text-xs font-bold whitespace-nowrap';
 
-  const tint = (k: string, kind: TableRow['kind']) => (kind === 'tku' ? TINT[k][0] : kind === 'rayon' ? TINT[k][1] : '');
+  const tint = (k: string, kind: TableRow['kind']) => (kind === 'tku' ? TINT[k][0] : '');
   // Latar kolom tanggal: Minggu = merah muda, tanggal genap = abu sangat tipis (pemisah antar tanggal)
   const dayTint = (d: number, kind: TableRow['kind']) => {
     if (kind === 'total') return '';
@@ -658,11 +658,11 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
     return ry === 1 ? 'border-l-[3px] border-l-sky-500' : ry === 2 ? 'border-l-[3px] border-l-violet-500' : '';
   };
   const labelTone = (r: TableRow) => {
-    if (r.kind !== 'rayon') return '';
-    return rayonOfRow(r) === 1 ? 'text-sky-700 dark:text-sky-300' : 'text-violet-700 dark:text-violet-300';
+    if (r.kind === 'total') return 'text-brand-800 dark:text-brand-300';
+    return ''; // subtotal rayon: warna teks ikut baris (hitam), sama seperti menu Evaluasi
   };
   // Warna teks aman untuk baris gelap (Total Cabang)
-  const hue = (kind: TableRow['kind'], light: string, dark: string) => (kind === 'total' ? dark : light);
+  const hue = (_kind: TableRow['kind'], light: string, _dark: string) => light; // baris total kini terang, tak perlu warna khusus gelap
 
   // ---- Perbandingan dengan Minggu lalu (akumulasi tgl 1 s/d Sabtu, rata-rata per hari) ----
   // Hanya tab Breakdown & tampilan Mingguan. Tanggal 1-7 belum punya pembanding.
@@ -693,6 +693,75 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
   // Hari Minggu tanpa transaksi di semua TKU: kolomnya dipersempit (1 kolom, bukan 4 varian)
   const collapsedDay = (d: number): boolean => dow(d) === 0 && isHoliday(d);
 
+  // ---- Tampilan ringkas (total per hari) <-> per varian ----
+  // Default: tiap tanggal = 1 kolom TOTAL. Klik tanggal / tombol "Buka varian" -> 4 varian + total.
+  const isOpen = (d: number): boolean => !collapsedDay(d) && openDays.has(d);
+  const dayCols = (d: number): number => (isOpen(d) ? 5 : 1);
+  const toggleDay = (d: number) =>
+    setOpenDays(prev => {
+      const nx = new Set(prev);
+      if (nx.has(d)) nx.delete(d); else nx.add(d);
+      return nx;
+    });
+  const openableDays = shownDays.filter(d => !collapsedDay(d));
+  const allOpen = openableDays.length > 0 && openableDays.every(d => openDays.has(d));
+  const toggleAll = () =>
+    setOpenDays(prev => {
+      const nx = new Set(prev);
+      openableDays.forEach(d => { if (allOpen) nx.delete(d); else nx.add(d); });
+      return nx;
+    });
+
+  // ---- Ringkasan akumulatif per tanggal (tab Realisasi, di bawah tabel) ----
+  // Semua angka dihitung dari tgl 1 s/d tanggal kolom, untuk TKU yang tampil (Cabang / Rayon terpilih).
+  const scopeAgg = isReal ? build(allIdxs) : null;
+  const scopeLabel = selectedRayon === 0 ? 'Cabang' : `Rayon ${selectedRayon}`;
+  const accUpTo: number[] = [0];
+  if (scopeAgg) {
+    let run = 0;
+    for (let d = 1; d <= daysInMonth; d++) { run += dayTotal(scopeAgg, d); accUpTo.push(run); }
+  }
+  type SumCell = { txt: string; cls: string };
+  const NA: SumCell = { txt: '—', cls: 'text-neutral-400' };
+  const sumCells = (d: number): Record<string, SumCell> => {
+    const cmp = scopeAgg!.cmp;
+    const acc = accUpTo[d];
+    const avg = acc / d;
+    const cur = dayTotal(scopeAgg!, d);
+    const prev = d > 7 ? dayTotal(scopeAgg!, d - 7) : prevMonthTotal(allIdxs, d - 7);
+    const wk = cur > 0 && prev > 0 ? cur - prev : null; // hari ini vs hari yang sama minggu lalu
+    const diffCell = (x: number, c: number): SumCell => (c > 0 ? { txt: formatDiff(x), cls: getStatusClass(x) } : NA);
+    const pctCell = (c: number): SumCell => {
+      if (c <= 0) return NA;
+      const p = avg / c;
+      return { txt: formatPercent(p), cls: p >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400' };
+    };
+    return {
+      acc: { txt: formatNumber(acc), cls: 'text-brand-700 dark:text-brand-300' },
+      avg: { txt: formatNumber(avg), cls: 'text-indigo-700 dark:text-indigo-300' },
+      tgt: cmp.tg > 0 ? { txt: formatNumber(cmp.tg * d), cls: '' } : NA,
+      dTg: diffCell(acc - cmp.tg * d, cmp.tg),
+      wk: wk === null ? NA : { txt: formatDiff(wk), cls: getStatusClass(wk) },
+      pTg: pctCell(cmp.tg),
+      pBl: pctCell(cmp.bl),
+      pTy: pctCell(cmp.ty),
+      dTy: diffCell(acc - cmp.ty * d, cmp.ty)
+    };
+  };
+  // Label dipendekkan supaya kolom nama tidak melebar di HP (nama lengkap tampil sebagai tooltip)
+  const sumRows: { key: string; label: string; full: string }[] = [
+    { key: 'acc', label: 'Akm Pjl', full: 'Akumulasi Penjualan' },
+    { key: 'avg', label: 'Rata2 Pjl', full: 'Rata-rata Penjualan' },
+    { key: 'tgt', label: 'Akm Tgt', full: 'Akumulasi Target' },
+    { key: 'dTg', label: '+/- vs Tgt', full: 'Akumulasi Selisih Botol vs Target' },
+    { key: 'wk', label: '+/- vs Mgg Lalu', full: 'Selisih Botol vs Minggu Lalu' },
+    { key: 'pTg', label: '% vs Tgt', full: '% vs Target' },
+    { key: 'pBl', label: '% vs Bln Lalu', full: '% vs Bulan Lalu' },
+    { key: 'pTy', label: '% vs Th Lalu', full: '% vs Tahun Lalu' },
+    { key: 'dTy', label: '+/- vs Th Lalu', full: 'Akumulasi Selisih Botol vs Tahun Lalu' }
+  ];
+  const trailCols = 16 + (showWeekCmp ? 2 : 0); // Akumulasi 5 + Rata-rata 5 + (Mgg lalu 2) + % 3 + Selisih 3
+
   // Saat Mingguan: tabel otomatis bergeser ke hari pertama yang ada isinya
   const tableScrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -718,9 +787,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
   const toneText = (t: Tone, kind: TableRow['kind']) =>
     t === 'none'
       ? 'text-neutral-400'
-      : kind === 'total'
-        ? t === 'up' ? 'text-emerald-300' : t === 'down' ? 'text-red-300' : 'text-white'
-        : t === 'up'
+      : t === 'up'
           ? 'text-emerald-600 dark:text-emerald-400'
           : t === 'down'
             ? 'text-red-600 dark:text-red-400'
@@ -741,7 +808,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
         : null;
 
   const blocks = [
-    { title: isReal ? 'Realisasi per Tanggal' : 'Rencana Breakdown per Tanggal', span: shownDays.reduce((sum, d) => sum + (collapsedDay(d) ? 1 : 4), 0), tone: 'text-neutral-700 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800' },
+    { title: isReal ? 'Realisasi per Tanggal' : 'Rencana Breakdown per Tanggal', span: shownDays.reduce((sum, d) => sum + dayCols(d), 0), tone: 'text-neutral-700 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800' },
     { title: 'Akumulasi', span: 5, tone: 'text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-950/30' },
     { title: 'Rata-rata', span: 5, tone: 'text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/30' },
     ...(showWeekCmp
@@ -988,6 +1055,21 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                 <th rowSpan={3} className="sticky left-0 z-20 px-3 py-2 text-left font-semibold bg-neutral-50 dark:bg-neutral-800 border-r border-neutral-200 dark:border-neutral-700 min-w-[130px] text-neutral-600 dark:text-neutral-300">
                   Nama TKU
                   <span className="block text-[10px] font-normal text-neutral-400 dark:text-neutral-500">% vs Tgt · Th lalu{showWeekCmp ? ' · Mgg lalu' : ''}</span>
+                  {/* Tombol ada di kolom nama yang menempel (sticky) -> tetap terlihat saat tabel digeser */}
+                  <button
+                    type="button"
+                    onClick={toggleAll}
+                    aria-pressed={allOpen}
+                    title={allOpen ? 'Ringkas semua tanggal jadi total per hari' : 'Buka semua tanggal per varian (YO / OM / OS / YT)'}
+                    className={`mt-1.5 inline-flex items-center gap-1 h-7 px-2 rounded-lg border text-[11px] font-semibold whitespace-nowrap cursor-pointer transition-colors ${
+                      allOpen
+                        ? 'bg-brand-600 border-brand-600 text-white'
+                        : 'bg-white dark:bg-neutral-900 border-neutral-300 dark:border-neutral-600 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700'
+                    }`}
+                  >
+                    {allOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                    <span>{allOpen ? 'Tutup varian' : 'Buka varian'}</span>
+                  </button>
                 </th>
                 {blocks.map(b => (
                   <th key={b.title} colSpan={b.span} className={`px-2 py-1.5 text-center font-bold border-l border-neutral-200 dark:border-neutral-800 ${b.tone}`}>
@@ -998,15 +1080,31 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
               <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/40 text-neutral-600 dark:text-neutral-300">
                 {shownDays.map(d => {
                   const w = dow(d);
+                  const hol = collapsedDay(d);
+                  const open = isOpen(d);
                   return (
                     <th
                       key={d}
                       data-day={d}
-                      colSpan={collapsedDay(d) ? 1 : 4}
-                      className={`${th} ${collapsedDay(d) ? '!px-1' : ''} ${w === 0 ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20' : ''}`}
+                      colSpan={dayCols(d)}
+                      rowSpan={open || hol ? 1 : 2}
+                      className={`${th} ${hol ? '!px-1' : ''} ${w === 0 ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20' : ''}`}
                     >
                       <div className="flex items-center justify-center gap-1">
-                        <span>{DAY_NAMES[w]} {d}</span>
+                        {hol ? (
+                          <span>{DAY_NAMES[w]} {d}</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => toggleDay(d)}
+                            aria-expanded={open}
+                            title={open ? 'Ringkas jadi total per hari' : 'Buka per varian'}
+                            className="inline-flex items-center gap-0.5 rounded-md px-1 py-0.5 cursor-pointer hover:bg-neutral-200/70 dark:hover:bg-neutral-700/60"
+                          >
+                            {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                            <span>{DAY_NAMES[w]} {d}</span>
+                          </button>
+                        )}
                         {!isReal && isRealDate(d) && (
                           <span className={`text-xs px-1 py-px rounded text-white font-semibold leading-none ${showPlanPast ? 'bg-sky-600' : 'bg-emerald-600'}`}>{showPlanPast ? 'Rencana' : 'Real'}</span>
                         )}
@@ -1033,15 +1131,18 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
               <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/40 text-neutral-500">
                 {shownDays.map(d => collapsedDay(d) ? (
                   <th key={`${d}libur`} className="px-1 py-1 text-center font-semibold text-[10px] text-neutral-400 border-l border-neutral-200 dark:border-neutral-800 bg-red-50 dark:bg-red-950/20">libur</th>
-                ) :
-                  VCODES.map((v, vi) => (
-                    <th
-                      key={`${d}${v}`}
-                      className={`px-1.5 py-1 text-center font-bold text-xs min-w-[44px] ${VCOL[v]} ${vi === 0 ? 'border-l border-neutral-200 dark:border-neutral-800' : ''} ${dow(d) === 0 ? 'bg-red-50 dark:bg-red-950/20' : ''}`}
-                    >
-                      {v}
-                    </th>
-                  ))
+                ) : isOpen(d) ? (
+                  <React.Fragment key={`${d}v`}>
+                    {[...VCODES, 'Total'].map((v, vi) => (
+                      <th
+                        key={`${d}${v}`}
+                        className={`px-1.5 py-1 text-center font-bold text-xs min-w-[44px] ${VCOL[v]} ${vi === 0 || v === 'Total' ? 'border-l border-neutral-200 dark:border-neutral-800' : ''} ${dow(d) === 0 ? 'bg-red-50 dark:bg-red-950/20' : ''}`}
+                      >
+                        {v === 'Total' ? 'Tot' : v}
+                      </th>
+                    ))}
+                  </React.Fragment>
+                ) : null
                 )}
               </tr>
             </thead>
@@ -1073,40 +1174,46 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                       )}
                     </td>
 
-                    {/* 1. Transaksi per tanggal */}
-                    {shownDays.map(d => collapsedDay(d) ? (
-                      <td key={`${d}libur`} className={`px-1 py-2 text-center font-mono text-xs text-neutral-300 dark:text-neutral-600 ${sep} ${dayTint(d, r.kind)}`}>-</td>
-                    ) :
-                      VCODES.map((v, vi) => {
-                        const future = isReal && d > updateDay;
-                        // Mode rencana asli: tanggal yang sudah tertutup realisasi menampilkan rencana aslinya
-                        const planShown = showPlanPast && isRealDate(d);
-                        const val = planShown ? r.idxs.reduce((acc, ti) => acc + getPlan(ti, d)[vi], 0) : a.daily[d][vi];
+                    {/* 1. Transaksi per tanggal: default total per hari; klik tanggal / tombol "Buka varian" untuk YO-OM-OS-YT */}
+                    {shownDays.map(d => {
+                      if (collapsedDay(d)) {
+                        return <td key={`${d}libur`} className={`px-1 py-2 text-center font-mono text-xs text-neutral-300 dark:text-neutral-600 ${sep} ${dayTint(d, r.kind)}`}>-</td>;
+                      }
+                      const future = isReal && d > updateDay;
+                      // Mode rencana asli: tanggal yang sudah tertutup realisasi menampilkan rencana aslinya
+                      const planShown = showPlanPast && isRealDate(d);
+                      const vals = VCODES.map((_, vi) => (planShown ? r.idxs.reduce((acc, ti) => acc + getPlan(ti, d)[vi], 0) : a.daily[d][vi]));
+                      const tot = vals.reduce((x, y) => x + y, 0);
+                      // Warna angka per tanggal vs hari yang sama minggu lalu (baris TKU, tampilan mingguan)
+                      const dayTone: Tone = showWeekCmp && r.kind === 'tku' && !future && !planShown ? toneOf(dayDiff(a, d)) : 'none';
+                      // Tab Breakdown: tanggal yang belum datang = rencana target -> biru
+                      const isPlanDay = !isReal && !isRealDate(d);
+                      const cell = (val: number, key: string, border: boolean) => {
                         // Hari libur (semua TKU tanpa transaksi): tampil '-' tanpa tanda warna
                         const isHolidayEmpty = !future && val === 0 && (planShown ? dow(d) === 0 : isHoliday(d));
-                        // Warna angka per tanggal vs hari yang sama minggu lalu (baris TKU, tampilan mingguan)
-                        const dayTone: Tone = showWeekCmp && r.kind === 'tku' && !future && !isHolidayEmpty && !planShown ? toneOf(dayDiff(a, d)) : 'none';
-                        // Tab Breakdown: tanggal yang belum datang = rencana target -> biru
-                        const isPlanDay = !isReal && !isRealDate(d);
                         const valTone = future || isHolidayEmpty
                           ? 'text-neutral-300 dark:text-neutral-600'
                           : planShown
                             ? `${hue(r.kind, 'text-sky-700 dark:text-sky-300', 'text-sky-300')} italic`
-                          : dayTone !== 'none'
-                            ? dayToneClass(dayTone)
-                            : isPlanDay
-                              ? hue(r.kind, 'text-sky-700 dark:text-sky-300', 'text-sky-300')
-                              : '';
+                            : dayTone !== 'none'
+                              ? dayToneClass(dayTone)
+                              : isPlanDay
+                                ? hue(r.kind, 'text-sky-700 dark:text-sky-300', 'text-sky-300')
+                                : '';
                         return (
-                          <td
-                            key={`${d}${v}`}
-                            className={`${td} ${vi === 0 ? sep : ''} ${dayTint(d, r.kind)} ${valTone}`}
-                          >
+                          <td key={key} className={`${td} ${border ? sep : ''} ${dayTint(d, r.kind)} ${valTone}`}>
                             {future ? '·' : isHolidayEmpty ? '-' : formatNumber(val)}
                           </td>
                         );
-                      })
-                    )}
+                      };
+                      if (!isOpen(d)) return cell(tot, `${d}T`, true);
+                      return (
+                        <React.Fragment key={d}>
+                          {vals.map((val, vi) => cell(val, `${d}${VCODES[vi]}`, vi === 0))}
+                          {cell(tot, `${d}T`, true)}
+                        </React.Fragment>
+                      );
+                    })}
 
                     {/* 2. Akumulasi */}
                     {a.acc.map((x, i) => (
@@ -1156,6 +1263,41 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                   </tr>
                 );
               })}
+
+              {/* Ringkasan akumulatif per tanggal (tab Realisasi): tgl 1 s/d tanggal kolom */}
+              {isReal && scopeAgg && (
+                <>
+                  <tr className="bg-neutral-100 dark:bg-neutral-800 border-t-2 border-neutral-300 dark:border-neutral-600">
+                    <td className="sticky left-0 z-10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap bg-neutral-100 dark:bg-neutral-800 border-r border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200">
+                      Akumulasi {scopeLabel}
+                    </td>
+                    <td colSpan={shownDays.reduce((sum, d) => sum + dayCols(d), 0) + trailCols} className="px-3 py-1.5 text-[11px] text-neutral-500 dark:text-neutral-400 whitespace-nowrap">
+                      Dihitung dari tgl 1 s/d tanggal di kolom
+                    </td>
+                  </tr>
+                  {sumRows.map(sr => (
+                    <tr key={`sum-${sr.key}`} className="bg-white dark:bg-neutral-900 hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
+                      <td title={sr.full} className="sticky left-0 z-10 px-3 py-2 text-xs font-semibold whitespace-nowrap bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-100">
+                        {sr.label}
+                      </td>
+                      {shownDays.map(d => {
+                        const future = d > updateDay;
+                        const c = future ? null : sumCells(d)[sr.key];
+                        return (
+                          <td
+                            key={`sum-${sr.key}-${d}`}
+                            colSpan={dayCols(d)}
+                            className={`${td} border-l border-neutral-200 dark:border-neutral-700 ${future ? 'text-neutral-300 dark:text-neutral-600' : c!.cls}`}
+                          >
+                            {future ? '·' : c!.txt}
+                          </td>
+                        );
+                      })}
+                      <td colSpan={trailCols} className="border-l border-neutral-200 dark:border-neutral-700" />
+                    </tr>
+                  ))}
+                </>
+              )}
             </tbody>
           </table>
         </div>
@@ -1226,9 +1368,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
                   const sep = 'border-l border-neutral-200 dark:border-neutral-700';
                   const coverCls = o.cover === null
                     ? 'text-neutral-400'
-                    : r.kind === 'total'
-                      ? (o.cover >= 1 ? 'text-emerald-300' : 'text-amber-300')
-                      : (o.cover >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400');
+                    : (o.cover >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400');
                   return (
                     <tr key={`o${r.key}`} className={rowBg(r.kind)}>
                       <td className={`sticky left-0 z-10 px-3 py-2 font-semibold whitespace-nowrap border-r border-neutral-200 dark:border-neutral-700 ${stickyBg(r.kind)} ${accentCls(r)} ${labelTone(r)}`}>
