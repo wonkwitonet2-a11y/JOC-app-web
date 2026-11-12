@@ -8,7 +8,7 @@ import {
   BarChart3
 } from 'lucide-react';
 import { AppState, VariantCode } from '../types';
-import { formatNumber, formatPercent, getPeriodInfo } from '../services/storage';
+import { formatNumber, formatDecimal, formatPercent, getPeriodInfo, getTargetBulanLalu, getTargetTahunLalu, potong2Desimal } from '../services/storage';
 
 interface TargetViewProps {
   state: AppState;
@@ -23,25 +23,29 @@ interface TargetViewProps {
 type TargetViewCategory = 'target_harian' | 'bulan_lalu' | 'tahun_lalu' | 'komparasi';
 
 
-// Kolom isian angka BULAT (tanpa desimal). Hanya angka yang diterima; saat diketik, titik/koma dan
-// angka di belakangnya diabaikan. Nilai yang tersimpan selalu bilangan bulat.
-// (prop hideDecimals dipertahankan agar pemanggil lama tetap jalan, tapi tidak berpengaruh lagi)
+// Kolom isian angka dengan HINGGA 2 desimal (koma atau titik). Saat kolom diklik tampil angka aslinya (mis. 300,55);
+// saat tidak diklik tampil bulat tanpa desimal (300), tetapi nilai yang tersimpan & dipakai hitungan tetap 300,55.
+// Desimal dipotong (bukan dibulatkan) ke 2 angka.
+// (prop hideDecimals dipertahankan agar pemanggil lama tetap jalan, tapi tidak berpengaruh)
 const DecimalInput: React.FC<{ value: number; onCommit: (v: number) => void; className?: string; hideDecimals?: boolean }> = ({ value, onCommit, className }) => {
   const [focused, setFocused] = useState(false);
   const [text, setText] = useState('');
-  const shown = focused ? text : (value ? formatNumber(Math.floor(value)) : '');
+  const shown = focused ? text : (value ? formatNumber(value) : '');
   return (
     <input
       type="text"
-      inputMode="numeric"
+      inputMode="decimal"
       value={shown}
       placeholder="0"
-      onFocus={() => { setText(value ? String(Math.floor(value)) : ''); setFocused(true); }}
+      onFocus={() => { setText(value ? String(potong2Desimal(value)).replace('.', ',') : ''); setFocused(true); }}
       onBlur={() => setFocused(false)}
       onChange={(e) => {
-        const raw = e.target.value.split(/[.,]/)[0].replace(/\D/g, '');
-        setText(raw);
-        onCommit(Math.floor(Number(raw)) || 0);
+        const raw = e.target.value.replace(/[^0-9.,]/g, '');
+        const sepAt = raw.search(/[.,]/);
+        const intPart = (sepAt === -1 ? raw : raw.slice(0, sepAt)).replace(/\D/g, '');
+        const decPart = sepAt === -1 ? null : raw.slice(sepAt + 1).replace(/\D/g, '').slice(0, 2);
+        setText(decPart === null ? intPart : `${intPart},${decPart}`);
+        onCommit(potong2Desimal(Number(`${intPart || 0}.${decPart || 0}`)));
       }}
       className={className}
     />
@@ -79,19 +83,19 @@ export const TargetView: React.FC<TargetViewProps> = ({
   const totalOmBl = state.tkus.reduce((acc, _, idx) => acc + getVarVal('OM', idx, 'bl'), 0);
   const totalOsBl = state.tkus.reduce((acc, _, idx) => acc + getVarVal('OS', idx, 'bl'), 0);
   const totalYtBl = state.tkus.reduce((acc, _, idx) => acc + getVarVal('YT', idx, 'bl'), 0);
-  const totalBlCabang = totalOriBl + totalOmBl + totalOsBl + totalYtBl || state.targetBulanLalu.reduce((a, b) => a + b, 0);
+  const totalBlCabang = totalOriBl + totalOmBl + totalOsBl + totalYtBl || state.tkus.reduce((a, _, i) => a + getTargetBulanLalu(state, i), 0);
 
   // Totals for Tahun Lalu ({period.tahunLaluLabel})
   const totalOriTy = state.tkus.reduce((acc, _, idx) => acc + getVarVal('YO', idx, 'ty'), 0);
   const totalOmTy = state.tkus.reduce((acc, _, idx) => acc + getVarVal('OM', idx, 'ty'), 0);
   const totalOsTy = state.tkus.reduce((acc, _, idx) => acc + getVarVal('OS', idx, 'ty'), 0);
   const totalYtTy = state.tkus.reduce((acc, _, idx) => acc + getVarVal('YT', idx, 'ty'), 0);
-  const totalTyCabang = totalOriTy + totalOmTy + totalOsTy + totalYtTy || state.targetTahunLalu.reduce((a, b) => a + b, 0);
+  const totalTyCabang = totalOriTy + totalOmTy + totalOsTy + totalYtTy || state.tkus.reduce((a, _, i) => a + getTargetTahunLalu(state, i), 0);
 
   const handleVariantFieldChange = (variant: VariantCode, tkuIdx: number, field: 'tg' | 'bl' | 'ty', value: number) => {
     onUpdateVariantTarget(variant, tkuIdx, field, value);
     const label = variant === 'YO' ? 'ORI' : variant;
-    showToast(`Target ${label} ${state.tkus[tkuIdx]?.nama} disetel ke ${formatNumber(value)} btl`, 'success');
+    showToast(`Target ${label} ${state.tkus[tkuIdx]?.nama} disetel ke ${formatDecimal(value)} btl`, 'success');
   };
 
   return (
@@ -792,8 +796,8 @@ export const TargetView: React.FC<TargetViewProps> = ({
                 <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono text-xs">
                   {state.tkus.map((t, idx) => {
                     const tg = getVarVal('YO', idx, 'tg') + getVarVal('OM', idx, 'tg') + getVarVal('OS', idx, 'tg') + getVarVal('YT', idx, 'tg') || t.targetHarian;
-                    const bl = getVarVal('YO', idx, 'bl') + getVarVal('OM', idx, 'bl') + getVarVal('OS', idx, 'bl') + getVarVal('YT', idx, 'bl') || state.targetBulanLalu[idx] || 0;
-                    const ty = getVarVal('YO', idx, 'ty') + getVarVal('OM', idx, 'ty') + getVarVal('OS', idx, 'ty') + getVarVal('YT', idx, 'ty') || state.targetTahunLalu[idx] || 0;
+                    const bl = getVarVal('YO', idx, 'bl') + getVarVal('OM', idx, 'bl') + getVarVal('OS', idx, 'bl') + getVarVal('YT', idx, 'bl') || getTargetBulanLalu(state, idx);
+                    const ty = getVarVal('YO', idx, 'ty') + getVarVal('OM', idx, 'ty') + getVarVal('OS', idx, 'ty') + getVarVal('YT', idx, 'ty') || getTargetTahunLalu(state, idx);
                     
                     const growthBl = bl > 0 ? (tg - bl) / bl : 0;
                     const growthTy = ty > 0 ? (tg - ty) / ty : 0;

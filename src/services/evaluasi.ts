@@ -1,5 +1,5 @@
 import { AppState, TkuItem, DailySalesRecord } from '../types';
-import { getPeriodInfo, getPembagiHari, SEED_PERIOD } from './storage';
+import { getPeriodInfo, getPembagiHari, SEED_PERIOD, getTargetBulanLalu, getTargetTahunLalu } from './storage';
 
 export interface EvaluasiRow {
   tku: TkuItem;
@@ -105,12 +105,12 @@ export function buildEvaluasiData(state: AppState): {
     const diffTg = akmPjl - tgHarian * divider;
 
     // Perbandingan vs Bulan Lalu (LM)
-    const lmHarian = state.targetBulanLalu[idx] || 0;
+    const lmHarian = getTargetBulanLalu(state, idx);
     const vsLmPct = lmHarian > 0 ? rata2 / lmHarian : 0;
     const diffLm = akmPjl - lmHarian * divider;
 
     // Perbandingan vs Tahun Lalu (LY)
-    const lyHarian = state.targetTahunLalu[idx] || 0;
+    const lyHarian = getTargetTahunLalu(state, idx);
     const vsLyPct = lyHarian > 0 ? rata2 / lyHarian : 0;
     const diffLy = akmPjl - lyHarian * divider;
 
@@ -210,11 +210,11 @@ export function buildEvaluasiData(state: AppState): {
     const vsTgPct = tgHarian > 0 ? rata2 / tgHarian : 0;
     const diffTg = akmPjl - tgHarian * divider;
 
-    const lmHarian = rows.reduce((s, r) => s + (state.targetBulanLalu[r.rawIdx] || 0), 0);
+    const lmHarian = rows.reduce((s, r) => s + (getTargetBulanLalu(state, r.rawIdx)), 0);
     const vsLmPct = lmHarian > 0 ? rata2 / lmHarian : 0;
     const diffLm = akmPjl - lmHarian * divider;
 
-    const lyHarian = rows.reduce((s, r) => s + (state.targetTahunLalu[r.rawIdx] || 0), 0);
+    const lyHarian = rows.reduce((s, r) => s + (getTargetTahunLalu(state, r.rawIdx)), 0);
     const vsLyPct = lyHarian > 0 ? rata2 / lyHarian : 0;
     const diffLy = akmPjl - lyHarian * divider;
 

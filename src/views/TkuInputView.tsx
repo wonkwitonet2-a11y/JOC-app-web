@@ -47,7 +47,9 @@ import {
   getCalendarPeriodKey,
   isPeriodBehindCalendar,
   periodLabelOf,
-  SEED_PERIOD
+  SEED_PERIOD,
+  getTargetBulanLalu,
+  getTargetTahunLalu,
 } from '../services/storage';
 import { useConfirm } from '../components/ConfirmDialog';
 import { REAL_TKU_DAILY_SALES } from '../data/realSalesSeptember2026';
@@ -1159,7 +1161,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       const r = getDayActualAllVariants(d);
       const cum = getCumActualUpToDay(d);
       const opsD = getDailyOpsDetail(d);
-      const avgDaily = d > 0 ? Math.floor(cum.cumTotal / d) : 0;
+      const avgDaily = d > 0 ? cum.cumTotal / d : 0;
       const vsTg = targetHarian > 0 ? truncFixed(((avgDaily / targetHarian) * 100), 1) + '%' : '-';
       const vsLm = blHarian > 0 ? truncFixed(((avgDaily / blHarian) * 100), 1) + '%' : '-';
       const vsLy = tyHarian > 0 ? truncFixed(((avgDaily / tyHarian) * 100), 1) + '%' : '-';
@@ -1463,12 +1465,12 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
   const targetPct = targetHarian > 0 ? (tkuDailyAvg / targetHarian) : 0;
   const akmDiffVsTarget = tkuAkmTotal - targetHarian * divider;
 
-  const blHarian = state.targetBulanLalu[tkuIdx] || 0;
+  const blHarian = getTargetBulanLalu(state, tkuIdx);
   const blDiff = tkuDailyAvg - blHarian;
   const blPct = blHarian > 0 ? (tkuDailyAvg / blHarian) : 0;
   const akmDiffVsBl = tkuAkmTotal - blHarian * divider;
 
-  const tyHarian = state.targetTahunLalu[tkuIdx] || 0;
+  const tyHarian = getTargetTahunLalu(state, tkuIdx);
   const tyDiff = tkuDailyAvg - tyHarian;
   const tyPct = tyHarian > 0 ? (tkuDailyAvg / tyHarian) : 0;
   const akmDiffVsTy = tkuAkmTotal - tyHarian * divider;
@@ -1775,7 +1777,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
     // ---- Pembagi realisasi = tanggal update (sama dengan menu admin) ----
     const upd = Math.max(1, Math.min(divider, DIM));
     const akmReal = getCumActualUpToDay(upd).cumTotal;
-    const avgReal = Math.floor(akmReal / upd);
+    const avgReal = akmReal / upd;
     const realCards = [
       { label: 'VS TARGET', short: 'Tgt', base: targetHarian, accent: '#6366f1' },
       { label: 'VS BLN LALU', short: 'BL', base: blHarian, accent: '#06b6d4' },
@@ -1803,8 +1805,8 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
       let wkInfo: React.ReactNode = <span className="text-neutral-400">vs mgg lalu: —</span>;
       if (started) {
         const cw = getCumActualUpToDay(cut);
-        avgV = [cw.cumYo, cw.cumOm, cw.cumOs, cw.cumYt].map(x => Math.floor(x / cut));
-        avgT = Math.floor(cw.cumTotal / cut);
+        avgV = [cw.cumYo, cw.cumOm, cw.cumOs, cw.cumYt].map(x => x / cut);
+        avgT = cw.cumTotal / cut;
         akmT = cw.cumTotal;
         // vs Mgg lalu: akm minggu ini (Min s/d hari terakhir realisasi) vs akm minggu lalu dengan jumlah hari yang sama.
         const rg0 = weekCompareRange(PY, PM0, wk.start, wk.end);
@@ -2784,7 +2786,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
           {(() => {
             // ---- Ringkasan di atas: vs Target / vs Bln Lalu / vs Thn Lalu (rencana sebulan penuh) ----
             const cumAll = getCumPlanUpToDay(DIM).cumTotal;
-            const avgAll = DIM > 0 ? Math.floor(cumAll / DIM) : 0;
+            const avgAll = DIM > 0 ? cumAll / DIM : 0;
             const summaryCards = [
               { label: 'VS TARGET', short: 'Tgt', base: targetHarian, accent: '#6366f1' },
               { label: 'VS BLN LALU', short: 'BL', base: blHarian, accent: '#06b6d4' },
@@ -2926,7 +2928,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                 const wIdx = WEEKS.indexOf(wk);
                 const cw = getCumPlanUpToDay(wk.end);
                 const wDiv = Math.max(1, wk.end);
-                                const avgT = Math.floor(cw.cumTotal / wDiv);
+                                const avgT = cw.cumTotal / wDiv;
                 // Metrik ringkas per minggu: vs mgg lalu, vs Tgt, vs Bln lalu, vs TH (pct = rata2 / pembanding, selisih = akm - pembanding x hari)
                 const mkMetric = (label: string, base: number) => {
                   if (!(base > 0)) return { label, pct: null as number | null, diff: 0 };
@@ -3223,7 +3225,7 @@ export const TkuInputView: React.FC<TkuInputViewProps> = ({
                   <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs space-y-1">
                     <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
                       <span className="text-neutral-700 dark:text-neutral-300">Rata-rata / hari</span>
-                      <span className="font-mono font-bold text-brand-600 dark:text-brand-400">{formatDecimal(tkuDailyAvg)} btl</span>
+                      <span className="font-mono font-bold text-brand-600 dark:text-brand-400">{formatNumber(tkuDailyAvg)} btl</span>
                     </div>
                   </div>
                 </div>

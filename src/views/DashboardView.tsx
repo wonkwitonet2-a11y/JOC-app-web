@@ -19,7 +19,9 @@ import {
   isPembagiManual,
   getPeriodInfo,
   getSeedDailyBranchTotal,
-  SEED_PERIOD
+  SEED_PERIOD,
+  getTargetBulanLalu,
+  getTargetTahunLalu,
 } from '../services/storage';
 import { TrendChart } from '../components/TrendChart';
 import { PeringkatTkuTable } from '../components/PeringkatTkuTable';
@@ -83,12 +85,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // Targets comparison
   const blSum = filteredTkus.reduce((acc, t) => {
     const rawIdx = state.tkus.indexOf(t);
-    return acc + (state.targetBulanLalu[rawIdx] || 0);
+    return acc + (getTargetBulanLalu(state, rawIdx));
   }, 0);
 
   const tySum = filteredTkus.reduce((acc, t) => {
     const rawIdx = state.tkus.indexOf(t);
-    return acc + (state.targetTahunLalu[rawIdx] || 0);
+    return acc + (getTargetTahunLalu(state, rawIdx));
   }, 0);
 
   // Persentase membandingkan rata-rata harian; selisih adalah gap akumulasi terhadap target s/d tanggal update.
@@ -392,11 +394,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const diffTg = akm - tg * divider;
     const pctTg = tg > 0 ? avg / tg : 0;
 
-    const bl = state.targetBulanLalu[rawIdx] || 0;
+    const bl = getTargetBulanLalu(state, rawIdx);
     const diffBl = akm - bl * divider;
     const pctBl = bl > 0 ? avg / bl : 0;
 
-    const ty = state.targetTahunLalu[rawIdx] || 0;
+    const ty = getTargetTahunLalu(state, rawIdx);
     const diffTy = akm - ty * divider;
     const pctTy = ty > 0 ? avg / ty : 0;
 
@@ -595,7 +597,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="mt-3 pt-2.5 border-t border-neutral-200/60 dark:border-neutral-700/60 text-xs space-y-1">
                 <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
                   <span className="text-neutral-700 dark:text-neutral-300">Rata-rata / hari</span>
-                  <span className="font-mono font-bold text-brand-600 dark:text-brand-400">{formatDecimal(avgPerDay)} btl</span>
+                  <span className="font-mono font-bold text-brand-600 dark:text-brand-400">{formatNumber(avgPerDay)} btl</span>
                 </div>
               </div>
             </div>
@@ -727,7 +729,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 {formatNumber(totalAkmPdm)} <span className="text-xs font-normal text-neutral-600 dark:text-neutral-300 font-sans">btl</span>
               </span>
               <span className="text-xs text-neutral-700 dark:text-neutral-300 block mt-auto pt-1 leading-snug font-sans break-words">
-                Rata: {formatDecimal(avgPdmPerDay)} btl/hr
+                Rata: {formatNumber(avgPdmPerDay)} btl/hr
               </span>
             </div>
             {/* 2.6 Akm BB */}
@@ -807,7 +809,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       {formatNumber(val)}
                     </td>
                     <td className="py-3 px-4 text-right text-neutral-700 dark:text-neutral-300">
-                      {formatDecimal(avg)}
+                      {formatNumber(avg)}
                     </td>
                     <td className="py-3 px-4 text-right font-semibold text-neutral-700 dark:text-neutral-300">
                       {formatPercent(portion)}
@@ -1007,7 +1009,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </td>
 
                     <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">
-                      {formatDecimal(row.avg)}
+                      {formatNumber(row.avg)}
                     </td>
 
                     <td className="py-3 px-3 text-right font-bold text-amber-600 dark:text-amber-400 border-l border-neutral-200 dark:border-neutral-700">
@@ -1097,7 +1099,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   {formatNumber(rankedTkus.reduce((s, r) => s + r.akm, 0))}
                 </td>
                 <td className="py-3 px-3 text-right">
-                  {formatDecimal(rankedTkus.reduce((s, r) => s + r.avg, 0))}
+                  {formatNumber(rankedTkus.reduce((s, r) => s + r.avg, 0))}
                 </td>
                 <td className="py-3 px-3 text-right text-amber-600 dark:text-amber-400 border-l border-neutral-200 dark:border-neutral-700">
                   {formatNumber(rankedTkus.reduce((s, r) => s + r.akmBb, 0))}

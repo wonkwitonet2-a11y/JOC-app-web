@@ -1,6 +1,6 @@
 import React from 'react';
 import { EvaluasiRow } from '../services/evaluasi';
-import { formatNumber, formatDecimal, formatPercent, getStatusClass, getBbStatusClass } from '../services/storage';
+import { formatNumber, formatPercent, getStatusClass, getBbStatusClass } from '../services/storage';
 import { VARIANTS } from '../types';
 import { ArrowRightLeft } from 'lucide-react';
 import { buildBestLookup, BEST_CELL_CLASS, BestKey } from '../services/evalBest';
@@ -73,7 +73,7 @@ export const EvalFullTable: React.FC<EvalFullTableProps> = ({
 
         {/* Akumulasi & Rata-rata */}
         <td className={`${tdCls} font-bold text-brand-600 dark:text-brand-400 border-l border-neutral-200 dark:border-neutral-700${b('akmPjl')}`}>{formatNumber(r.akmPjl)}</td>
-        <td className={`${tdCls} font-bold text-neutral-900 dark:text-neutral-100${b('rata2')}`}>{formatDecimal(r.rata2)}</td>
+        <td className={`${tdCls} font-bold text-neutral-900 dark:text-neutral-100${b('rata2')}`}>{formatNumber(r.rata2)}</td>
 
         {/* vs LW (Last Week) */}
         <td className={`${tdCls} border-l border-neutral-200 dark:border-neutral-700${b('vsLwPct')}`}>

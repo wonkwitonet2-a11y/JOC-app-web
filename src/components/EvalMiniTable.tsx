@@ -1,6 +1,6 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
 import { EvaluasiRow } from '../services/evaluasi';
-import { formatNumber, formatDecimal, formatPercent, getStatusClass, getBbStatusClass } from '../services/storage';
+import { formatNumber, formatPercent, getStatusClass, getBbStatusClass } from '../services/storage';
 import { buildBestLookup, BEST_CELL_CLASS, BestKey } from '../services/evalBest';
 import { Table, LayoutGrid, ArrowRightLeft } from 'lucide-react';
 
@@ -127,7 +127,7 @@ export const EvalMiniTable: React.FC<EvalMiniTableProps> = ({
 
         {/* 1. Rata2 */}
         <td style={fitCellStyle} className={`${tdCls} font-bold text-neutral-900 dark:text-neutral-100 border-l border-neutral-200/60 dark:border-neutral-700/60${b('rata2')}`}>
-          {formatDecimal(r.rata2)}
+          {formatNumber(r.rata2)}
         </td>
 
         {/* 2. vs LW (%) */}
@@ -318,7 +318,7 @@ export const EvalMiniTable: React.FC<EvalMiniTableProps> = ({
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <span className="text-xs font-mono font-bold text-neutral-900 dark:text-white">
-                      {formatDecimal(r.rata2)} <span className="text-xs font-normal text-neutral-500">btl</span>
+                      {formatNumber(r.rata2)} <span className="text-xs font-normal text-neutral-500">btl</span>
                     </span>
                     <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded-md ${
                       isTargetHit 
@@ -415,7 +415,7 @@ export const EvalMiniTable: React.FC<EvalMiniTableProps> = ({
             <div className="grid grid-cols-4 gap-1 text-center text-xs font-mono pt-1 border-t border-neutral-800">
               <div>
                 <span className="text-neutral-400 text-xs block">Rata/Hari</span>
-                <span className="font-bold text-xs sm:text-sm text-white">{formatDecimal(cabangTotal.rata2)}</span>
+                <span className="font-bold text-xs sm:text-sm text-white">{formatNumber(cabangTotal.rata2)}</span>
               </div>
               <div>
                 <span className="text-neutral-400 text-xs block">% BB</span>

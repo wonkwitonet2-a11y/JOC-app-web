@@ -25,7 +25,7 @@ import {
 import { AppState, ArchiveRecord, ArchiveRow, VARIANTS } from '../types';
 import { ArsipLineChart } from '../components/ArsipYearCharts';
 import { ArsipCatatanMingguan } from '../components/ArsipCatatanMingguan';
-import { formatNumber, formatDecimal, round2, formatPercent, getPeriodInfo, getBbStatusClass, formatDiff } from '../services/storage';
+import { formatNumber, round2, formatPercent, getPeriodInfo, getBbStatusClass, formatDiff } from '../services/storage';
 import { INITIAL_ARCHIVES } from '../data/initialData';
 
 // 'Jember' (arsip lama) dan 'JEMBER 1' (data aktif) adalah unit yang sama
@@ -34,28 +34,25 @@ const normNama = (n: string) => {
   return x === 'jember' ? 'jember 1' : x;
 };
 
-// Ambil rata-rata harian TKU tanpa pembulatan ke atas (Math.floor).
-// Jika ada data lama yang sempat tersimpan dengan Math.round (misal 4249.5 jadi 4250),
-// fungsi ini membatasi maksimumnya ke Math.floor(total / d) = 4249.
+// Rata-rata harian TKU = total ÷ jumlah hari, dihitung dengan desimal penuh (tidak dibulatkan/dipotong).
+// Tampilan memakai formatNumber (desimal tidak terlihat, tidak dibulatkan ke atas); nilai di balik layar tetap desimal.
 const getRowRataHarian = (row: { total?: number; rataHarian?: number }, d: number): number => {
   const days = d || 30;
-  const floorVal = Math.floor((row.total || 0) / days);
-  if (row.rataHarian !== undefined && !isNaN(row.rataHarian)) {
-    return Math.min(Math.floor(row.rataHarian), floorVal);
-  }
-  return floorVal;
+  return (row.total || 0) / days;
 };
 
 const getRowRataVarian = (row: { varian?: number[]; rataVarian?: [number, number, number, number] }, vIdx: number, d: number): number => {
   const days = d || 30;
-  const v = row.varian?.[vIdx] || 0;
-  const floorVal = Math.floor(v / days);
-  if (row.rataVarian && row.rataVarian[vIdx] !== undefined && !isNaN(row.rataVarian[vIdx])) {
-    return Math.min(Math.floor(row.rataVarian[vIdx]), floorVal);
-  }
-  return floorVal;
+  return (row.varian?.[vIdx] || 0) / days;
 };
 
+
+// Rata-rata level cabang/rayon = total akumulasi seluruh TKU dibagi jumlah hari.
+// BUKAN penjumlahan rata-rata tiap TKU yang sudah dibulatkan ke bawah (itu menghilangkan sisa desimal tiap TKU).
+const cabangRata = (rows: Array<{ total?: number }>, d: number): number =>
+  (d || 30) > 0 ? rows.reduce((s, r) => s + (r.total || 0), 0) / (d || 30) : 0;
+const cabangRataVarian = (rows: Array<{ varian?: number[] }>, vIdx: number, d: number): number =>
+  (d || 30) > 0 ? rows.reduce((s, r) => s + (r.varian?.[vIdx] || 0), 0) / (d || 30) : 0;
 
 // ===== Agregat level cabang per bulan arsip =====
 interface BranchMonth {
@@ -78,12 +75,12 @@ const aggBranchMonth = (key: string, arc: ArchiveRecord): BranchMonth => {
   const rows = arc.rows || [];
   const d = arc.d || 30;
   const sold = rows.reduce((s, r) => s + (r.total || 0), 0);
-  const rata = rows.reduce((s, r) => s + getRowRataHarian(r, d), 0);
+  const rata = cabangRata(rows, d);
   const target = rows.reduce((s, r) => s + (r.targetHarian || 0), 0);
   const ly = rows.reduce((s, r) => s + (r.tahunLalu || 0), 0);
   const jwp = rows.reduce((s, r) => s + (r.akmJwp || 0), 0);
   const label = (arc.namaBulan || key).replace(/\s*\d{4}$/, '');
-  const varRata = [0, 1, 2, 3].map(i => rows.reduce((s, r) => s + getRowRataVarian(r, i, d), 0)) as [number, number, number, number];
+  const varRata = [0, 1, 2, 3].map(i => cabangRataVarian(rows, i, d)) as [number, number, number, number];
   return {
     key,
     label,
@@ -101,13 +98,13 @@ const aggBranchMonth = (key: string, arc: ArchiveRecord): BranchMonth => {
   };
 };
 
-const fmtChartDec = (v: number) => formatDecimal(v, Number.isInteger(v) ? 0 : 1);
+const fmtChartDec = (v: number) => formatNumber(v);
 
 // ===== Riwayat Tahunan: nilai per TKU / cabang untuk tiap metrik =====
 const histRowValue = (metric: HistoricalMetric, row: ArchiveRow, d: number): number => {
   switch (metric) {
     case 'total': return row.total || 0;
-    case 'rata': return row.rataHarian ?? (row.total / (d || 31));
+    case 'rata': return (row.total || 0) / (d || 31);
     case 'bb': return row.akmBb || 0;
     case 'syl': return row.sYl || 0;
     case 'coverage': return row.coverageArea || (row.jumlahArea ? (row.jumlahYl || 0) / row.jumlahArea : 1);
@@ -137,7 +134,7 @@ const histBranchValue = (metric: HistoricalMetric, arc: ArchiveRecord): number |
 // asAvg = true -> nilai rata-rata (boleh desimal); false -> nilai bulanan
 const fmtHist = (metric: HistoricalMetric, v: number, asAvg = false): string => {
   if (metric === 'coverage') return formatPercent(v);
-  if (metric === 'rata' || metric === 'syl' || asAvg) return formatDecimal(v);
+  if (metric === 'rata' || metric === 'syl' || asAvg) return formatNumber(v);
   return formatNumber(v);
 };
 
@@ -297,7 +294,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
   const draftRow = (idx: number): { v: number[]; total: number; rata: number } => {
     const v = (varianDraft[idx] || ['0', '0', '0', '0']).map(toNum);
     const total = v.reduce((a, b) => a + b, 0);
-    return { v, total, rata: Math.floor(total / (activeArchive.d || 30)) };
+    return { v, total, rata: total / (activeArchive.d || 30) };
   };
   const startEditAbsen = () => {
     const d: Record<number, OpsDraft> = {};
@@ -500,7 +497,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
     let best: { namaBulan: string; rata: number; total: number } | null = null;
     for (const arc of allArchives) {
       const d = arc.d || 30;
-      const rata = arc.rows.reduce((sum, r) => sum + getRowRataHarian(r, d), 0);
+      const rata = cabangRata(arc.rows, d);
       const total = arc.rows.reduce((sum, r) => sum + (r.total || 0), 0);
       if (!best || rata > best.rata) {
         best = { namaBulan: arc.namaBulan, rata, total };
@@ -516,16 +513,16 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
     const d = activeArchive.d || 31;
 
     const totalSold = rows.reduce((s, r) => s + (r.total || 0), 0);
-    const avgDailySold = rows.reduce((s, r) => s + getRowRataHarian(r, d), 0);
+    const avgDailySold = cabangRata(rows, d);
     const totalYo = rows.reduce((s, r) => s + (r.varian[0] || 0), 0);
     const totalOm = rows.reduce((s, r) => s + (r.varian[1] || 0), 0);
     const totalOs = rows.reduce((s, r) => s + (r.varian[2] || 0), 0);
     const totalYt = rows.reduce((s, r) => s + (r.varian[3] || 0), 0);
 
-    const totalRataYo = rows.reduce((s, r) => s + getRowRataVarian(r, 0, d), 0);
-    const totalRataOm = rows.reduce((s, r) => s + getRowRataVarian(r, 1, d), 0);
-    const totalRataOs = rows.reduce((s, r) => s + getRowRataVarian(r, 2, d), 0);
-    const totalRataYt = rows.reduce((s, r) => s + getRowRataVarian(r, 3, d), 0);
+    const totalRataYo = cabangRataVarian(rows, 0, d);
+    const totalRataOm = cabangRataVarian(rows, 1, d);
+    const totalRataOs = cabangRataVarian(rows, 2, d);
+    const totalRataYt = cabangRataVarian(rows, 3, d);
 
     const totalTargetHarian = rows.reduce((s, r) => s + (r.targetHarian || 0), 0);
     const totalBulanLalu = rows.reduce((s, r) => s + (r.bulanLalu || 0), 0);
@@ -845,7 +842,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                   {formatNumber(ytdStats.totalSold)} <span className="text-xs font-semibold text-neutral-500">btl</span>
                 </div>
                 <div className="text-xs font-bold text-brand-700 dark:text-brand-300 font-mono mt-1">
-                  Rata: {formatDecimal(ytdStats.avgSoldDaily)} btl/hr
+                  Rata: {formatNumber(ytdStats.avgSoldDaily)} btl/hr
                 </div>
               </div>
               <div className="text-[11px] text-neutral-500 mt-2.5 pt-2 border-t border-neutral-100 dark:border-neutral-800">
@@ -873,7 +870,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                   </span>
                 </div>
                 <div className="text-xs font-mono text-neutral-700 dark:text-neutral-300 mt-1">
-                  Tgt: {formatNumber(ytdStats.totalTarget)} btl <span className="text-neutral-400">({formatDecimal(ytdStats.avgTargetDaily)}/hr)</span>
+                  Tgt: {formatNumber(ytdStats.totalTarget)} btl <span className="text-neutral-400">({formatNumber(ytdStats.avgTargetDaily)}/hr)</span>
                 </div>
               </div>
               <div className={`text-[11px] font-semibold mt-2.5 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between ${
@@ -904,7 +901,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                   </span>
                 </div>
                 <div className="text-xs font-mono text-neutral-700 dark:text-neutral-300 mt-1">
-                  LY: {formatNumber(ytdStats.totalLy)} btl <span className="text-neutral-400">({formatDecimal(ytdStats.avgLyDaily)}/hr)</span>
+                  LY: {formatNumber(ytdStats.totalLy)} btl <span className="text-neutral-400">({formatNumber(ytdStats.avgLyDaily)}/hr)</span>
                 </div>
               </div>
               <div className={`text-[11px] font-semibold mt-2.5 pt-2 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between ${
@@ -1119,7 +1116,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                 {formatNumber(activeStats.totalSold)} <span className="text-xs font-normal text-neutral-500">btl</span>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-xs text-neutral-500 mt-auto border-t border-neutral-100 dark:border-neutral-800 pt-1">
-                <span>Rata: <b className="text-neutral-800 dark:text-neutral-200 font-mono">{formatDecimal(activeStats.avgDailySold)}</b>/hr</span>
+                <span>Rata: <b className="text-neutral-800 dark:text-neutral-200 font-mono">{formatNumber(activeStats.avgDailySold)}</b>/hr</span>
                 <span className={`font-bold ${activeStats.vsTargetPct >= 1 ? 'text-emerald-600' : 'text-amber-600'}`}>
                   {formatPercent(activeStats.vsTargetPct)} Tgt
                 </span>
@@ -1292,8 +1289,8 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                             </td>
                             <td className="py-3 px-3 text-right text-neutral-500">
                               {editVarian
-                                ? formatDecimal(Math.floor(draftRow(idx).v[k] / (activeArchive.d || 30)))
-                                : (k === 2 && !(row.varian[2] > 0) ? '—' : formatDecimal(getRowRataVarian(row, k, activeArchive.d)))}
+                                ? formatNumber(draftRow(idx).v[k] / (activeArchive.d || 30))
+                                : (k === 2 && !(row.varian[2] > 0) ? '—' : formatNumber(getRowRataVarian(row, k, activeArchive.d)))}
                             </td>
                           </React.Fragment>
                         ))}
@@ -1301,7 +1298,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                           {formatNumber(editVarian ? draftRow(idx).total : row.total)}
                         </td>
                         <td className="py-3 px-3 text-right font-semibold text-neutral-700 dark:text-neutral-300">
-                          {formatDecimal(editVarian ? draftRow(idx).rata : getRowRataHarian(row, activeArchive.d))}
+                          {formatNumber(editVarian ? draftRow(idx).rata : getRowRataHarian(row, activeArchive.d))}
                         </td>
                       </tr>
                     ))}
@@ -1310,18 +1307,18 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                     <tr className="bg-brand-50/60 dark:bg-brand-950/30 font-bold border-t-2 border-brand-200 dark:border-brand-900/60 text-xs">
                       <td colSpan={2} className="py-3.5 px-3 font-sans text-brand-700 dark:text-brand-400">Total Cabang</td>
                       <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{formatNumber(activeStats.totalYo)}</td>
-                      <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{formatDecimal(activeStats.totalRataYo)}</td>
+                      <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{formatNumber(activeStats.totalRataYo)}</td>
                       <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{formatNumber(activeStats.totalOm)}</td>
-                      <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{formatDecimal(activeStats.totalRataOm)}</td>
+                      <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{formatNumber(activeStats.totalRataOm)}</td>
                       <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{activeStats.totalOs > 0 ? formatNumber(activeStats.totalOs) : '—'}</td>
-                      <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{activeStats.totalRataOs > 0 ? formatDecimal(activeStats.totalRataOs) : '—'}</td>
+                      <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{activeStats.totalRataOs > 0 ? formatNumber(activeStats.totalRataOs) : '—'}</td>
                       <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{formatNumber(activeStats.totalYt)}</td>
-                      <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{formatDecimal(activeStats.totalRataYt)}</td>
+                      <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{formatNumber(activeStats.totalRataYt)}</td>
                       <td className="py-3.5 px-4 text-right font-extrabold text-brand-700 dark:text-brand-400 text-sm bg-brand-100/40 dark:bg-brand-900/40">
                         {formatNumber(activeStats.totalSold)}
                       </td>
                       <td className="py-3.5 px-3 text-right font-extrabold text-brand-700 dark:text-brand-400">
-                        {formatDecimal(activeStats.avgDailySold)}
+                        {formatNumber(activeStats.avgDailySold)}
                       </td>
                     </tr>
                   </tbody>
@@ -1365,10 +1362,10 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                           {formatNumber(row.total)}
                         </td>
                         <td className="py-3 px-3 text-right font-semibold text-neutral-700 dark:text-neutral-300">
-                          {formatDecimal(row.rataHarian ?? (row.total / activeArchive.d))}
+                          {formatNumber(getRowRataHarian(row, activeArchive.d))}
                         </td>
                         <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">
-                          {row.targetHarian ? formatDecimal(row.targetHarian) : '—'}
+                          {row.targetHarian ? formatNumber(row.targetHarian) : '—'}
                         </td>
                         <td className="py-3 px-3 text-right font-bold">
                           {row.vsTargetPct !== undefined ? (
@@ -1378,7 +1375,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                           ) : '—'}
                         </td>
                         <td className="py-3 px-3 text-right text-neutral-600 dark:text-neutral-400">
-                          {row.bulanLalu ? formatDecimal(row.bulanLalu) : '—'}
+                          {row.bulanLalu ? formatNumber(row.bulanLalu) : '—'}
                         </td>
                         <td className="py-3 px-3 text-right text-blue-600 dark:text-blue-400 font-semibold">
                           {row.vsLmPct ? formatPercent(row.vsLmPct) : '—'}
@@ -1394,7 +1391,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                               onChange={e => setAbsenDraft(d => ({ ...d, [idx]: { ...d[idx], ty: e.target.value } }))}
                               className="w-20 px-1.5 py-1 text-right text-xs font-mono rounded-md border border-brand-400 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white"
                             />
-                          ) : (row.tahunLalu ? formatDecimal(row.tahunLalu) : '—')}
+                          ) : (row.tahunLalu ? formatNumber(row.tahunLalu) : '—')}
                         </td>
                         <td className="py-3 px-3 text-right text-emerald-600 dark:text-emerald-400 font-semibold">
                           {row.vsLyPct ? formatPercent(row.vsLyPct) : '—'}
@@ -1411,22 +1408,22 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                         {formatNumber(activeStats.totalSold)}
                       </td>
                       <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400 font-bold">
-                        {formatDecimal(activeStats.avgDailySold)}
+                        {formatNumber(activeStats.avgDailySold)}
                       </td>
                       <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400 font-bold">
-                        {formatDecimal(activeStats.totalTargetHarian)}
+                        {formatNumber(activeStats.totalTargetHarian)}
                       </td>
                       <td className="py-3.5 px-3 text-right font-extrabold text-brand-700 dark:text-brand-400">
                         {formatPercent(activeStats.vsTargetPct)}
                       </td>
                       <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400 font-bold">
-                        {formatDecimal(activeStats.totalBulanLalu)}
+                        {formatNumber(activeStats.totalBulanLalu)}
                       </td>
                       <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400 font-bold">
                         {formatPercent(activeStats.vsLmPct)}
                       </td>
                       <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400 font-bold">
-                        {formatDecimal(activeStats.totalTahunLalu)}
+                        {formatNumber(activeStats.totalTahunLalu)}
                       </td>
                       <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400 font-bold">
                         {formatPercent(activeStats.vsLyPct)}
@@ -1617,12 +1614,12 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                         <td className="py-2.5 px-3 text-right font-bold text-neutral-900 dark:text-neutral-100 bg-neutral-50 dark:bg-neutral-800/30">
                           {formatNumber(row.total)}
                         </td>
-                        <td className="py-2.5 px-2 text-right font-semibold">{formatDecimal(row.rataHarian ?? (row.total / activeArchive.d))}</td>
-                        <td className="py-2.5 px-2 text-right">{row.targetHarian ? formatDecimal(row.targetHarian) : '—'}</td>
+                        <td className="py-2.5 px-2 text-right font-semibold">{formatNumber(getRowRataHarian(row, activeArchive.d))}</td>
+                        <td className="py-2.5 px-2 text-right">{row.targetHarian ? formatNumber(row.targetHarian) : '—'}</td>
                         <td className="py-2.5 px-2 text-right font-bold">{row.vsTargetPct ? formatPercent(row.vsTargetPct) : '—'}</td>
-                        <td className="py-2.5 px-2 text-right">{row.bulanLalu ? formatDecimal(row.bulanLalu) : '—'}</td>
+                        <td className="py-2.5 px-2 text-right">{row.bulanLalu ? formatNumber(row.bulanLalu) : '—'}</td>
                         <td className="py-2.5 px-2 text-right text-blue-600">{row.vsLmPct ? formatPercent(row.vsLmPct) : '—'}</td>
-                        <td className="py-2.5 px-2 text-right">{row.tahunLalu ? formatDecimal(row.tahunLalu) : '—'}</td>
+                        <td className="py-2.5 px-2 text-right">{row.tahunLalu ? formatNumber(row.tahunLalu) : '—'}</td>
                         <td className="py-2.5 px-2 text-right text-emerald-600">{row.vsLyPct ? formatPercent(row.vsLyPct) : '—'}</td>
                         <td className="py-2.5 px-2 text-right">{row.akmBb ? formatNumber(row.akmBb) : '—'}</td>
                         <td className={`py-2.5 px-2 text-right ${getBbStatusClass(row.akmBbPct)}`}>{row.akmBbPct ? formatPercent(row.akmBbPct) : '—'}</td>
@@ -1647,12 +1644,12 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                       <td className="py-3 px-2 text-right text-brand-700 dark:text-brand-400">{activeStats.totalOs > 0 ? formatNumber(activeStats.totalOs) : '—'}</td>
                       <td className="py-3 px-2 text-right text-brand-700 dark:text-brand-400">{formatNumber(activeStats.totalYt)}</td>
                       <td className="py-3 px-3 text-right font-extrabold text-brand-700 dark:text-brand-400 bg-brand-100/40 dark:bg-brand-900/40">{formatNumber(activeStats.totalSold)}</td>
-                      <td className="py-3 px-2 text-right text-brand-700 dark:text-brand-400 font-bold">{formatDecimal(activeStats.avgDailySold)}</td>
-                      <td className="py-3 px-2 text-right text-brand-700 dark:text-brand-400 font-bold">{formatDecimal(activeStats.totalTargetHarian)}</td>
+                      <td className="py-3 px-2 text-right text-brand-700 dark:text-brand-400 font-bold">{formatNumber(activeStats.avgDailySold)}</td>
+                      <td className="py-3 px-2 text-right text-brand-700 dark:text-brand-400 font-bold">{formatNumber(activeStats.totalTargetHarian)}</td>
                       <td className="py-3 px-2 text-right font-extrabold text-brand-700 dark:text-brand-400">{formatPercent(activeStats.vsTargetPct)}</td>
-                      <td className="py-3 px-2 text-right text-brand-700 dark:text-brand-400">{formatDecimal(activeStats.totalBulanLalu)}</td>
+                      <td className="py-3 px-2 text-right text-brand-700 dark:text-brand-400">{formatNumber(activeStats.totalBulanLalu)}</td>
                       <td className="py-3 px-2 text-right text-brand-700 dark:text-brand-400">{formatPercent(activeStats.vsLmPct)}</td>
-                      <td className="py-3 px-2 text-right text-brand-700 dark:text-brand-400">{formatDecimal(activeStats.totalTahunLalu)}</td>
+                      <td className="py-3 px-2 text-right text-brand-700 dark:text-brand-400">{formatNumber(activeStats.totalTahunLalu)}</td>
                       <td className="py-3 px-2 text-right text-brand-700 dark:text-brand-400">{formatPercent(activeStats.vsLyPct)}</td>
                       <td className="py-3 px-2 text-right text-brand-700 dark:text-brand-400">{formatNumber(activeStats.totalBb)}</td>
                       <td className={`py-3 px-2 text-right ${getBbStatusClass(activeStats.bbPct)}`}>{formatPercent(activeStats.bbPct)}</td>
@@ -1720,12 +1717,12 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                 {branchMonths.map(m => (
                   <tr key={m.key} className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors">
                     <td className="py-3 px-4 font-sans font-semibold text-neutral-900 dark:text-neutral-100 sticky left-0 bg-white dark:bg-neutral-900 z-10 border-r border-neutral-100 dark:border-neutral-800">{m.label}</td>
-                    <td className="py-3 px-3 text-right font-semibold text-neutral-800 dark:text-neutral-200">{formatDecimal(m.rata)}</td>
-                    <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">{m.target > 0 ? formatDecimal(m.target) : '—'}</td>
+                    <td className="py-3 px-3 text-right font-semibold text-neutral-800 dark:text-neutral-200">{formatNumber(m.rata)}</td>
+                    <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">{m.target > 0 ? formatNumber(m.target) : '—'}</td>
                     <td className="py-3 px-3 text-right font-bold">
                       {m.vsTgt !== null ? <span className={m.vsTgt >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>{formatPercent(m.vsTgt)}</span> : '—'}
                     </td>
-                    <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">{m.ly > 0 ? formatDecimal(m.ly) : '—'}</td>
+                    <td className="py-3 px-3 text-right text-neutral-700 dark:text-neutral-300">{m.ly > 0 ? formatNumber(m.ly) : '—'}</td>
                     <td className="py-3 px-3 text-right font-bold">
                       {m.vsLy !== null ? <span className={m.vsLy >= 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>{formatPercent(m.vsLy)}</span> : '—'}
                     </td>
@@ -1735,10 +1732,10 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                   <td className="py-3.5 px-4 font-sans text-brand-700 dark:text-brand-400 sticky left-0 bg-brand-50/90 dark:bg-brand-950/90 z-10 border-r border-brand-200 dark:border-brand-900">
                     Rata-rata {selectedYear} ({branchMonths.length} bln)
                   </td>
-                  <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{formatDecimal(yearSummary.rata)}</td>
-                  <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{yearSummary.target > 0 ? formatDecimal(yearSummary.target) : '—'}</td>
+                  <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{formatNumber(yearSummary.rata)}</td>
+                  <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{yearSummary.target > 0 ? formatNumber(yearSummary.target) : '—'}</td>
                   <td className="py-3.5 px-3 text-right font-extrabold text-brand-700 dark:text-brand-400">{yearSummary.vsTgt !== null ? formatPercent(yearSummary.vsTgt) : '—'}</td>
-                  <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{yearSummary.ly > 0 ? formatDecimal(yearSummary.ly) : '—'}</td>
+                  <td className="py-3.5 px-3 text-right text-brand-700 dark:text-brand-400">{yearSummary.ly > 0 ? formatNumber(yearSummary.ly) : '—'}</td>
                   <td className="py-3.5 px-3 text-right font-extrabold text-brand-700 dark:text-brand-400">{yearSummary.vsLy !== null ? formatPercent(yearSummary.vsLy) : '—'}</td>
                 </tr>
                 {ytdStats && (

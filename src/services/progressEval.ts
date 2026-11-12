@@ -1,5 +1,5 @@
 import { AppState, DailySalesRecord } from '../types';
-import { getPeriodInfo, getPembagiHari, getJwpAsOf } from './storage';
+import { getPeriodInfo, getPembagiHari, getJwpAsOf, getTargetBulanLalu, getTargetTahunLalu } from './storage';
 
 /**
  * Evaluasi bersama untuk menu Breakdown, Realisasi (admin) dan ringkasan akun TKU.
@@ -339,8 +339,8 @@ export function buildProgressEval(state: AppState, weeks: WeekDef[]): ProgressEv
       idx: i,
       acc: accNow,
       tgHarian: tg,
-      blHarian: state.targetBulanLalu[i] || 0,
-      tyHarian: state.targetTahunLalu[i] || 0,
+      blHarian: getTargetBulanLalu(state, i),
+      tyHarian: getTargetTahunLalu(state, i),
       progress: makeProgress(accNow, tg),
       week,
       trend,

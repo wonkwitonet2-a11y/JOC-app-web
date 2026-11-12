@@ -722,9 +722,22 @@ export async function testSupabaseConnection(u: string, k: string): Promise<{ su
   }
 }
 
+// ===== SUMBER TUNGGAL Bulan Lalu & Tahun Lalu =====
+// Acuan = angka per varian di menu Target (targetPerVariant[varian][tku].bl / .ty).
+// TKU, Dashboard, Evaluasi, Breakdown & Arsip WAJIB membaca lewat dua fungsi ini, bukan langsung dari
+// larik targetBulanLalu / targetTahunLalu (larik itu hanya cadangan untuk data lama yang belum punya angka per varian).
+// Rumusnya sama persis dengan yang dipakai tabel di menu Target: jumlah 4 varian, kalau kosong baru pakai larik.
+type TargetSource = Pick<AppState, 'targetPerVariant' | 'targetBulanLalu' | 'targetTahunLalu'>;
+const sumVariantTarget = (s: TargetSource, idx: number, field: 'bl' | 'ty'): number =>
+  Math.round((['YO', 'OM', 'OS', 'YT'] as const).reduce((a, v) => a + (Number(s.targetPerVariant?.[v]?.[idx]?.[field]) || 0), 0) * 100) / 100;
+export const getTargetBulanLalu = (s: TargetSource, idx: number): number =>
+  sumVariantTarget(s, idx, 'bl') || s.targetBulanLalu?.[idx] || 0;
+export const getTargetTahunLalu = (s: TargetSource, idx: number): number =>
+  sumVariantTarget(s, idx, 'ty') || s.targetTahunLalu?.[idx] || 0;
+
 export const formatNumber = (n: number | null | undefined): string => {
   if (n === null || n === undefined || isNaN(n)) return '—';
-  return Math.floor(n).toLocaleString('id-ID');
+  return Math.floor(n + 1e-9).toLocaleString('id-ID'); // +1e-9: 2790.9999999 (sisa hitungan desimal) tetap tampil 2.791
 };
 
 // Format angka desimal hingga 2 angka di belakang koma TANPA pembulatan ke atas (dipotong/floor).
@@ -1610,9 +1623,9 @@ export function buildArchiveFromState(state: AppState): ArchiveRecord {
     const sold = t.penjualanAkm.reduce((a, b) => a + b, 0);
     const akmBb = (t.bbAkm || [0, 0, 0, 0]).reduce((a, b) => a + (Number(b) || 0), 0);
     const targetHarian = t.targetHarian || 0;
-    const bulanLalu = state.targetBulanLalu[idx] || 0;
-    const tahunLalu = state.targetTahunLalu[idx] || 0;
-    const rataHarian = divider > 0 ? Math.floor(sold / divider) : 0;
+    const bulanLalu = getTargetBulanLalu(state, idx);
+    const tahunLalu = getTargetTahunLalu(state, idx);
+    const rataHarian = divider > 0 ? trunc2(sold / divider) : 0;
     const vsTargetPct = targetHarian > 0 ? trunc2((rataHarian / targetHarian) * 1000) / 1000 : 1;
     const vsLmPct = bulanLalu > 0 ? trunc2((rataHarian / bulanLalu) * 1000) / 1000 : 1;
     const vsLyPct = tahunLalu > 0 ? trunc2((rataHarian / tahunLalu) * 1000) / 1000 : 1;
@@ -1625,10 +1638,10 @@ export function buildArchiveFromState(state: AppState): ArchiveRecord {
     const jumlahArea = t.jumlahArea || 0;
     const coverageArea = jumlahArea > 0 ? trunc2((jumlahYl / jumlahArea) * 1000) / 1000 : 1;
     const rataVarian: [number, number, number, number] = [
-      divider > 0 ? Math.floor(t.penjualanAkm[0] / divider) : 0,
-      divider > 0 ? Math.floor(t.penjualanAkm[1] / divider) : 0,
-      divider > 0 ? Math.floor(t.penjualanAkm[2] / divider) : 0,
-      divider > 0 ? Math.floor(t.penjualanAkm[3] / divider) : 0
+      divider > 0 ? trunc2(t.penjualanAkm[0] / divider) : 0,
+      divider > 0 ? trunc2(t.penjualanAkm[1] / divider) : 0,
+      divider > 0 ? trunc2(t.penjualanAkm[2] / divider) : 0,
+      divider > 0 ? trunc2(t.penjualanAkm[3] / divider) : 0
     ];
 
     return {
@@ -2098,15 +2111,15 @@ function sanitizeArchivesRounding(archives: Record<string, ArchiveRecord> | unde
     let rowChanged = false;
     const nextRows = arc.rows.map(r => {
       let rCopy = { ...r };
-      const expectedFloor = Math.floor((r.total || 0) / d);
-      // Jika rataHarian dibulatkan ke atas (misal 127.485 / 30 = 4249.5 jadi 4250), koreksi ke 4249 (Math.floor)
+      const expectedFloor = Math.floor(((r.total || 0) / d) * 100 + 1e-9) / 100; // batas atas = total / hari dipotong 2 desimal
+      // Jika rataHarian dibulatkan ke atas (misal 3316,935 jadi 3317), koreksi ke 3316,93 (dipotong, bukan dibulatkan)
       if (r.rataHarian !== undefined && r.rataHarian > expectedFloor) {
         rCopy.rataHarian = expectedFloor;
         rowChanged = true;
       }
       if (Array.isArray(r.varian)) {
         const nextRataVarian = r.varian.map((v, vIdx) => {
-          const fv = Math.floor((v || 0) / d);
+          const fv = Math.floor(((v || 0) / d) * 100 + 1e-9) / 100;
           if (r.rataVarian && r.rataVarian[vIdx] !== undefined && r.rataVarian[vIdx] > fv) {
             rowChanged = true;
             return fv;

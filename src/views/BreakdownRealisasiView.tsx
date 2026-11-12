@@ -13,7 +13,9 @@ import {
   getPembagiBreakdownMingguan,
   getDaysInActiveMonth,
   getWeeksOfMonth,
-  truncFixed
+  truncFixed,
+  getTargetBulanLalu,
+  getTargetTahunLalu,
 } from '../services/storage';
 
 interface BreakdownRealisasiViewProps {
@@ -230,8 +232,8 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
     const avgTotal = accTotal / n;
     const cmp = {
       tg: idxs.reduce((a, i) => a + (state.tkus[i]?.targetHarian || 0), 0),
-      bl: idxs.reduce((a, i) => a + (state.targetBulanLalu[i] || 0), 0),
-      ty: idxs.reduce((a, i) => a + (state.targetTahunLalu[i] || 0), 0)
+      bl: idxs.reduce((a, i) => a + (getTargetBulanLalu(state, i)), 0),
+      ty: idxs.reduce((a, i) => a + (getTargetTahunLalu(state, i)), 0)
     };
     const pct = (c: number) => (c > 0 ? avgTotal / c : null);
     return {
@@ -566,7 +568,7 @@ export const BreakdownRealisasiView: React.FC<BreakdownRealisasiViewProps> = ({
       sets: belumAda ? [] : [
         ...(viewMode === 'mingguan' && !isReal ? [makeWeek()] : []),
         make('vs Target', i => state.tkus[i]?.targetHarian || 0),
-        make('vs Th Lalu', i => state.targetTahunLalu[i] || 0)
+        make('vs Th Lalu', i => getTargetTahunLalu(state, i))
       ]
     };
   })();

@@ -120,6 +120,9 @@ const normNamaView = (str: string) => {
   if (t === 'dp jempat 4' || t === 'dp jember 4') return 'dp jember 4';
   return t;
 };
+// Potong (bukan bulatkan) ke 2 desimal; toleransi kecil agar 0.29*100 tidak jadi 28.99
+const r2 = (n: number): number => Math.round(n * 100) / 100;
+const t2 = (n: any): number => Math.floor((Number(n) || 0) * 100 + 1e-9) / 100;
 const VIEW_VARIANT_SHARE = { YO: 0.76, OM: 0.09, OS: 0.11, YT: 0.04 } as const;
 const buildViewSnapshot = (real: AppState, key: string): MonthSnapshot => {
   const snap: MonthSnapshot = JSON.parse(JSON.stringify(buildBlankSnapshot(real, key)));
@@ -137,10 +140,10 @@ const buildViewSnapshot = (real: AppState, key: string): MonthSnapshot => {
     const fields = ['targetHarian', 'jumlahYl', 'jumlahArea', 'coverageArea', 'absenYl', 'frekuensiAbsen', 'akmJwp', 'sYl', 'l250', 'l300'] as const;
     fields.forEach(f => { const val = (row as any)[f]; if (typeof val === 'number') m[f] = val; });
     snap.tkuMonthly[i] = m;
-    if (typeof row.bulanLalu === 'number') snap.targetBulanLalu[i] = Math.floor(row.bulanLalu);
-    if (typeof row.tahunLalu === 'number') snap.targetTahunLalu[i] = Math.floor(row.tahunLalu);
+    if (typeof row.bulanLalu === 'number') snap.targetBulanLalu[i] = t2(row.bulanLalu);
+    if (typeof row.tahunLalu === 'number') snap.targetTahunLalu[i] = t2(row.tahunLalu);
     const tg = Number(m.targetHarian) || 0;
-    codes.forEach(c => { snap.targetPerVariant[c][i] = { ...snap.targetPerVariant[c][i], tg: Math.floor(tg * VIEW_VARIANT_SHARE[c]) }; });
+    codes.forEach(c => { snap.targetPerVariant[c][i] = { ...snap.targetPerVariant[c][i], tg: t2(tg * VIEW_VARIANT_SHARE[c]) }; });
   });
   return snap;
 };
@@ -172,31 +175,7 @@ export default function App() {
   // state     = yang dilihat/diubah menu: data asli, atau salinan bulan lama saat mode lihat aktif.
   const [realState, setRealState] = useState<AppState>(() => loadAppState());
   const [view, setView] = useState<ViewCtx | null>(null);
-  // Data target lama yang masih berdesimal (dari HP, server, atau arsip) dibulatkan ke bawah sekali saja.
-  useEffect(() => {
-    const isInt = (n: any) => typeof n !== 'number' || Number.isInteger(n);
-    const arrOk = (a: any) => !Array.isArray(a) || a.every(isInt);
-    const pv: any = realState.targetPerVariant || {};
-    const pvOk = Object.values(pv).every((m: any) => Object.values(m || {}).every((r: any) => isInt(r?.tg) && isInt(r?.bl) && isInt(r?.ty)));
-    const tkuOk = (realState.tkus || []).every(t => isInt(t.targetHarian));
-    if (arrOk(realState.targetBulanLalu) && arrOk(realState.targetTahunLalu) && pvOk && tkuOk) return;
-    const fl = (n: any) => (typeof n === 'number' ? Math.floor(n) : n);
-    setRealState(prev => {
-      const nextPv: any = {};
-      Object.entries((prev.targetPerVariant || {}) as any).forEach(([v, m]: [string, any]) => {
-        const mm: any = {};
-        Object.entries(m || {}).forEach(([k, r]: [string, any]) => { mm[k] = { ...r, tg: fl(r?.tg), bl: fl(r?.bl), ty: fl(r?.ty) }; });
-        nextPv[v] = mm;
-      });
-      return {
-        ...prev,
-        targetBulanLalu: Array.isArray(prev.targetBulanLalu) ? prev.targetBulanLalu.map(fl) : prev.targetBulanLalu,
-        targetTahunLalu: Array.isArray(prev.targetTahunLalu) ? prev.targetTahunLalu.map(fl) : prev.targetTahunLalu,
-        targetPerVariant: nextPv,
-        tkus: (prev.tkus || []).map(t => ({ ...t, targetHarian: fl(t.targetHarian) }))
-      };
-    });
-  }, [realState.targetBulanLalu, realState.targetTahunLalu, realState.targetPerVariant, realState.tkus]);
+  // (Efek pembulatan ke bawah untuk target dihapus: target boleh berdesimal 2 angka, dipakai penuh di semua hitungan.)
   // true = penyimpanan di HP ini gagal (memori penuh/diblokir): tampilkan peringatan merah sampai berhasil lagi.
   const [localSaveFailed, setLocalSaveFailed] = useState(false);
   useEffect(() => {
@@ -900,7 +879,7 @@ export default function App() {
   const handleUpdateTargetHarian = (tkuIdx: number, newTg: number) => {
     setState(prev => {
       const nextTkus = [...prev.tkus];
-      nextTkus[tkuIdx] = { ...nextTkus[tkuIdx], targetHarian: Math.floor(Number(newTg) || 0) };
+      nextTkus[tkuIdx] = { ...nextTkus[tkuIdx], targetHarian: t2(newTg) };
       return { ...prev, tkus: nextTkus };
     });
   };
@@ -908,7 +887,7 @@ export default function App() {
   const handleUpdateTargetBl = (tkuIdx: number, newBl: number) => {
     setState(prev => {
       const nextBl = [...prev.targetBulanLalu];
-      nextBl[tkuIdx] = Math.floor(Number(newBl) || 0);
+      nextBl[tkuIdx] = t2(newBl);
       return { ...prev, targetBulanLalu: nextBl };
     });
   };
@@ -916,7 +895,7 @@ export default function App() {
   const handleUpdateTargetTy = (tkuIdx: number, newTy: number) => {
     setState(prev => {
       const nextTy = [...prev.targetTahunLalu];
-      nextTy[tkuIdx] = Math.floor(Number(newTy) || 0);
+      nextTy[tkuIdx] = t2(newTy);
       return { ...prev, targetTahunLalu: nextTy };
     });
   };
@@ -925,24 +904,24 @@ export default function App() {
     setState(prev => {
       const nextMap = { ...prev.targetPerVariant };
       const varMap = { ...(nextMap[variant] || {}) };
-      varMap[tkuIdx] = { ...(varMap[tkuIdx] || {}), [field]: Math.floor(Number(val) || 0) };
+      varMap[tkuIdx] = { ...(varMap[tkuIdx] || {}), [field]: t2(val) };
       nextMap[variant] = varMap;
 
       // Auto sum across all 4 variants for this tku
-      const totalTgForTku = (['YO', 'OM', 'OS', 'YT'] as VariantCode[]).reduce((sum, v) => {
+      const totalTgForTku = r2((['YO', 'OM', 'OS', 'YT'] as VariantCode[]).reduce((sum, v) => {
         const item = v === variant ? varMap[tkuIdx] : nextMap[v]?.[tkuIdx];
         return sum + (item?.tg || 0);
-      }, 0);
+      }, 0));
 
-      const totalBlForTku = (['YO', 'OM', 'OS', 'YT'] as VariantCode[]).reduce((sum, v) => {
+      const totalBlForTku = r2((['YO', 'OM', 'OS', 'YT'] as VariantCode[]).reduce((sum, v) => {
         const item = v === variant ? varMap[tkuIdx] : nextMap[v]?.[tkuIdx];
         return sum + (item?.bl || 0);
-      }, 0);
+      }, 0));
 
-      const totalTyForTku = (['YO', 'OM', 'OS', 'YT'] as VariantCode[]).reduce((sum, v) => {
+      const totalTyForTku = r2((['YO', 'OM', 'OS', 'YT'] as VariantCode[]).reduce((sum, v) => {
         const item = v === variant ? varMap[tkuIdx] : nextMap[v]?.[tkuIdx];
         return sum + (item?.ty || 0);
-      }, 0);
+      }, 0));
 
       const nextTkus = [...prev.tkus];
       if (field === 'tg') {
@@ -1639,7 +1618,7 @@ export default function App() {
         const pt = patch[i];
         if (!pt) return r;
         // % vs tahun lalu = rata harian ÷ rata harian tahun lalu (rumus sama dengan saat arsip dibuat; tanpa tahun lalu = 1)
-        const vsLyPct = pt.tahunLalu > 0 ? Math.floor(((r.rataHarian || 0) / pt.tahunLalu) * 1000 * 100 + 1e-9) / 100 / 1000 : 1;
+        const vsLyPct = pt.tahunLalu > 0 ? Math.floor((((r.total || 0) / (arc.d || 30)) / pt.tahunLalu) * 1000 * 100 + 1e-9) / 100 / 1000 : 1;
         const next = { ...r, absenYl: pt.absenYl, frekuensiAbsen: pt.frekuensiAbsen, tahunLalu: pt.tahunLalu, vsLyPct };
         // Akm BB, Akm JWP, Jml Area, Jml YL, YL<250, YL<300 (opsional) + turunannya dihitung ulang dengan rumus saat arsip dibuat
         const sold = r.total || 0;
@@ -1711,8 +1690,8 @@ export default function App() {
         if (!pv) return r;
         const varian = pv.map(x => Math.max(0, Math.round(Number(x) || 0))) as [number, number, number, number];
         const sold = varian.reduce((x, y) => x + y, 0);
-        const rataHarian = Math.floor(sold / d);
-        const rataVarian = varian.map(x => Math.floor(x / d)) as [number, number, number, number];
+        const rataHarian = trunc2(sold / d);
+        const rataVarian = varian.map(x => trunc2(x / d)) as [number, number, number, number];
         const targetHarian = r.targetHarian || 0;
         const bulanLalu = r.bulanLalu || 0;
         const tahunLalu = r.tahunLalu || 0;
